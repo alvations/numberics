@@ -1,0 +1,50 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Endless</title>
+<meta name="description" content="2048 with no ceiling. Merge past 2048 and keep going, with power-ups earned from every new highest tile.">
+<meta name="theme-color" content="#14151c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E%E2%88%9E%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Numberics</h1>
+      <p class="sub">Endless. There is no top tile.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat"><span>Score</span><b id="score">0</b></div>
+      <div class="stat"><span>Best</span><b id="best">0</b></div>
+      <div class="stat"><span>Top tile</span><b id="top">-</b></div>
+    </div>
+  </header>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status"></p>
+
+  <div id="board" class="board" tabindex="0" aria-label="Game board. Arrow keys or swipe to slide tiles.">
+    <div id="cells" class="cells"></div>
+    <div id="tiles" class="tiles"></div>
+    <div id="over" class="over" hidden>
+      <h2>No moves left</h2>
+      <p id="over-text"></p>
+      <button id="again" class="btn primary" type="button">New game</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="new" class="btn" type="button">New game</button>
+  </div>
+  <p class="how">Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up.
+     Merge past 2048 and keep going.</p>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="engine.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

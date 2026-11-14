@@ -1,0 +1,12 @@
+{
+  "name": "numberics",
+  "version": "0.1.0",
+  "description": "Numberics Endless: 2048 with no ceiling, plus power-ups. No build step.",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "test": "node tests/test.js",
+    "test:browser": "node tests/emulation.cjs",
+    "start": "python3 -m http.server 8070"
+  }
+}
