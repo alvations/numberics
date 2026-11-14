@@ -7,7 +7,8 @@ const http = require("http"), fs = require("fs"), path = require("path");
 const root = path.join(__dirname, "..");
 const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
 const srv = http.createServer((q, r) => {
-  const f = path.join(root, q.url === "/" ? "index.html" : q.url.split("?")[0]);
+  let f = path.join(root, q.url.split("?")[0]);
+  if (fs.existsSync(f) && fs.statSync(f).isDirectory()) f = path.join(f, "index.html");
   if (!f.startsWith(root) || !fs.existsSync(f)) { r.writeHead(404); return r.end(); }
   r.writeHead(200, { "content-type": types[path.extname(f)] || "text/plain" }); r.end(fs.readFileSync(f));
 });
@@ -81,6 +82,39 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp"); await p.keyboard.press("ArrowRight");
   const after = await p.evaluate(() => window.__numberics.state.moves);
   ck("reduced motion plays instantly", after > before);
+  await ctx.close();
+
+  // 6b. Sudoku: renders, accepts input, notes, undo, conflicts, solve
+  ctx = await b.newContext({ viewport: { width: 420, height: 900 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); const e3 = []; p.on("pageerror", x => e3.push(x.message));
+  await p.goto(url + "sudoku/");
+  ck("81 sudoku cells", await p.locator(".c").count() === 81);
+  ck("givens shown", await p.locator(".c.given").count() >= 20);
+  const empty = await p.evaluate(() => window.__sudoku.state.puzzle.findIndex(v => !v));
+  await p.locator(".c").nth(empty).click();
+  const truth = await p.evaluate(i => window.__sudoku.state.solution[i], empty);
+  await p.keyboard.press(String(truth));
+  ck("typed digit lands", await p.evaluate(i => window.__sudoku.state.grid[i], empty) === truth);
+  await p.keyboard.press("u");
+  ck("undo clears it", await p.evaluate(i => window.__sudoku.state.grid[i], empty) === 0);
+  await p.keyboard.press("n"); await p.keyboard.press("5");
+  ck("notes mode pencils a mark", await p.evaluate(i => (window.__sudoku.state.notes[i] & 32) !== 0, empty));
+  await p.keyboard.press("n"); await p.keyboard.press("Backspace");
+  const wrong = (truth % 9) + 1;
+  await p.keyboard.press(String(wrong));
+  const clash = await p.evaluate((i) => { const s = window.__sudoku.state; return s.grid.some((v, k) => v === s.grid[i] && k !== i); }, empty);
+  if (clash) ck("a rule-breaking digit is painted red", await p.locator(".c.bad").count() >= 1);
+  await shot(p, "sudoku");
+  await p.evaluate(() => { const s = window.__sudoku.state; const g = s.solution.slice(); const hole = s.puzzle.findIndex(v => !v); s.grid = g.slice(); s.grid[hole] = 0; window.__sudoku.state = s; window.__sudoku.select(hole); });
+  await p.keyboard.press(String(await p.evaluate(() => { const s = window.__sudoku.state; return s.solution[s.grid.findIndex(v => !v)]; })));
+  ck("finishing the grid shows Solved", await p.isVisible("#win"));
+  await shot(p, "sudoku-solved");
+  ck("no sudoku page errors", e3.length === 0, e3.join("|"));
+  await p.addInitScript(() => {}); await ctx.close();
+  ctx = await b.newContext({ viewport: { width: 420, height: 900 } }); p = await ctx.newPage();
+  await p.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
+  const e4 = []; p.on("pageerror", x => e4.push(x.message)); await p.goto(url + "sudoku/");
+  ck("sudoku runs with storage blocked", e4.length === 0 && await p.locator(".c").count() === 81, e4.join("|"));
   await ctx.close();
 
   // 7. desktop shot + swipe

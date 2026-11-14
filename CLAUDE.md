@@ -4,23 +4,25 @@ Read this first. It is the standing memory for the repo (the single highest-leve
 sister project melon-eight): stack, core rules, and "keep it this way" notes beside load-bearing decisions.
 
 ## What this is
-**Numberics Endless**: 2048 with no ceiling, plus earned power-ups. Browser game, static, no build step,
+**Numberics** is a small collection of number games: **Endless** (2048 with no ceiling, plus earned power-ups, at the repo root) and **Sudoku** (`sudoku/`). Browser game, static, no build step,
 no framework, no backend, no tracking. Playable by opening `index.html` or `npm start` (port 8070).
 
 ## Layout
 ```
+sudoku/            second game: engine.js (pure), game.js, index.html, style.css, same rules as below
 engine.js          pure rules (UMD: browser global `Numberics` AND `require`). No DOM/storage/clock.
 game.js            browser client: draw, input, persistence. Never re-implements a rule.
 style.css          theme tokens, layout, reduced motion
 index.html         page shell
-tests/test.js      zero-dependency engine + convention tests   (npm test)
+tests/test.js      Endless engine + convention tests        (npm test runs both files)
+tests/test-sudoku.js Sudoku engine + convention tests
 tests/emulation.cjs headless-Chromium checks, opt-in, self-skips (npm run test:browser)
 docs/DESIGN.md     design principles register + how the power-ups are tuned
 ```
 
 ## Run / test
 ```bash
-node tests/test.js                                   # always, before every commit
+npm test                                             # always (Endless + Sudoku), before every commit
 NODE_PATH=$(npm root -g) node tests/emulation.cjs    # after any UI change (SHOTS=<dir> saves screenshots)
 ```
 Show a green test and a screenshot in the same turn you say "done". Serve tests on 8070+ (never 5060).
@@ -43,6 +45,15 @@ Show a green test and a screenshot in the same turn you say "done". Serve tests 
   was. Perf work never changes how anything looks or behaves.
 - **No em-dashes** anywhere (a test enforces it). Every source file carries the SPDX header.
 
+## Sudoku rules (keep it this way)
+- **Every puzzle has exactly one solution.** The generator digs holes only while `countSolutions == 1`;
+  tests check this on many seeds and all three difficulties.
+- Difficulty is clue count (easy 40, medium 32, hard 26 or fewer). Puzzles are a pure function of seed + difficulty.
+- Conflicts (a digit repeated in a row/column/box) are painted red, but the game never says which digit is
+  *correct* except through the counted **Hint**. Best times count only hint-free solves.
+- A solved board locks. The timer pauses in a background tab. Notes are bitmasks; placing a digit clears it from peers.
+- The two games share conventions, not code, so each folder works on its own. Games link to each other quietly.
+
 ## Conventions
 - License Apache-2.0, copyright `alvations (Melon Lab)`. Never remove LICENSE, NOTICE or headers.
 - No AI model identifiers in code, comments, docs or commit messages.
@@ -50,5 +61,6 @@ Show a green test and a screenshot in the same turn you say "done". Serve tests 
 
 ## Known gaps / ideas queue
 - Sound, share card, achievements/collection and save-file export (all exist in melon-eight) are not built.
+- Sudoku ideas: daily puzzle by date seed, automatic notes fill, killer/diagonal variants.
 - Only a 4x4 board is wired in the UI; the engine already accepts other `size` values.
 - Deploy target not chosen (GitHub Pages from `main` / root would work as is).

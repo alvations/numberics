@@ -35,3 +35,11 @@ Tuning knobs live at the top of `engine.js`: `AWARD_FROM_LEVEL` (5), `POWER_CAP`
 | Reduced motion honoured; opacity is not motion | melon-eight | emulation reduced-motion run |
 | No design change unless asked | cleo-guide rule 8 | CLAUDE.md |
 | Say no to the half of a suggestion that would defang the design | melon-eight 5b | stuck stays hard: locked + no power = over |
+
+## Sudoku
+- Generation: fill a grid by seeded randomised backtracking, then remove cells in random order, keeping a removal
+  only if the puzzle still has exactly one solution (solver stops counting at 2).
+- Difficulty is clue count only (easy 40, medium 32, hard 26 or fewer). It is a simple, honest knob; a
+  technique-graded rating (naked pairs, X-wing) is a possible future refinement.
+- Helpers are honest: red marks show rule conflicts only, never whether a digit is right. Hint is the one
+  way to learn the truth and it disqualifies the best time.
