@@ -8,6 +8,14 @@ tile, only how far you get before the board locks.
 Every new highest tile from 32 up earns a **power-up**: **Undo**, **Smash** (delete a tile), **Swap**
 (exchange two cells), **Boost** (double a tile). Use them to dig out of a jam and stay alive.
 
+## Screenshots
+| Endless | Sudoku |
+|---|---|
+| <img src="screenshots/endless-mobile.png" width="300" alt="Endless on a phone"> | <img src="screenshots/sudoku-mobile.png" width="300" alt="Sudoku on a phone"> |
+
+Desktop: [Endless](screenshots/endless-desktop.png) · [Sudoku](screenshots/sudoku-desktop.png).
+Regenerate with `npm run shots` (needs Playwright).
+
 ## Sudoku
 Classic 9x9 with three difficulties, pencil notes, undo, hints and red conflict highlighting. Every puzzle is
 generated from a seed and has exactly one solution. Keys: `1`-`9`, `Backspace`, `N` notes, `U` undo, `H` hint, arrows.

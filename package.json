@@ -7,6 +7,7 @@
   "scripts": {
     "test": "node tests/test.js && node tests/test-sudoku.js",
     "test:browser": "node tests/emulation.cjs",
-    "start": "python3 -m http.server 8070"
+    "start": "python3 -m http.server 8070",
+    "shots": "node tools/shots.cjs"
   }
 }

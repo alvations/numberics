@@ -143,5 +143,13 @@ t("history carries only the owner's authorship (no AI author, co-author or trail
   ok(!hit, "attribution found in history: " + hit);
 });
 
+t("every live game in games.json has mobile + desktop screenshots", () => {
+  const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8"));
+  games.filter(g => g.status === "live").forEach(g => ["mobile", "desktop"].forEach(v => {
+    const f = path.join(root, "screenshots", g.id + "-" + v + ".png");
+    ok(fs.existsSync(f) && fs.statSync(f).size > 10000, "missing or empty " + path.relative(root, f) + " (run npm run shots)");
+  }));
+});
+
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

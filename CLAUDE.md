@@ -17,6 +17,8 @@ index.html         page shell
 tests/test.js      Endless engine + convention tests        (npm test runs both files)
 tests/test-sudoku.js Sudoku engine + convention tests
 tests/emulation.cjs headless-Chromium checks, opt-in, self-skips (npm run test:browser)
+games.json         registry of every game (id, name, path, status: live | planned)
+tools/shots.cjs    screenshots of every live game -> screenshots/<id>-{mobile,desktop}.png
 docs/DESIGN.md     design principles register + how the power-ups are tuned
 ```
 
@@ -24,8 +26,14 @@ docs/DESIGN.md     design principles register + how the power-ups are tuned
 ```bash
 npm test                                             # always (Endless + Sudoku), before every commit
 NODE_PATH=$(npm root -g) node tests/emulation.cjs    # after any UI change (SHOTS=<dir> saves screenshots)
+NODE_PATH=$(npm root -g) node tools/shots.cjs        # after any visible change, and for every new game
 ```
 Show a green test and a screenshot in the same turn you say "done". Serve tests on 8070+ (never 5060).
+
+**Screenshots are part of every game (owner rule).** Every game, now and future, is listed in `games.json`,
+defines `window.__demo()` (a fixed, representative state for the shot, unreachable from the UI), and has
+`screenshots/<id>-mobile.png` + `-desktop.png` committed and embedded in the README. Regenerate them in the
+same commit as any visible change. `npm test` fails if a live game has no screenshots.
 
 ## Core rules (keep it this way)
 - **Infinite means infinite.** No win condition, no 2048 special case, no win text. Tiles are stored as

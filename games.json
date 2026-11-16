@@ -1,0 +1,4 @@
+[
+  { "id": "endless", "name": "Endless", "path": "", "status": "live", "blurb": "2048 with no ceiling, plus earned power-ups." },
+  { "id": "sudoku", "name": "Sudoku", "path": "sudoku/", "status": "live", "blurb": "Classic 9x9, every puzzle has exactly one solution." }
+]

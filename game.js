@@ -200,5 +200,13 @@
   $("again").addEventListener("click", startNew);
 
   render();
+  // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
+  window.__demo = function () {
+    flush(); targeting = null;
+    var s = N.newGame(2026), dirs = ["left", "down", "right", "down"];
+    for (var k = 0; k < 120 && !s.over; k++) s = N.move(s, dirs[k % 4]).state;
+    s.power = { undo: 1, smash: 2, swap: 1, boost: 1 };
+    state = s; render();
+  };
   window.__numberics = { get state() { return state; }, set state(s) { state = s; render(); }, render: render };
 })();

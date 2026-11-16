@@ -146,5 +146,12 @@
 
   if (!state) { state = S.newState(S.generate(freshSeed(), level)); save(); }
   startTimer(); render();
+  // Screenshot hook (tools/shots.cjs): a fixed puzzle with a few moves and notes. Not reachable from the UI.
+  window.__demo = function () {
+    var st = S.newState(S.generate(2026, "medium")), empt = st.puzzle.map(function (v, k) { return v ? -1 : k; }).filter(function (k) { return k >= 0; });
+    for (var k = 0; k < 8; k++) st = S.place(st, empt[k], st.solution[empt[k]]);
+    st = S.toggleNote(st, empt[10], 2); st = S.toggleNote(st, empt[10], 7); st = S.toggleNote(st, empt[11], 4);
+    clearInterval(tick); state = st; elapsed = 134; sel = empt[8]; render();
+  };
   window.__sudoku = { get state() { return state; }, set state(s) { state = s; render(); }, select: function (i) { sel = i; render(); } };
 })();
