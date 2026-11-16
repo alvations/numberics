@@ -1,21 +1,23 @@
-# Numberics roadmap: six new games (plan only, nothing built yet)
+# Numberics roadmap: seven new games (plan only, nothing built yet)
 
 Status: **planned and decided, build from the week of 23 Nov 2026.** Nothing in this file is implemented yet.
 
 **Owner decisions (16 Nov 2026):** every game gets power-ups; the number twists and the power-ups per game are
 the designer's call (made below); the finger game is re-imagined without fingers; the Six design is the
-designer's call (made below). One question stays open: **Q0** (landing page), defaulted to "change nothing".
+designer's call (made below). Tic-tac-toe was added to the list the same day (section 7, named Fifteen).
+One question stays open: **Q0** (landing page), defaulted to "change nothing".
 
 | Game | Inspired by | Our twist | Folder |
 |---|---|---|---|
 | **Endless** (live) | 2048 | no ceiling, earned power-ups | `/` |
-| **Sudoku** (live) | Sudoku | unique-solution generator; power-ups added (section 7) | `sudoku/` |
+| **Sudoku** (live) | Sudoku | unique-solution generator; power-ups added (section 8) | `sudoku/` |
 | **Fibonacci** | 2584 | no ceiling, Endless power-ups | `fibonacci/` |
 | **Seven** | Drop7 | Endless palette, Lucky Seven chains, daily sequence | `seven/` |
 | **Three** | Threes | multiples of 3 are the stars: step merges + rainbow **Flush** runs | `three/` |
 | **Four** | Connect Four | numbered discs: four of your colour OR any four that **sum to 10** | `four/` |
 | **Five** | Chopsticks | number tiles, not fingers: add onto a tile, at 5 it **bursts** | `five/` |
 | **Six** | the "6s challenge" | longer lines, two-digit numbers, targets 6 / 66 / 6.6 / 666 / 66.6 | `six/` |
+| **Fifteen** | tic-tac-toe | it IS tic-tac-toe in disguise: claim numbers 1-9, first to hold three that sum to 15 wins | `fifteen/` |
 
 ---
 
@@ -46,7 +48,7 @@ Same rules everywhere, so a player learns them once:
   per game, below), never bought, never timed. Each power-up caps at 9.
 - **Undo always snapshots the whole state, power-ups included**, so rewinding can never farm a reward, and a
   power-up never earns a power-up (the Boost rule from Endless).
-- Computer opponents (Four, Five) **also get power-ups on Hard**, under the same earn rules, so they stay fair.
+- Computer opponents (Four, Five, Fifteen) **also get power-ups on Hard**, under the same earn rules, so they stay fair.
 
 | Game | Slot 1 | Slot 2 | Slot 3 | Slot 4 | Earned by |
 |---|---|---|---|---|---|
@@ -57,6 +59,7 @@ Same rules everywhere, so a player learns them once:
 | Four | Undo (takes back both moves) | Pop (remove any disc, the column drops) | Hold (swap your next disc with a held one) | Tune (set your next disc's number) | blocking a line of three, or making a ten-line threat |
 | Five | Undo | Split (move points between your own two tiles) | Shield (a tile cannot be hit next turn) | Nudge (+1 or -1 on any tile) | bursting an opponent's tile |
 | Six | Hint (reveals one operator) | Skip (a new line, same tier) | Peek (shows the value of one part) | Undo (last edit) | 3 lines in a row without help |
+| Fifteen | Undo | Erase (remove one opponent number) | Peek (shows the number you must block) | Double (claim two numbers this turn) | winning a round of a best-of-five |
 | Sudoku | Undo (stays free and unlimited) | Reveal (the old Hint) | Check (marks wrong digits once) | Candidates (fills notes for one box) | each correct row, column or box completed |
 
 Best times and high scores record **how many power-ups were used**, so a pure run still shows as pure.
@@ -205,7 +208,26 @@ targets; every generated line verified by the solver; no `eval` or `Function` in
 
 ---
 
-## 7. Sudoku gets power-ups (a change to a live game, asked for on 16 Nov)
+## 7. Fifteen (tic-tac-toe, the number way)
+
+**The trick:** tic-tac-toe and the old "Pick 15" game are the same game. Lay 1-9 on a 3x3 **magic square**
+(8 1 6 / 3 5 7 / 4 9 2): every row, column and diagonal sums to 15, and those 8 lines are the only triples
+of 1-9 that do. So "three in a row" and "three numbers that sum to 15" are one rule.
+**Play:** you and the computer take turns claiming numbers (tiles in the Endless style, yours gold-edged, the
+computer's cool-edged). The first side holding **three numbers that add up to 15** wins. Two views of one
+board, switchable any time: **Numbers** (a row of 1-9, pure arithmetic) and **Grid** (the magic square, where
+it reads as tic-tac-toe). The reveal that they are the same game is the fun of it.
+**Rounds:** perfect play is a draw, so a match is **best of five**; winning a round earns a power-up (0a), and
+power-ups are what break the deadlock. The side that starts alternates each round.
+**AI:** the full game tree is tiny (under 9! positions), so it is solved exactly. **Easy** random but takes a
+win, **Medium** blocks and takes wins, **Hard** perfect play plus power-ups.
+**Tests:** the 8 magic lines are exactly the 15-sum triples of 1-9; win by sum equals win by grid line; draw
+detection; Hard never loses without power-ups in play; Erase, Peek, Double; best-of-five scoring.
+**Name:** Fifteen (in the family style). Rename if you prefer another.
+
+---
+
+## 8. Sudoku gets power-ups (a change to a live game, asked for on 16 Nov)
 
 Undo stays free. The current Hint becomes the **Reveal** power-up; **Check** and **Candidates** are added;
 charges are earned by completing a correct row, column or box (section 0a). The board, numpad and layout stay
@@ -219,7 +241,7 @@ as they are; only the tools row becomes the Endless-style power-up tray. Before/
 2. **Fibonacci** (0.5 day): closest to Endless, proves the rule-set refactor.
 3. **Seven** (1 day). 4. **Four** (1-1.5 days). 5. **Five** (0.5-1 day, solver first).
 6. **Three** (1-2 days, simulations decide the rules). 7. **Six** (1.5-2 days, solver and parser first).
-8. **Sudoku power-ups** (0.5 day).
+8. **Fifteen** (0.5 day, solver first). 9. **Sudoku power-ups** (0.5 day).
 
 Every game ships with its screenshots, tests and design notes in the same commit, pushed as it goes.
 

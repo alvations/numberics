@@ -75,7 +75,7 @@ same commit as any visible change. `npm test` fails if a live game has no screen
 - Verify in a real browser after UI changes (Playwright Chromium is preinstalled in the cloud container).
 
 ## Known gaps / ideas queue
-- **Next: six new games are planned in `docs/ROADMAP.md`** (Fibonacci, Seven, Three, Four, Five, Six), with
+- **Next: six new games are planned in `docs/ROADMAP.md`** (Fibonacci, Seven, Three, Four, Five, Six, Fifteen), with
   the shared house style, open questions for the owner and a "Resume here" checklist. Read it before building.
 - Sound, share card, achievements/collection and save-file export (all exist in melon-eight) are not built.
 - Sudoku ideas: daily puzzle by date seed, automatic notes fill, killer/diagonal variants.

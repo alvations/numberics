@@ -54,5 +54,12 @@
     "path": "six/",
     "status": "planned",
     "blurb": "Make every line equal six, then 66, 6.6, 666."
+  },
+  {
+    "id": "fifteen",
+    "name": "Fifteen",
+    "path": "fifteen/",
+    "status": "planned",
+    "blurb": "Tic-tac-toe in disguise: first to hold three numbers that sum to 15."
   }
 ]
