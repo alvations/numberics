@@ -61,5 +61,12 @@
     "path": "fifteen/",
     "status": "planned",
     "blurb": "Tic-tac-toe in disguise: first to hold three numbers that sum to 15."
+  },
+  {
+    "id": "nine",
+    "name": "Nine",
+    "path": "nine/",
+    "status": "planned",
+    "blurb": "Nim with number tiles up to nine: take from one, last take wins."
   }
 ]

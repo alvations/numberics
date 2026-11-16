@@ -1,10 +1,11 @@
-# Numberics roadmap: seven new games (plan only, nothing built yet)
+# Numberics roadmap: eight new games (plan only, nothing built yet)
 
 Status: **planned and decided, build from the week of 23 Nov 2026.** Nothing in this file is implemented yet.
 
 **Owner decisions (16 Nov 2026):** every game gets power-ups; the number twists and the power-ups per game are
 the designer's call (made below); the finger game is re-imagined without fingers; the Six design is the
-designer's call (made below). Tic-tac-toe was added to the list the same day (section 7, named Fifteen).
+designer's call (made below). Tic-tac-toe was added to the list the same day (section 7, named Fifteen),
+and Nim the same day (section 9, named Nine).
 One question stays open: **Q0** (landing page), defaulted to "change nothing".
 
 | Game | Inspired by | Our twist | Folder |
@@ -18,6 +19,7 @@ One question stays open: **Q0** (landing page), defaulted to "change nothing".
 | **Five** | Chopsticks | number tiles, not fingers: add onto a tile, at 5 it **bursts** | `five/` |
 | **Six** | the "6s challenge" | longer lines, two-digit numbers, targets 6 / 66 / 6.6 / 666 / 66.6 | `six/` |
 | **Fifteen** | tic-tac-toe | it IS tic-tac-toe in disguise: claim numbers 1-9, first to hold three that sum to 15 wins | `fifteen/` |
+| **Nine** | Nim | heaps are number tiles 1-9 (9 is the cap); take from one tile, last take wins | `nine/` |
 
 ---
 
@@ -48,7 +50,7 @@ Same rules everywhere, so a player learns them once:
   per game, below), never bought, never timed. Each power-up caps at 9.
 - **Undo always snapshots the whole state, power-ups included**, so rewinding can never farm a reward, and a
   power-up never earns a power-up (the Boost rule from Endless).
-- Computer opponents (Four, Five, Fifteen) **also get power-ups on Hard**, under the same earn rules, so they stay fair.
+- Computer opponents (Four, Five, Fifteen, Nine) **also get power-ups on Hard**, under the same earn rules, so they stay fair.
 
 | Game | Slot 1 | Slot 2 | Slot 3 | Slot 4 | Earned by |
 |---|---|---|---|---|---|
@@ -60,6 +62,7 @@ Same rules everywhere, so a player learns them once:
 | Five | Undo | Split (move points between your own two tiles) | Shield (a tile cannot be hit next turn) | Nudge (+1 or -1 on any tile) | bursting an opponent's tile |
 | Six | Hint (reveals one operator) | Skip (a new line, same tier) | Peek (shows the value of one part) | Undo (last edit) | 3 lines in a row without help |
 | Fifteen | Undo | Erase (remove one opponent number) | Peek (shows the number you must block) | Double (claim two numbers this turn) | winning a round of a best-of-five |
+| Nine | Undo | Add (+1 to any tile, never past 9) | Pass (skip your turn once) | Peek (shows one winning move, if one exists) | winning a round of a best-of-five |
 | Sudoku | Undo (stays free and unlimited) | Reveal (the old Hint) | Check (marks wrong digits once) | Candidates (fills notes for one box) | each correct row, column or box completed |
 
 Best times and high scores record **how many power-ups were used**, so a pure run still shows as pure.
@@ -235,13 +238,34 @@ as they are; only the tools row becomes the Endless-style power-up tray. Before/
 
 ---
 
+## 9. Nine (Nim, up to nine)
+
+**Rules:** a row of **heaps, each a number tile from 1 to 9** (drawn as the number plus up to nine pips, in the
+Endless colours). On your turn, pick one tile and **lower it by any amount** (1 up to its value); a tile at 0
+is gone. Whoever makes the **last take wins**. Nine is the base: no tile ever starts above 9 or grows past it.
+**Levels:** the run climbs from 3 tiles to 4, 5 and up to **9 tiles**, so the opening "9" grows from the tile
+values to the board itself. A **Misere** mode (last take loses) unlocks after the first win.
+**AI:** Nim is solved by the nim-sum (the XOR of the tiles). **Easy** random, **Medium** perfect only when
+two tiles remain, **Hard** perfect with power-ups. Fairness: every dealt start is a winning position for the
+side to move (nim-sum not zero) and the player moves first, so a perfect player can always win: the computer can
+only punish a mistake. That makes Nine a skill you can learn, and Peek teaches it.
+**Learn view:** an optional toggle shows each tile in binary and the running nim-sum, so the strategy is
+discoverable, not a secret.
+**Rounds and power-ups:** best of five; winning a round earns a power-up (0a). Add (+1, capped at 9) and Pass
+are the deadlock breakers, because each one changes who is winning.
+**Tests:** legal moves only; last take wins (and loses in Misere); Hard always wins from a non-zero nim-sum
+and never wins from zero without power-ups; dealt starts always have a non-zero nim-sum; Add never exceeds 9;
+Peek returns a move that leaves a zero nim-sum.
+
+---
+
 ## Build order and estimates
 
 1. Shared foundation incl. `shared/power.js` (0.5-1 day), then the Endless/Sudoku pixel-identical check.
 2. **Fibonacci** (0.5 day): closest to Endless, proves the rule-set refactor.
 3. **Seven** (1 day). 4. **Four** (1-1.5 days). 5. **Five** (0.5-1 day, solver first).
 6. **Three** (1-2 days, simulations decide the rules). 7. **Six** (1.5-2 days, solver and parser first).
-8. **Fifteen** (0.5 day, solver first). 9. **Sudoku power-ups** (0.5 day).
+8. **Fifteen** (0.5 day, solver first). 9. **Nine** (0.5 day). 10. **Sudoku power-ups** (0.5 day).
 
 Every game ships with its screenshots, tests and design notes in the same commit, pushed as it goes.
 
