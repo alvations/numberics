@@ -1,4 +1,58 @@
 [
-  { "id": "endless", "name": "Endless", "path": "", "status": "live", "blurb": "2048 with no ceiling, plus earned power-ups." },
-  { "id": "sudoku", "name": "Sudoku", "path": "sudoku/", "status": "live", "blurb": "Classic 9x9, every puzzle has exactly one solution." }
+  {
+    "id": "endless",
+    "name": "Endless",
+    "path": "",
+    "status": "live",
+    "blurb": "2048 with no ceiling, plus earned power-ups."
+  },
+  {
+    "id": "sudoku",
+    "name": "Sudoku",
+    "path": "sudoku/",
+    "status": "live",
+    "blurb": "Classic 9x9, every puzzle has exactly one solution."
+  },
+  {
+    "id": "fibonacci",
+    "name": "Fibonacci",
+    "path": "fibonacci/",
+    "status": "planned",
+    "blurb": "2584 with no ceiling: merge neighbours in the Fibonacci sequence."
+  },
+  {
+    "id": "seven",
+    "name": "Seven",
+    "path": "seven/",
+    "status": "planned",
+    "blurb": "Drop numbered discs; a disc pops when its number matches its run."
+  },
+  {
+    "id": "three",
+    "name": "Three",
+    "path": "three/",
+    "status": "planned",
+    "blurb": "Count in threes: step merges and rainbow Flush runs."
+  },
+  {
+    "id": "four",
+    "name": "Four",
+    "path": "four/",
+    "status": "planned",
+    "blurb": "Four in a row against the computer."
+  },
+  {
+    "id": "five",
+    "name": "Five",
+    "path": "five/",
+    "status": "planned",
+    "blurb": "The finger game: a hand dies at five. Beat the computer."
+  },
+  {
+    "id": "six",
+    "name": "Six",
+    "path": "six/",
+    "status": "planned",
+    "blurb": "Make every line equal six, then 66, 6.6, 666."
+  }
 ]
