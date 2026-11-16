@@ -25,7 +25,7 @@
     "name": "Seven",
     "path": "seven/",
     "status": "planned",
-    "blurb": "Drop numbered discs; a disc pops when its number matches its run."
+    "blurb": "Drop numbered discs; pop seven in one chain for luck."
   },
   {
     "id": "three",
@@ -39,14 +39,14 @@
     "name": "Four",
     "path": "four/",
     "status": "planned",
-    "blurb": "Four in a row against the computer."
+    "blurb": "Four in a row, or any four that sum to ten."
   },
   {
     "id": "five",
     "name": "Five",
     "path": "five/",
     "status": "planned",
-    "blurb": "The finger game: a hand dies at five. Beat the computer."
+    "blurb": "Add one tile onto another; at five it bursts. Beat the computer."
   },
   {
     "id": "six",

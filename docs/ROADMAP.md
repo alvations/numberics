@@ -1,20 +1,21 @@
 # Numberics roadmap: six new games (plan only, nothing built yet)
 
-Status: **planning, approved to build from the week of 23 Nov 2026.** Nothing in this file is implemented.
-The owner reviews this plan first; open questions are marked **Q** and need an answer before that game starts.
+Status: **planned and decided, build from the week of 23 Nov 2026.** Nothing in this file is implemented yet.
 
-The family after this plan (one-word names, number-led, one house style):
+**Owner decisions (16 Nov 2026):** every game gets power-ups; the number twists and the power-ups per game are
+the designer's call (made below); the finger game is re-imagined without fingers; the Six design is the
+designer's call (made below). One question stays open: **Q0** (landing page), defaulted to "change nothing".
 
 | Game | Inspired by | Our twist | Folder |
 |---|---|---|---|
 | **Endless** (live) | 2048 | no ceiling, earned power-ups | `/` |
-| **Sudoku** (live) | Sudoku | unique-solution generator | `sudoku/` |
-| **Fibonacci** | 2584 | no ceiling, same power-ups as Endless | `fibonacci/` |
-| **Seven** | Drop7 | Endless palette, daily seeded sequence | `seven/` |
+| **Sudoku** (live) | Sudoku | unique-solution generator; power-ups added (section 7) | `sudoku/` |
+| **Fibonacci** | 2584 | no ceiling, Endless power-ups | `fibonacci/` |
+| **Seven** | Drop7 | Endless palette, Lucky Seven chains, daily sequence | `seven/` |
 | **Three** | Threes | multiples of 3 are the stars: step merges + rainbow **Flush** runs | `three/` |
-| **Four** | Connect Four | you vs the computer, three strengths | `four/` |
-| **Five** | Chopsticks (finger game) | you vs the computer, solved AI, hand dies at 5+ | `five/` |
-| **Six** | the "6s challenge" | longer and harder lines, two-digit numbers, targets 6 / 66 / 6.6 / 666 / 66.6 | `six/` |
+| **Four** | Connect Four | numbered discs: four of your colour OR any four that **sum to 10** | `four/` |
+| **Five** | Chopsticks | number tiles, not fingers: add onto a tile, at 5 it **bursts** | `five/` |
+| **Six** | the "6s challenge" | longer lines, two-digit numbers, targets 6 / 66 / 6.6 / 666 / 66.6 | `six/` |
 
 ---
 
@@ -23,66 +24,89 @@ The family after this plan (one-word names, number-led, one house style):
 **Goal: every new game looks and feels like Endless, without changing how Endless looks.**
 
 - `shared/theme.css`: the tokens and components Endless already uses, lifted as-is: colours (`--bg`, `--panel`,
-  `--cell`, `--ink`, `--mute`, `--accent`), the brand header (`h1` in accent + `.sub` line), stat pills, the 4-up
-  button tray, the board panel, `.btn` / `.btn.primary`, the toast, the end-of-run overlay, the phone gutter and
-  safe-area rules, and the reduced-motion block. Endless and Sudoku switch to it **only if** the before/after
-  screenshots are pixel-identical (owner rule: no unasked design change; perf/refactor never changes the look).
+  `--cell`, `--ink`, `--mute`, `--accent`), the brand header, stat pills, the 4-up power-up tray, the board
+  panel, `.btn` / `.btn.primary`, the toast, the end-of-run overlay, phone gutter + safe-area rules, and the
+  reduced-motion block. Endless and Sudoku switch to it **only if** their before/after screenshots are
+  pixel-identical (no unasked design change; a refactor never changes the look).
 - `shared/kit.js`: storage (try/catch + in-memory fallback), `freshSeed()`, mulberry32, toast, the two-step
-  "New game / Sure?" button, `prefersReducedMotion`, and the `window.__demo` + `__<game>` test hooks pattern.
+  "New game / Sure?" button, `prefersReducedMotion`, and the `window.__demo` hook pattern.
 - `shared/tiles.js`: the endless hue formula (`(level*43+30) % 360`), the label rule (digits while short, then
-  an exponent / index form), and container-query font sizing by label length. Fibonacci, Seven and Three reuse it.
-- Each game keeps the Endless layout contract: header (title + stats) → tray (power-ups or tools) → hint line →
-  square board → "New game" → one-line how-to → quiet links to the other games.
-- **Q0 (navigation):** with 8 games the root page needs a decision. Option A (recommended): keep Endless at `/`
-  exactly as it is and grow the quiet "More from Numberics" line into a row of all games from `games.json`.
-  Option B: a hub page at `/` and Endless moves to `endless/` (changes the landing, so only if you ask for it).
+  an exponent or index form), and container-query font sizing by label length. Every tile-based game reuses it.
+- `shared/power.js`: **one power-up system for every game** (section 0a).
+- Layout contract for every game: header (title + stats) -> power-up tray -> hint line -> board -> "New game"
+  -> one-line how-to -> quiet links to the other games.
+- **Q0 (open, defaulted):** the landing page stays exactly as it is (Endless at `/`); the quiet "More from
+  Numberics" line grows into one row linking every live game from `games.json`. A hub page only if you ask.
 
-Per-game checklist (every game, no exceptions): pure `engine.js` (UMD, seeded, no DOM) + `tests/test-<id>.js`,
-`game.js` client, `index.html`, `window.__demo()`, `games.json` entry, `screenshots/<id>-{mobile,desktop}.png`
-in the same commit, browser checks in `tests/emulation.cjs` (play, blocked storage, reduced motion), and a section
-in `docs/DESIGN.md`. Commits authored by the owner only.
+### 0a. Power-ups for everyone (one system, per-game meaning)
+
+Same rules everywhere, so a player learns them once:
+- A 4-slot tray in the Endless style, counts shown as gold badges, keys `1`-`4`, `Esc` cancels targeting.
+- You start each run with **one Undo**. Every other charge is **earned by playing well** (the earn rule is
+  per game, below), never bought, never timed. Each power-up caps at 9.
+- **Undo always snapshots the whole state, power-ups included**, so rewinding can never farm a reward, and a
+  power-up never earns a power-up (the Boost rule from Endless).
+- Computer opponents (Four, Five) **also get power-ups on Hard**, under the same earn rules, so they stay fair.
+
+| Game | Slot 1 | Slot 2 | Slot 3 | Slot 4 | Earned by |
+|---|---|---|---|---|---|
+| Endless | Undo | Smash (remove a tile) | Swap (two cells) | Boost (double a tile) | new highest tile from 32 |
+| Fibonacci | Undo | Smash | Swap | Boost (tile -> next Fibonacci) | new highest tile from 34 |
+| Seven | Undo | Smash (remove a disc) | Hold (keep the next disc for later) | Crack (crack every egg touching a disc) | a chain of 3+ waves, or a Lucky Seven |
+| Three | Undo | Smash | Swap (two neighbours) | Third (turn a 1 or 2 into a 3) | every Flush |
+| Four | Undo (takes back both moves) | Pop (remove any disc, the column drops) | Hold (swap your next disc with a held one) | Tune (set your next disc's number) | blocking a line of three, or making a ten-line threat |
+| Five | Undo | Split (move points between your own two tiles) | Shield (a tile cannot be hit next turn) | Nudge (+1 or -1 on any tile) | bursting an opponent's tile |
+| Six | Hint (reveals one operator) | Skip (a new line, same tier) | Peek (shows the value of one part) | Undo (last edit) | 3 lines in a row without help |
+| Sudoku | Undo (stays free and unlimited) | Reveal (the old Hint) | Check (marks wrong digits once) | Candidates (fills notes for one box) | each correct row, column or box completed |
+
+Best times and high scores record **how many power-ups were used**, so a pure run still shows as pure.
+
+Per-game checklist (every game): pure `engine.js` (UMD, seeded, no DOM) + `tests/test-<id>.js`, `game.js`,
+`index.html`, `window.__demo()`, a `games.json` entry, `screenshots/<id>-{mobile,desktop}.png` in the same
+commit, browser checks in `tests/emulation.cjs` (play, power-ups, blocked storage, reduced motion), a section in
+`docs/DESIGN.md`. Commits authored by the owner only.
 
 ---
 
 ## 1. Fibonacci (2584, endless)
 
-**Rules (2584):** 4x4 slide board like 2048, but tiles are Fibonacci numbers (1, 2, 3, 5, 8, 13, ...). Two tiles
-merge when they are **consecutive** in the sequence (1+1=2, 1+2=3, 2+3=5, 3+5=8 ...), not when they are equal.
+**Rules (2584):** a 4x4 slide board like 2048, but tiles are Fibonacci numbers (1, 2, 3, 5, 8, 13, ...). Two
+tiles merge when they are **consecutive** in the sequence (1+1=2, 1+2=3, 2+3=5, 3+5=8 ...), not when equal.
 Spawns are 1 (90%) and 2 (10%). The original stops at 2584; ours never stops.
-*To verify against https://thereal23.github.io/2584/ before building: spawn odds, whether 1+1 is the only equal
-merge, and the score rule (we assume score += merged value, as in 2048).*
+*Check against https://thereal23.github.io/2584/ before building: spawn odds, whether 1+1 is the only equal
+merge, and the score rule (assumed: score += merged value).*
 
-**Design:** store tiles as Fibonacci **indices** (1 means 1, 2 means 2, 3 means 3, 4 means 5 ...), so values are
-`F(index)` and there is no overflow. Merge test: `|a - b| == 1`, or `a == b == 1`. Result: `max(a, b) + 1`.
-Labels: digits up to 6 characters, then `F<sub>n</sub>`. Same four power-ups, same award rule (new highest tile at
-index 8 = 34 or above, to be tuned), same anti-farming Undo, same "stuck is not over while you hold a power-up".
+**Design:** tiles stored as Fibonacci **indices** (1 means 1, 2 means 2, 3 means 3, 4 means 5 ...), values
+`F(index)`, no overflow. Merge if `|a - b| == 1` or `a == b == 1`; result `max(a, b) + 1`. Labels: digits up
+to 6 characters, then `F` with the index as a subscript. Power-ups and "stuck is not over while you hold one"
+exactly as Endless.
 
-**Engine plan:** refactor `engine.js` to take a **rule set** (`canMerge`, `mergeResult`, `spawnTable`, `value`,
-`label`) with Endless as the default. Endless behaviour must stay byte-identical: all 27 existing tests unchanged
-and green, plus a replay test (same seed + 1,000 moves gives the same board before and after the refactor).
+**Engine:** refactor `engine.js` to take a **rule set** (`canMerge`, `mergeResult`, `spawnTable`, `value`,
+`label`, `awardFrom`) with Endless as the default. Endless must stay byte-identical: all existing tests
+unchanged and green, plus a replay test (same seed + 1,000 moves gives the same board before and after).
 
-**Tests:** consecutive merges only; 3+3 does NOT merge; 1+1 does; one merge per tile per move (1,1,2 slides to
+**Tests:** consecutive merges only; 3+3 does not merge; 1+1 does; one merge per tile per move (1,1,2 slides to
 2,2, and the new 2 does not merge again in the same move); infinite to index 300; power-ups as Endless.
 
 ---
 
 ## 2. Seven (Drop7)
 
-**Rules (Drop7):** 7x7 well. You drop one disc at a time into a column. Discs are numbers 1-7 or blank "eggs".
-A numbered disc **pops** when its number equals the length of the unbroken run it sits in, counted along its row
-**or** its column. A pop cracks each adjacent egg (egg -> cracked -> revealed random number). Gravity, then pops
-again: each wave of a chain scores more (chain multiplier). Every N drops (N shrinks as levels rise) a full row
-of eggs rises from the bottom; if a column overflows the top, the game ends.
+**Rules (Drop7):** a 7x7 well. Drop one disc at a time into a column. Discs are numbers 1-7 or blank eggs. A
+numbered disc **pops** when its number equals the length of the unbroken run it sits in, along its row **or**
+its column. A pop cracks each adjacent egg (egg -> cracked -> a random number). Gravity, then pop again: each
+wave of a chain scores more. Every N drops (N shrinks with level) a row of eggs rises from the bottom; if a
+column overflows, the run ends.
 
-**Our version:** numbers coloured with the Endless hue formula so 1-7 read as the same family; a "next disc"
-preview; modes **Classic** (rising rows), **Blitz** (N fixed at 5), **Daily** (date-seeded sequence, the same
-for everyone, no server). Optional power-ups reuse the Endless tray: **Smash** (remove one disc) and **Undo**.
-**Q2:** keep power-ups in Seven, or keep it pure like Drop7?
+**Number twist: Lucky Seven.** When one chain pops **exactly 7 discs in total**, every egg on the board cracks
+one step and you earn a power-up. It rewards counting, not just stacking.
+**Our version:** numbers coloured with the Endless hue formula; a "next disc" preview; modes **Classic**,
+**Blitz** (N fixed at 5) and **Daily** (date-seeded, the same for everyone, no server). Power-ups per 0a.
 
-**Engine:** board 7x7 ints (0 empty, 1-7 numbers, 8 egg, 9 cracked egg); `drop(state, col)` returns the full
-wave-by-wave trace (pops, cracks, falls, score per wave) so the client animates each wave and the tests can
-assert it. Tests: row-run and column-run pops, a disc that matches neither stays, egg -> cracked -> number,
-multi-wave chain scoring, rising row and overflow game over, determinism by seed.
+**Engine:** 7x7 ints (0 empty, 1-7 numbers, 8 egg, 9 cracked); `drop(state, col)` returns the full wave-by-wave
+trace (pops, cracks, falls, score per wave) so the client animates each wave and tests can assert it.
+**Tests:** row and column pops, a disc matching neither stays, egg -> cracked -> number, chain scoring, Lucky
+Seven, the rising row and overflow, Hold and Crack, determinism by seed.
 
 ---
 
@@ -91,111 +115,117 @@ multi-wave chain scoring, rising row and overflow game over, determinism by seed
 **Base (Threes):** 4x4; a swipe moves every tile **one step**; 1 + 2 = 3; from 3 up, equal tiles merge (3+3=6,
 6+6=12 ...); the next tile is previewed and enters from the edge you swiped away from.
 
-**The problem the owner named:** in Threes, 3 is just the first doubling step, and the colours quickly matter
-more than the numbers. **Our fix: make "multiple of 3" the whole game.**
-1. **Step merge (new):** two tiles that are *neighbouring multiples* of 3 also merge into their sum:
-   3+6=9, 6+9=15, 9+12=21. (Proof it stays in the family: 3k + 3(k+1) = 3(2k+1).) So 9, 15, 21 exist, not only
-   3, 6, 12, 24, and you are always counting in threes.
-2. **Flush (new):** after a move, any straight line of **3 or more adjacent tiles that run in consecutive
-   multiples of 3** (3-6-9, 12-9-6, 6-9-12-15, either direction) **flushes**: the run collapses into one tile
-   worth the run's sum (always a multiple of 3), with a bonus of `sum x run length`. Longer flushes are rarer and
+**The fix for "3 becomes irrelevant": make "multiple of 3" the whole game.**
+1. **Step merge:** neighbouring multiples of 3 also merge into their sum: 3+6=9, 6+9=15, 9+12=21
+   (3k + 3(k+1) = 3(2k+1), so it stays a multiple of 3). Every multiple exists, and you always count in threes.
+2. **Flush:** after a move, any straight line of **3 or more adjacent tiles in consecutive multiples of 3**
+   (3-6-9, 12-9-6, 6-9-12-15, either direction) **flushes**: the run collapses into one tile worth its sum
+   (always a multiple of 3), scoring `sum x run length`, and earns a power-up. Longer flushes are rarer and
    worth much more, like poker straights.
-3. **Rainbow scale:** each multiple has a rainbow colour by `k = value / 3`: 3 red, 6 orange, 9 yellow,
-   12 green, 15 blue, 18 indigo, 21 violet, then the spectrum repeats one "octave" up with a brighter ring
-   (24 red+ring, 27 orange+ring ...). So a flush is literally a rainbow lined up in order, and it **sweeps** along
-   the run when it fires (a colour pass, then the collapse; reduced motion shows a static rainbow outline).
-   1 and 2 stay neutral grey: they are only halves of a 3.
+3. **Rainbow scale:** each multiple has a colour by `k = value / 3`: 3 red, 6 orange, 9 yellow, 12 green,
+   15 blue, 18 indigo, 21 violet, then the spectrum repeats one octave up with a brighter ring (24 red+ring,
+   27 orange+ring ...). A flush is a rainbow lined up in order, and it **sweeps** along the run when it fires
+   (reduced motion: a static rainbow outline, then the collapse). 1 and 2 stay neutral grey: halves of a 3.
 
-**Q3a (controls):** you described "drag and merge, Candy Crush kind of". Two options:
-- **A (recommended): swipe** like Threes (one step per swipe), flushes happen as a result. Familiar, works with
-  the Endless keyboard + swipe code.
-- **B: drag one tile** to an adjacent cell (match-3 style). If that makes a merge or a flush it commits; if not,
-  it snaps back. More "Candy Crush", but a new input model.
-**Q3b:** should the game end like Threes (board locked) or be endless with power-ups like Endless?
-**Tuning plan:** before any UI, run 10,000 simulated games per rule variant (bots in Node, like melon-eight's
-measurements) to check flushes happen often enough to matter (target: a flush every 15-30 moves) but not
-constantly. Ship the variant the numbers support.
+**Decided:** controls are **swipe** (one step per swipe, keyboard and swipe code from Endless). The run is
+**endless with power-ups**: it ends only when the board is locked and no power-up can act, like Endless.
+**Tuning first:** before any UI, 10,000 simulated games per rule variant (Node bots) to check flushes land
+every 15-30 moves; ship the variant the numbers support and record the numbers in `docs/DESIGN.md`.
 
 ---
 
-## 4. Four (Connect Four vs the computer)
+## 4. Four (Connect Four, counted)
 
-**Rules:** 7 columns x 6 rows; drop discs; four in a row in any line wins; a full board is a draw.
-**AI:** negamax with alpha-beta on bitboards, centre-first move ordering, a transposition table. Strengths:
-**Easy** (depth 2 + some randomness), **Medium** (depth 6), **Hard** (depth 10+, near perfect). Classic Connect
-Four is a first-player win with perfect play, so by default the player moves first and Hard plays the best reply.
-**Style:** discs use the accent gold vs a cool hue from the Endless palette; the winning four pulse once.
-**Q4:** plain Connect Four, or a Numberics twist (for example, discs carry 1-4 and a line must also sum to a
-target)? Recommendation: ship plain first, twist as a later mode.
-**Tests:** win detection in all four directions, draw, AI takes an immediate win, AI blocks an immediate loss,
-determinism of Easy with a fixed seed.
+**Rules:** 7 columns x 6 rows; drop discs in turn; a full board is a draw.
+**Number twist: every disc carries a number 1-4** (dealt from a seeded bag, your next number is shown). You win
+with either:
+- **Four in a row of your colour** (classic), or
+- a **ten-line**: any four in a row, **any colours**, whose numbers **sum to exactly 10**, completed by your
+  disc. (10 = 1+2+3+4, the "count to four" line, but 4+4+1+1 and 3+3+2+2 count too.)
+So every disc you drop also arms lines for your opponent: you read colour and arithmetic at once.
+**AI:** negamax with alpha-beta and a transposition table over both win conditions; centre-first ordering.
+Strengths **Easy** (depth 2 + randomness), **Medium** (depth 6), **Hard** (depth 8+, uses power-ups). The
+player moves first by default.
+**Tests:** both win types in all four directions, a ten-line completed by the opponent's disc does not win for
+you, draw, AI takes an immediate win, AI blocks an immediate loss, Pop and Tune, Easy determinism by seed.
 
 ---
 
-## 5. Five (Chopsticks vs the computer)
+## 5. Five (Chopsticks, re-imagined without fingers)
 
-**Rules (as asked):** each side has two hands, each starting with 1 finger. On your turn, tap one of your living
-hands onto **any other living hand** (an opponent's hand, or your own other hand): that hand gains the tapping
-hand's fingers. A hand that reaches **5 or more dies** (it does not wrap around). The side with the last living
-hand wins.
-**AI:** the whole game is tiny (each hand is 0-4, so at most 625 positions x 2 turns), so we **solve it**
-completely by retrograde analysis: every position is labelled win / lose / draw. Strengths: **Easy** (random
-legal move that does not lose at once), **Medium** (looks 3 moves ahead), **Hard** (perfect play from the
-solved table).
-**Fairness check before building:** the solver tells us whether the first player can force a win. If yes, the
-player always moves first; if the start is a forced draw, we add a draw rule (same position 3 times, or 40
-moves without a hand dying) and say so in the how-to line.
-**Q5:** include the classic "split" move (move fingers between your own two hands)? Recommendation: not at
-first; "add to your own hand" already gives a self-move.
-**Style:** hands drawn as simple line glyphs with 0-4 raised fingers (in the noir line style of melon-eight
-badges), finger counts as big numbers in the Endless tile colours; a dying hand fades out.
-**Tests:** every move rule, death at 5+, win detection, solver labels known positions correctly, Hard never
-loses from a position the table marks as a win.
+**Theme:** no hands, no fingers. Each side owns **two number tiles** in the Endless tile style, both starting at
+**1**. The board is four tiles: yours at the bottom, the computer's at the top.
+**Rules:** on your turn, pick one of your live tiles and **add its value onto any other live tile** (one of the
+computer's, or your own other tile). A tile that reaches **5 or more bursts** and is gone. The side with the
+last live tile wins. The tile colours walk the Endless palette 1 -> 4, so a 4 visibly "glows" one step from
+bursting; a burst is a short pop (a fade under reduced motion).
+**AI:** at most 625 positions x 2 turns, so the game is **solved** by retrograde analysis (every position
+labelled win / lose / draw). **Easy**: a random legal move that does not lose at once. **Medium**: 3 moves
+ahead. **Hard**: perfect play from the table, with power-ups.
+**Fairness:** the solver runs first. If the starting side can force a win, the player always starts; if the
+start is a forced draw, a draw rule applies (same position 3 times, or 40 moves without a burst) and the how-to
+line says so.
+**Split** (moving points between your own two tiles, the classic finger-game move) is a **power-up**, not a
+basic move.
+**Tests:** every move rule, burst at 5+, win detection, solver labels known positions correctly, Hard never
+loses from a position the table marks as a win, Shield and Nudge.
 
 ---
 
 ## 6. Six (the 6s challenge, expanded)
 
 **Classic:** each line gives three identical digits (2 2 2, 5 5 5 ...). Insert +, -, x, /, square root,
-factorial and brackets so the line equals 6. (Every digit 0-9 works: 0 0 0 is (0! + 0! + 0!)!.)
+factorial and brackets so it equals 6. (Every digit 0-9 works: 0 0 0 is (0! + 0! + 0!)!.)
 
-**Ours, as asked: longer, harder lines that always land on sixes.** Levels climb in tiers:
-| Tier | Line | Target |
-|---|---|---|
-| 1 | three copies of one digit, 0-9 | 6 |
-| 2 | four or five copies | 6 |
-| 3 | two-digit numbers (10 10 10, 12 12 12 ...) | 6 |
-| 4 | three to five copies | 66 or 6.6 |
-| 5 | mixed lengths and two-digit numbers | 666 or 66.6 |
-Allowed tools grow by tier: Tier 1 has + - x / sqrt ! and brackets; later tiers may add the decimal point and
-joining digits (2 2 -> 22) if the solver shows they are needed. **Q6:** are joining digits and decimals allowed,
-or only operators?
+**Design (decided):**
+- **A run is six lines.** Solve all six to clear a round; rounds climb the tiers. A **Daily Six** (date
+  seeded, the same for everyone) and an endless **Climb** mode.
+- **Tiers, always landing on sixes:**
 
-**Every line is proven solvable before it is shown.** A solver searches expressions over the line in order with
-**exact fraction arithmetic** (no floating point, so 6.6 is exactly 33/5), square root only of perfect squares,
-factorial only of whole numbers up to 10. Difficulty = how few solutions exist and how many operators the
-shortest one needs, so tiers are ordered by measurement, not guesswork.
-**Input:** tap the gaps between numbers to cycle operators, tap a number for sqrt / !, tap twice to place
-brackets; the running value is shown live; the line locks gold when it hits the target. **Never `eval`**: a
-small parser builds the expression tree. A counted **Hint** reveals one operator of a known solution.
-**Tests:** every digit 0-9 solvable at Tier 1; the parser respects precedence and brackets; exact arithmetic for
-decimal targets; every generated puzzle verified by the solver; no `eval` / `Function` in the source.
+| Tier | Line | Target | Tools |
+|---|---|---|---|
+| 1 | three copies of one digit, 0-9 | 6 | + - x / sqrt ! ( ) |
+| 2 | four or five copies | 6 | same |
+| 3 | two-digit numbers (10 10 10, 12 12 12 ...) | 6 | same |
+| 4 | three to five copies | 66 or 6.6 | + joining digits (2 2 -> 22) and the decimal point |
+| 5 | mixed lengths and two-digit numbers | 666 or 66.6 | all tools |
+
+  Joining digits and decimals only arrive at Tier 4, because 66 and 6.6 need them; tiers 1-3 stay pure
+  operators, as in the classic puzzle.
+- **Every line is proven solvable before it is shown.** A solver searches expressions over the line in order
+  with **exact fraction arithmetic** (6.6 is exactly 33/5), square root only of perfect squares, factorial only
+  of whole numbers up to 10. Difficulty = how few solutions exist and how many operators the shortest one
+  needs, so tiers are ordered by measurement, not guesswork.
+- **Input:** tap a gap between numbers to cycle operators, tap a number for sqrt or !, tap twice to place
+  brackets; the running value shows live; the line turns gold when it hits the target. **Never `eval`**: a small
+  parser builds the expression tree. Number tiles use the Endless colours; the target 6s are in gold.
+- **Power-ups** per 0a: Hint, Skip, Peek, Undo.
+**Tests:** every digit 0-9 solvable at Tier 1; parser precedence and brackets; exact arithmetic for decimal
+targets; every generated line verified by the solver; no `eval` or `Function` in the source.
+
+---
+
+## 7. Sudoku gets power-ups (a change to a live game, asked for on 16 Nov)
+
+Undo stays free. The current Hint becomes the **Reveal** power-up; **Check** and **Candidates** are added;
+charges are earned by completing a correct row, column or box (section 0a). The board, numpad and layout stay
+as they are; only the tools row becomes the Endless-style power-up tray. Before/after screenshots ship with it.
 
 ---
 
 ## Build order and estimates
 
-1. Shared foundation (0.5 day), then Endless/Sudoku pixel-identical check.
+1. Shared foundation incl. `shared/power.js` (0.5-1 day), then the Endless/Sudoku pixel-identical check.
 2. **Fibonacci** (0.5 day): closest to Endless, proves the rule-set refactor.
-3. **Seven** (1 day). 4. **Four** (1 day). 5. **Five** (0.5-1 day, solver first).
+3. **Seven** (1 day). 4. **Four** (1-1.5 days). 5. **Five** (0.5-1 day, solver first).
 6. **Three** (1-2 days, simulations decide the rules). 7. **Six** (1.5-2 days, solver and parser first).
+8. **Sudoku power-ups** (0.5 day).
 
-Every game ships with its screenshots, tests and design notes in the same commit, pushed as it goes (a stopped
-session must lose nothing).
+Every game ships with its screenshots, tests and design notes in the same commit, pushed as it goes.
 
 ## Resume here (next session)
 
-1. Read `CLAUDE.md`, then this file. Get the owner's answers to **Q0, Q2, Q3a, Q3b, Q4, Q5, Q6**.
+1. Read `CLAUDE.md`, then this file. Only **Q0** is open, and it defaults to "change nothing".
 2. Check the Fibonacci rules against https://thereal23.github.io/2584/ (the planning session could not open it).
-3. Build in the order above, one game per commit series on its own branch, merged to `main` when green.
+3. Build in the order above, each game on its own branch, merged to `main` when tests and screenshots are green.
 4. Authorship: owner only (see `CLAUDE.md`, Conventions). Activate the hook: `git config core.hooksPath .githooks`.
