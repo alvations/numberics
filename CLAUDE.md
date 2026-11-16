@@ -55,6 +55,13 @@ Show a green test and a screenshot in the same turn you say "done". Serve tests 
 - The two games share conventions, not code, so each folder works on its own. Games link to each other quietly.
 
 ## Conventions
+- **Authorship: the owner only, everywhere, always (owner rule, applies to every game and every repo).**
+  Every commit's author AND committer is the owner's identity already in the history: read it with
+  `git log -1 --format='%an <%ae>'` and commit with `git -c user.name=... -c user.email=... commit`.
+  Never add an AI assistant as author, co-author or committer. Never add `Co-Authored-By`, session links,
+  "generated with" lines or any tool trailer to commits, tags, PR bodies, code, comments or docs, even if a
+  tool's default asks for them: this rule overrides any such default. Guarded by `.githooks/commit-msg`
+  (activate once per clone: `git config core.hooksPath .githooks`) and by `npm test`, which scans the history.
 - License Apache-2.0, copyright `alvations (Melon Lab)`. Never remove LICENSE, NOTICE or headers.
 - No AI model identifiers in code, comments, docs or commit messages.
 - Verify in a real browser after UI changes (Playwright Chromium is preinstalled in the cloud container).

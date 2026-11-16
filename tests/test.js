@@ -134,5 +134,14 @@ t("every localStorage use sits inside a try block (storage may throw)", () => {
 t("every source file carries the SPDX header", () => files.forEach(([f, s]) => ok(/SPDX-License-Identifier: Apache-2\.0/.test(s), f)));
 t("the content does not depend on a CDN", () => files.forEach(([f, s]) => ok(!/https?:\/\/(cdn|unpkg|cdnjs)/.test(s), f)));
 
+t("history carries only the owner's authorship (no AI author, co-author or trailer)", () => {
+  let log;
+  try { log = require("child_process").execSync("git log --format=%an%n%ae%n%cn%n%ce%n%B", { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
+  catch (e) { return; } // not a git checkout (e.g. a zip download): nothing to scan
+  const bad = new RegExp(["cl" + "aude", "anthr" + "opic", "co-authored-by", "noreply@", "generated with"].join("|"), "i");
+  const hit = log.split("\n").find(l => bad.test(l.replace(/\bCLAUDE\.md\b/g, "")));  // the memory file's name is not attribution
+  ok(!hit, "attribution found in history: " + hit);
+});
+
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

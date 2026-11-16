@@ -1,0 +1,8 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+# Owner rule: commits carry only the owner's authorship. Block AI attribution lines and identities.
+pat='cl''aude|anthr''opic|co-authored-by|generated with'
+# the project memory file is named CLAUDE.md; its name alone is not attribution
+if sed 's/CLAUDE\.md//g' "$1" | grep -qiE "$pat"; then echo "commit-msg: AI attribution in the message is not allowed (see CLAUDE.md, Authorship)." >&2; exit 1; fi
+who="$(git var GIT_AUTHOR_IDENT) $(git var GIT_COMMITTER_IDENT)"
+if echo "$who" | grep -qiE "cl""aude|anthr""opic|noreply@"; then echo "commit-msg: author/committer must be the owner (see CLAUDE.md, Authorship)." >&2; exit 1; fi
