@@ -14,3 +14,7 @@ Every visible design change must trace to a line here (CLAUDE.md: no design chan
 | O-5 | 20 Nov 2026 | Build all games, fan out agents, iterate QA/QC like melon-eight; deploy to GitHub Pages. | Done (live) |
 | O-6 | 20 Nov 2026 | Endless is not really endless: rename it **Two**. A creative designer and UI/UX iterate on the site to make it attractive to casual players of all ages; tiles must move (no "blipping"), modelled on how the original 2048 and other games animate; settings, achievements, replay value and secret achievements like melon-eight; iterate the review panel; every cycle passes QA, QC and perf tests. Autonomous. | In progress (`docs/design/REDESIGN.md`) |
 | O-7 | 20 Nov 2026 | Order every games list "in increasing order": Fibonacci, Two, Three, Four, Five, Six, Seven, Nine, Fifteen, Sudoku. Two is the default game on the landing page (the root opens Two). The order is the owner's proposal: put it through the review panels each cycle and change it if their evidence supports a better one (record why); the owner stays the final gate. | In progress |
+
+Decisions taken for O-6 under "iterate autonomously" (each goes to the review panel; the owner can reverse any):
+sound and vibration on by default (silent until the first tap, volume 50%); first-time players start Sudoku, Four, Five
+and Fifteen on Easy (saved choices kept); the new Daily Sudoku ramps Easy Mon-Thu, Medium Fri-Sat, Hard Sun.

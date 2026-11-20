@@ -20,7 +20,7 @@ const VIEWS = [
 // Small, optional per-game play hints. Anything not listed plays generically: arrow keys, Enter and clicks on
 // whatever is clickable outside the header, the games row, the difficulty row and New game.
 // keys: keys pressed (repeat a key to weight it); click: share of actions that are clicks (0..1); sel: extra
-// click targets. Unknown ids (new games, renamed games) just play generically.
+// click targets; seq + seqP: tap sequences (one selector per tap) tried with probability seqP. Unknown ids (new games, renamed games) just play generically.
 const PLAY = {
   endless: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
   two: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
@@ -28,10 +28,11 @@ const PLAY = {
   three: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.1 },
   seven: { keys: ["ArrowLeft", "ArrowRight", "Enter", "Enter"], click: 0.2 },
   sudoku: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "1", "2", "3", "4", "5", "6", "7", "8", "9"], click: 0.3 },
-  four: { keys: ["ArrowLeft", "ArrowRight", "Enter"], click: 0.7 },
-  five: { keys: ["ArrowLeft", "ArrowRight", "Enter"], click: 0.8 },
-  fifteen: { keys: ["ArrowLeft", "ArrowRight", "Enter"], click: 0.8 },
-  nine: { keys: ["ArrowLeft", "ArrowRight", "ArrowUp", "Enter"], click: 0.8 },
+  four: { keys: ["ArrowLeft", "ArrowRight", "Enter", "Enter"], click: 0.5 },
+  five: { keys: ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter", "Enter"], click: 0.5, seqP: 0.6,
+    seq: [['.slot[data-i="0"], .slot[data-i="1"]', '.slot']] },
+  fifteen: { keys: ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Enter", "Enter"], click: 0.5 },
+  nine: { keys: ["ArrowLeft", "ArrowRight", "ArrowDown", "Enter", "Enter"], click: 0.4 },
   six: { keys: ["ArrowLeft", "ArrowRight", "Enter"], click: 0.8 },
 };
 const GENERIC = { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "Enter", " "], click: 0.5 };
@@ -86,26 +87,29 @@ const INIT = `(() => {
 })();`;
 
 // Picks a click target in the page (fresh each time, so it follows re-renders). Returns viewport coordinates.
-function pickTarget(extraSel) {
+function pickTarget(opt) {
   const SKIP = "header, nav, footer, #games, .games, .seg, #levels, #diff, #new, a[href], [aria-haspopup], dialog, [data-perf-skip], " +
     "[id*=setting], [class*=setting], [id*=sound], [id*=audio], [id*=theme]";
-  const sel = "#board, #board *, button, [role=button], [data-i], [data-n], [data-g], .slot, .tile, .cell, .heap, .ft, .gp, .bar, .pw" + (extraSel ? ", " + extraSel : "");
+  const sel = opt.only || "#board, #board *, button, [role=button], [data-i], [data-n], [data-g], .slot, .tile, .cell, .heap, .ft, .gp, .bar, .pw" + (opt.sel ? ", " + opt.sel : "");
   const vw = innerWidth, vh = innerHeight;
   const els = [...document.querySelectorAll(sel)].filter(el => {
     if (el.closest(SKIP)) return false;
     if (el.disabled) return false;
     const r = el.getBoundingClientRect();
-    if (r.width < 4 || r.height < 4 || r.bottom < 0 || r.right < 0 || r.top > vh || r.left > vw) return false;
+    if (r.width < 4 || r.height < 4) return false;
     const cs = getComputedStyle(el); if (cs.visibility === "hidden" || cs.pointerEvents === "none" || +cs.opacity === 0) return false;
-    const x = Math.min(vw - 1, Math.max(0, r.left + r.width / 2)), y = Math.min(vh - 1, Math.max(0, r.top + r.height / 2));
-    const top = document.elementFromPoint(x, y); if (!top || top.closest(SKIP)) return false;
     return true;
   });
   // Buttons in an end card (Play again, Next round) win when present, so play keeps going after a game ends.
   const card = els.filter(el => el.tagName === "BUTTON" && el.closest(".over:not([hidden]), [role=dialog]"));
-  const pool = card.length && Math.random() < 0.7 ? card : els;
+  const pool = !opt.only && card.length && Math.random() < 0.7 ? card : els;
   if (!pool.length) return null;
-  const r = pool[Math.floor(Math.random() * pool.length)].getBoundingClientRect();
+  const el = pool[Math.floor(Math.random() * pool.length)];
+  // A target below the fold (the phone view) is scrolled into view first, like a player would. Scrolling is not a layout shift.
+  let r = el.getBoundingClientRect();
+  if (r.top < 0 || r.bottom > vh || r.left < 0 || r.right > vw) { el.scrollIntoView({ block: "nearest", inline: "nearest" }); r = el.getBoundingClientRect(); }
+  const x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y);
+  if (!top || top.closest(SKIP) || (top !== el && !el.contains(top) && !top.contains(el))) return null; // covered by something else
   return { x: r.left + r.width * (0.3 + Math.random() * 0.4), y: r.top + r.height * (0.3 + Math.random() * 0.4) };
 }
 
@@ -157,10 +161,20 @@ async function runOnce(browser, base, page, view) {
   while (Date.now() - t0 < PLAY_MS) {
     if (p.url() !== urlBefore) { navigated = true; break; }
     const nCpu = vs ? await p.evaluate(() => window.__perf.cpu.length) : 0;
-    if (Math.random() < plan.click) {
-      const t = await p.evaluate(pickTarget, plan.sel || "");
+    if (plan.seq && Math.random() < plan.seqP) {
+      // A short tap sequence (pick a tile, then its target), each step a random visible match of its selector.
+      for (const only of plan.seq[Math.floor(Math.random() * plan.seq.length)]) {
+        const t = await p.evaluate(pickTarget, { only }).catch(() => null);
+        if (t) await p.mouse.click(t.x, t.y).catch(() => {});
+        await p.waitForTimeout(120);
+      }
+    } else if (Math.random() < plan.click) {
+      const t = await p.evaluate(pickTarget, { sel: plan.sel || "" }).catch(() => null);
       if (t) await p.mouse.click(t.x, t.y).catch(() => {});
     } else {
+      // A player's keys go to the board, not to the last button they tapped (Enter would press that button again).
+      await p.evaluate(() => { const a = document.activeElement, b = document.getElementById("board");
+        if (a && /^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) { a.blur(); if (b) b.focus({ preventScroll: true }); } }).catch(() => {});
       await p.keyboard.press(plan.keys[Math.floor(Math.random() * plan.keys.length)]).catch(() => {});
     }
     actions++;
