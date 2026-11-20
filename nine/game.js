@@ -130,7 +130,8 @@
     var ln = $("learn"); ln.hidden = !prefs.learn; ln.textContent = "";
     if (prefs.learn) {
       var goal = document.createElement("span"); goal.className = "goal";
-      goal.textContent = "To win, leave a nim-sum of 0 after your move. Nim-sum: add the binary columns, dropping every carry.";
+      goal.textContent = "To win, leave a nim-sum of 0 after your move" + (state.misere ? " (Misere: once every tile is 1 or gone, leave an odd number of 1s)" : "") +
+        ". Nim-sum: add the binary columns, dropping every carry.";
       ln.appendChild(goal);
       var sum = document.createElement("span"); sum.className = "sum";
       if (state.diff === "hard") {
