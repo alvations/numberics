@@ -18,3 +18,4 @@ Every visible design change must trace to a line here (CLAUDE.md: no design chan
 Decisions taken for O-6 under "iterate autonomously" (each goes to the review panel; the owner can reverse any):
 sound and vibration on by default (silent until the first tap, volume 50%); first-time players start Sudoku, Four, Five
 and Fifteen on Easy (saved choices kept); the new Daily Sudoku ramps Easy Mon-Thu, Medium Fri-Sat, Hard Sun.
+| O-8 | 20 Nov 2026 | Background music (BGM) and SFX like melon-eight (procedural Web Audio), with selectable BGM styles: chill, epic, EDM, and styles evoking classic falling-block, monster-collecting and adventure games; decided with the panel, a music director and a producer. All music original (no copied melodies or names of other games in the product). | In progress |

@@ -275,3 +275,33 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
   .tile.pop,.tile.new{ animation:none; }
   .toast{ transition:opacity 200ms; } /* opacity is not motion */
 }
+
+/* ===== B2 motion: the keyed tile layer of shared/motion.js (REDESIGN.md 5.2, 5.12, 5.13). Everything here is scoped
+   under .nmm-layer and its keyframes are named nmm-*, so plain .tile rules above are untouched. Only transform and
+   opacity animate. .nmm-reduced is set by NumbericsMotion at each sync from the Settings tri-state, then the device. ===== */
+.nmm-layer{ --nmm-slide:var(--m-slide,110ms); --nmm-pop:var(--m-pop,180ms); --nmm-appear:var(--m-appear,170ms);
+  --nmm-fade:var(--m-fade,160ms); position:absolute; inset:var(--gap); }
+.nmm-layer.nmm-clip{ overflow:clip; }
+.nmm-layer > .tile{ position:absolute; left:0; top:0; margin:0; z-index:1; animation:none;
+  width:calc((100% - (var(--cols) - 1) * var(--gap)) / var(--cols)); height:calc((100% - (var(--rows) - 1) * var(--gap)) / var(--rows));
+  transform:translate(calc(var(--c) * (100% + var(--gap))), calc(var(--r) * (100% + var(--gap))));
+  transition:transform var(--nmm-slide) var(--e-slide); will-change:transform; }
+.nmm-layer > .tile > .face{ width:100%; height:100%; }
+.nmm-layer > .tile.gone{ z-index:0; }
+.nmm-layer > .tile.merged{ z-index:2; }
+.nmm-layer > .tile.merged > .face{ animation:nmm-pop var(--nmm-pop) var(--e-pop) var(--nmm-slide) backwards; }
+.nmm-layer > .tile.new > .face{ animation:nmm-appear var(--nmm-appear) var(--e-out) var(--nmm-slide) backwards; }
+.nmm-layer > .tile.nmm-bump > .face{ animation:nmm-pop var(--nmm-pop) var(--e-pop); }
+.nmm-layer > .tile.nmm-out > .face{ animation:nmm-out var(--nmm-fade) var(--e-out) forwards; }
+.nmm-layer > .tile.nmm-fadein > .face{ animation:nmm-fade 120ms linear backwards; }
+.nmm-layer > .tile.nmm-snap{ transition:none; }
+.nmm-layer.nmm-reduced > .tile{ transition:none; }
+.nmm-layer.nmm-reduced > .tile.merged > .face,.nmm-layer.nmm-reduced > .tile.new > .face,
+.nmm-layer.nmm-reduced > .tile.nmm-bump > .face,.nmm-layer.nmm-reduced > .tile.nmm-fadein > .face{ animation:nmm-fade var(--nmm-fade) linear backwards; }
+.nmm-layer.nmm-reduced > .tile.nmm-out > .face{ animation:nmm-fadeout var(--nmm-fade) linear forwards; }
+@keyframes nmm-pop{ 0%{ transform:scale(.72); } 60%{ transform:scale(1.14); } 100%{ transform:scale(1); } }
+@keyframes nmm-appear{ 0%{ opacity:0; transform:scale(.35); } 100%{ opacity:1; transform:scale(1); } }
+@keyframes nmm-out{ to{ opacity:0; transform:scale(.6); } }
+@keyframes nmm-fade{ from{ opacity:0; } }
+@keyframes nmm-fadeout{ to{ opacity:0; } }
+/* ===== end B2 motion ===== */
