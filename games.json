@@ -4,69 +4,69 @@
     "name": "Endless",
     "path": "",
     "status": "live",
-    "blurb": "2048 with no ceiling, plus earned power-ups."
+    "blurb": "2048 with no top tile."
   },
   {
     "id": "sudoku",
     "name": "Sudoku",
     "path": "sudoku/",
     "status": "live",
-    "blurb": "Classic 9x9, every puzzle has exactly one solution."
+    "blurb": "Classic 9x9, one answer only."
   },
   {
     "id": "fibonacci",
     "name": "Fibonacci",
     "path": "fibonacci/",
     "status": "live",
-    "blurb": "2584 with no ceiling: merge neighbours in the Fibonacci sequence."
+    "blurb": "Merge neighbours in the Fibonacci run."
   },
   {
     "id": "seven",
     "name": "Seven",
     "path": "seven/",
     "status": "live",
-    "blurb": "Drop numbered discs; pop seven in one chain for luck."
+    "blurb": "Drop discs; a number pops when it fits its line."
   },
   {
     "id": "three",
     "name": "Three",
     "path": "three/",
     "status": "live",
-    "blurb": "Count in threes: step merges and rainbow Flush runs."
+    "blurb": "Count in threes, line up rainbow flushes."
   },
   {
     "id": "four",
     "name": "Four",
     "path": "four/",
     "status": "live",
-    "blurb": "Four in a row, or any four that sum to ten."
+    "blurb": "Four in a row, or four that make ten."
   },
   {
     "id": "five",
     "name": "Five",
     "path": "five/",
     "status": "live",
-    "blurb": "Add one tile onto another; at five it bursts. Beat the computer."
+    "blurb": "Add tiles onto tiles; at five they burst."
   },
   {
     "id": "six",
     "name": "Six",
     "path": "six/",
     "status": "live",
-    "blurb": "Make every line equal six, then 66, 6.6, 666."
+    "blurb": "Signs between numbers until they make six."
   },
   {
     "id": "fifteen",
     "name": "Fifteen",
     "path": "fifteen/",
     "status": "live",
-    "blurb": "Tic-tac-toe in disguise: first to hold three numbers that sum to 15."
+    "blurb": "Claim three numbers that make fifteen."
   },
   {
     "id": "nine",
     "name": "Nine",
     "path": "nine/",
     "status": "live",
-    "blurb": "Nim with number tiles up to nine: take from one, last take wins."
+    "blurb": "Take from the heaps; take the last to win."
   }
 ]
