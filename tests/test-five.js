@@ -401,6 +401,11 @@ t("how-to copy: 'at 5 or more' and 'you can always win', no jargon", () => {
   ok(/5 or more bursts/.test(how) && /you can always win/.test(how) && !/seat|solved|perfect play/i.test(how), how);
   ok(/<span>Record<\/span>/.test(h) && !/Matches/.test(h), "R16 pill names");
 });
+t("round 3: one end-card wording (You win / The computer wins / round N), no old 'Round to' or 'Match to' lines", () => {
+  const g = fs.readFileSync(path.join(__dirname, "..", "five", "game.js"), "utf8");
+  ok(!/Round to (you|the computer)|Match to (you|the computer)|Round drawn/.test(g), "old card wording");
+  ok(/"You win"/.test(g) && /"The computer wins"/.test(g) && /" round " \+ state\.round/.test(g), "new card wording");
+});
 t("client never re-implements a rule (no burst arithmetic in game.js)", () => {
   const g = fs.readFileSync(path.join(__dirname, "..", "five/game.js"), "utf8");
   ok(!/>=\s*5\b|BURST\s*-|tiles\[[^\]]+\]\s*\+=/.test(g));

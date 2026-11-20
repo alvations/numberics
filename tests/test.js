@@ -422,7 +422,9 @@ t("every live game in games.json has mobile + desktop screenshots", () => {
 // ---- replay: the rule-set refactor must keep Endless byte-identical ----
 // A seeded driver plays 20 games of 1,000 actions (moves plus every power-up, with valid and invalid
 // targets) and hashes every result. The fixture was recorded from the engine BEFORE the refactor.
-// Re-record only for an intended rule change: RECORD_ENDLESS_REPLAY=1 node tests/test.js
+// Re-record only for an intended rule change: RECORD_ENDLESS_REPLAY=1 node tests/test.js. Re-recorded for round 2
+// (state.free) and round 3 (state.marks: stepping both engines from the same state over 200 seeds, 199,304 actions,
+// the only differences are 1,284 awards withheld because a marked tile made the new top tile, and the marks field).
 function endlessReplay(seed) {
   const h = require("crypto").createHash("sha256");
   let s = N.newGame(seed), d = seed * 7919 + 1, games = 1;

@@ -211,12 +211,81 @@ t("R2 property: random play mixing power-ups and moves never raises the stock th
   ok(checked > 1000, "fuzz reached " + checked + " assisted moves");
   eq(bad, 0, "assisted moves that raised the stock (of " + checked + ")");
 });
-t("R2: the swipe after an assisted swipe pays again (the rule is one swipe deep, as in Three)", () => {
-  const s = board([[9, 7, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], { top: 9, power: { undo: 0, smash: 0, swap: 0, boost: 1 } });
-  let r = F.move(F.use(s, "boost", 1).state, "left"); eq(r.awarded.length, 0);
-  // set up a natural 89 + 55 merge after it
-  const t2 = Object.assign({}, r.state, { grid: [10, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] });
-  r = F.move(t2, "left"); eq(r.state.grid[0], 11); eq(r.awarded.length, 1, "a natural new top tile pays");
+t("R2 by tile (round 3): the 89 a Boost made stays marked, so merging it with 55 later pays nothing; an honest one pays", () => {
+  const s = board([[9, 7, 0, 0], Z, Z, Z], { top: 9, power: { undo: 0, smash: 0, swap: 0, boost: 1 } });
+  let r = F.move(F.use(s, "boost", 1).state, "left"); eq(r.awarded.length, 0); eq(r.state.marks[0], 1, "the 89 is marked");
+  // the marked 89 meets a 55 later: 144 is a new top tile, but a marked one
+  const m = r.state.marks.slice();
+  r = F.move(Object.assign({}, r.state, { grid: [10, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], marks: m, free: false }), "left");
+  eq(r.state.grid[0], 11); eq(r.awarded.length, 0, "a marked new top tile pays nothing"); ok(r.marked);
+  // the same merge from honest tiles pays
+  r = F.move(Object.assign({}, r.state, { grid: [11, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], marks: new Array(16).fill(0), top: 11 }), "left");
+  eq(r.state.grid[0], 12); eq(r.awarded.length, 1, "a natural new top tile pays");
+});
+t("R2 by tile, mechanics repro: Swap the 377 beside the 610, Up (no merge), Left makes 987 and pays nothing", () => {
+  const s = board([[0, 0, 0, 13], [14, 0, 0, 0], Z, [0, 0, 0, 0]], { top: 14, power: { undo: 0, smash: 0, swap: 1, boost: 0 } });
+  const w = F.use(s, "swap", 3, 5); ok(w.ok); eq([w.state.grid[4], w.state.grid[5]], [14, 13]); eq(w.state.marks[5], 1);
+  const up = F.move(w.state, "up"); ok(up.moved); eq(up.merges, [], "Up merges nothing");
+  eq([up.state.grid[0], up.state.grid[1]], [14, 13], "the pair stays in line");
+  const left = F.move(up.state, "left"); eq(left.state.grid[0], 15, "610 + 377 = 987");
+  eq(left.awarded, [], "a swapped tile never pays"); ok(left.marked);
+  const h = F.move(F.move(s, "up").state, "left"); eq(h.awarded, [], "the same swipes without the Swap pay nothing");
+});
+t("R2 by tile, critic repro: Boost 21 to 34 beside 55, a dummy swipe, then 89 pays nothing", () => {
+  const s = board([[9, 7, 0, 0], Z, Z, [0, 0, 0, 1]], { top: 9, power: { undo: 0, smash: 0, swap: 0, boost: 1 } });
+  const b = F.use(s, "boost", 1), d = F.move(b.state, "up"); ok(d.moved); eq(d.state.grid.slice(0, 2), [9, 8]); ok(!d.state.free);
+  const r = F.move(d.state, "left"); eq(r.state.grid[0], 10); eq(r.awarded, []); ok(r.marked);
+});
+t("R15: a full stock flags the skipped reward (the client says Power-ups full)", () => {
+  const full = { undo: 9, smash: 9, swap: 9, boost: 9 };
+  const r = F.move(board([[9, 8, 0, 0], Z, Z, Z], { top: 9, power: full }), "left");
+  eq(r.milestones, [10]); eq(r.awarded, []); ok(r.full);
+});
+// The critic's method, as in tests/test.js: the same moves with and without the power-up, 0 to 5 neutral moves
+// (legal in both lines, merging in neither) after a Boost or Swap, 0 after a Smash or a swap into an empty cell.
+function r2Property(E, seeds) {
+  let trials = 0, paying = 0, bad = [], gaps = [0, 0, 0, 0, 0, 0];
+  for (let seed = 1; seed <= seeds; seed++) {
+    let x = (seed * 2654435761) >>> 0;
+    const rnd = () => { x = (x * 1103515245 + 12345) >>> 0; return x / 4294967296; };
+    const pick = (a) => a[Math.floor(rnd() * a.length)];
+    let s = E.newGame(seed); s.power = { undo: 0, smash: 5, swap: 5, boost: 5 };
+    for (let step = 0; step < 4000 && !s.over; step++) {
+      let r = null; const pref = ["left", "down", "right", "up"];
+      for (const d of (rnd() < 0.85 ? pref : pref.slice().sort(() => rnd() - 0.5))) { r = E.move(s, d); if (r.moved) break; }
+      if (!r || !r.moved) break;
+      s = r.state;
+      if (rnd() >= 0.3) continue;
+      const tiles = s.grid.map((v, i) => v ? i : -1).filter(i => i >= 0), empt = s.grid.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+      const big = tiles.filter(i => s.grid[i] >= s.top - 2), name = pick(["boost", "swap", "swap0", "smash"]);
+      const a = rnd() < 0.7 && big.length ? pick(big) : pick(tiles);
+      let u;
+      if (name === "boost" || name === "smash") u = E.use(s, name, a);
+      else if (name === "swap") u = E.use(s, "swap", a, pick(tiles));
+      else { if (!empt.length) continue; u = E.use(s, "swap", a, pick(empt)); }
+      if (!u.ok) continue;
+      const want = name === "boost" || name === "swap" ? Math.floor(rnd() * 6) : 0;
+      let p = u.state, q = s, k = 0;
+      for (let tr = 0; tr < 40 && k < want; tr++) {
+        const d = pick(E.DIRS), rp = E.move(p, d), rq = E.move(q, d);
+        if (!rp.moved || !rq.moved || rp.merges.length || rq.merges.length) continue;
+        p = rp.state; q = rq.state; k++;
+      }
+      gaps[k]++;
+      for (const d of E.DIRS) {
+        const rp = E.move(p, d), rq = E.move(q, d); trials++;
+        if (rp.milestones.some(l => l >= E.AWARD_FROM_INDEX)) paying++;
+        if (rp.awarded.length > rq.awarded.length && bad.length < 3) bad.push(name + " k=" + k + " " + d + " seed " + seed + " " + JSON.stringify(p.grid));
+      }
+    }
+  }
+  return { trials, paying, bad, gaps };
+}
+t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move never out-earns the same moves without it", () => {
+  const r = r2Property(F, 80);
+  eq(r.bad, [], "the power-up earned a reward");
+  ok(r.trials > 15000, "trials " + r.trials); ok(r.paying > 150, "power-up lines that reached a paying tile: " + r.paying);
+  r.gaps.forEach((n, k) => ok(n >= 5, "gap " + k + " exercised " + n + " times"));
 });
 {
   const fs = require("fs"), path = require("path"), rd = f => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
@@ -236,6 +305,43 @@ t("R2: the swipe after an assisted swipe pays again (the rule is one swipe deep,
   t("R9, R17: Enter or Space on a focused button or link is left to it; fields are never game keys", () => {
     ok(/\(e\.key === "Enter" \|\| e\.key === " "\) && \(tag === "BUTTON" \|\| tag === "A"/.test(js));
     ok(/tag === "INPUT" \|\| tag === "SELECT"/.test(js));
+  });
+  const how = html.replace(/\s+/g, " ");
+  t("round 3 (cold #10): the how-to says equal tiles do not merge, except 1 + 1", () => ok(/Equal tiles do not merge, except 1 \+ 1\./.test(how)));
+  t("round 3 (R2 copy, mechanics #2): the how-to says exactly which tiles and moves never earn", () => {
+    ok(/Swapped and boosted tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost\./.test(how));
+    ok(/Swapped and boosted tiles earn no reward\./.test(js) && /Power-ups full\./.test(js), "toasts say why a tile paid nothing");
+    ok(!/Boost! Boosted tiles earn no reward"/.test(js), "the old toast is gone");
+  });
+  t("round 3 (craft #5, cold #11): Best starts as a dimmed none", () => {
+    ok(/<b id="best" class="none">none<\/b>/.test(html)); ok(/\$\("best"\)\.textContent = bs \? fmt\(bs\) : "none"/.test(js));
+    ok(!/\.stat b\.none\{ color:var\(--mute\); font-weight:400; \}/.test(rd("fibonacci/style.css")), "the shared .stat .none style applies");
+  });
+  t("round 3 (craft #7/#8): the end card offers See the board; the page New game hides with its space kept", () => {
+    ok(/<button id="over-view" class="btn" type="button">See the board<\/button>/.test(html));
+    ok(/\$\("new"\)\.style\.visibility = state\.over \? "hidden" : ""/.test(js), "visibility, not display");
+    ok(/\$\("again"\)\.focus\(/.test(js), "focus moves to the card's primary");
+  });
+  t("round 3 (cold #5): the board owns its touchmove, so the tap after a swipe is never eaten", () =>
+    ok(/addEventListener\("touchmove", function \(e\) \{ if \(e\.cancelable\) e\.preventDefault\(\); \}, \{ passive: false \}\)/.test(js)));
+  t("round 3 (craft #2): values that sit together have clearly distinct colours (delta E >= 30, text 4.5:1)", () => {
+    const H = JSON.parse(js.match(/var HUES = (\[[^\]]+\])/)[1]);
+    const hsl2rgb = (h, s, l) => { s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+      const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1))); return [f(0), f(8), f(4)]; };
+    const lin = c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    const lab = (rgb) => { const [r, g, b] = rgb.map(lin), f = t => t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116;
+      const X = (r * 0.4124 + g * 0.3576 + b * 0.1805) / 0.95047, Y = r * 0.2126 + g * 0.7152 + b * 0.0722, Zc = (r * 0.0193 + g * 0.1192 + b * 0.9505) / 1.08883;
+      return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Zc))]; };
+    const lum = rgb => { const [r, g, b] = rgb.map(lin); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const text = lum([0x15 / 255, 0x15 / 255, 0x1d / 255]);
+    const L = H.map(h => { const rgb = hsl2rgb(h, 62, 60); return { lab: lab(rgb), c: (lum(rgb) + 0.05) / (text + 0.05) }; });
+    const de = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    for (let i = 0; i < L.length; i++) {
+      ok(L[i].c >= 4.5, "dark text contrast for hue " + H[i] + ": " + L[i].c.toFixed(2));
+      for (let j = i + 1; j < L.length; j++) ok(de(L[i].lab, L[j].lab) >= 30, H[i] + " vs " + H[j] + ": " + de(L[i].lab, L[j].lab).toFixed(1));
+      ok(de(L[i].lab, L[(i + 1) % L.length].lab) >= 80, "merge partners " + H[i] + " and " + H[(i + 1) % L.length]);
+    }
+    ok(/HUES\[\(level - 2\) % HUES\.length\]/.test(js), "the table cycles by level");
   });
   t("round 2: the help line, the tray and the engine agree on the 55 floor", () => {
     ok(/new highest tile from 55 up/.test(html) && /new top tile from 55\./.test(js));

@@ -52,7 +52,7 @@ h1{ margin:0; font-size:2rem; letter-spacing:.02em; color:var(--accent); }
 @keyframes appear{ from{ opacity:0; scale:.6; } }
 .over{ position:absolute; inset:0; border-radius:14px; background:rgba(20,21,28,.985); z-index:3; display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:10px; text-align:center; padding:20px; }
-.over[hidden]{ display:none; } .over h2{ margin:0; font-size:1.6rem; line-height:1.2; text-wrap:balance; }
+.over[hidden]{ display:none; } .over h2{ margin:0; font-size:clamp(1.2rem, 5.6vw, 1.6rem); line-height:1.2; text-wrap:balance; }
 .over p{ margin:0; color:var(--mute); text-wrap:balance; } .over .best{ color:var(--accent); font-weight:700; }
 .row{ display:flex; justify-content:center; margin:14px 0 6px; }
 .btn{ background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:10px; padding:9px 18px; font:inherit; cursor:pointer; }

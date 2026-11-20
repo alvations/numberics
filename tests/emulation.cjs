@@ -18,6 +18,8 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await new Promise(r => srv.listen(0, "127.0.0.1", r));
   const url = "http://127.0.0.1:" + srv.address().port + "/";
   const b = await chromium.launch();
+  // Round 3 end-card pattern: the final board holds 1.5 s, then the card shows
+  const card = (p) => p.waitForSelector("#over", { state: "visible", timeout: 3000 }).then(() => true, () => false);
   const shot = async (p, n) => { if (process.env.SHOTS) await p.screenshot({ path: path.join(process.env.SHOTS, n + ".png") }); };
 
   // 1. plays, animates, persists
@@ -63,7 +65,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
 
   // 4. game over overlay when truly locked and out of power-ups
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; s.over = true; window.__numberics.state = s; });
-  ck("overlay shows when locked", await p.isVisible("#over"));
+  ck("overlay shows when locked", await card(p));
   await shot(p, "over");
   ck("overlay scrim is the darker one (R8, F7)", await p.evaluate(() => /0\.9[5-9]\d*\)/.test(getComputedStyle(document.getElementById("over")).backgroundColor)));
   ck("only one New game on screen while over (E2)", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden"));
@@ -111,7 +113,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("a bad target warns with the neutral toast (R7)", await p.evaluate(() => { const t = document.getElementById("toast"); return t.classList.contains("bad") && /empty cell/.test(t.textContent); }));
   await p.keyboard.press("Escape");
   await p.keyboard.press("4"); for (let i = 0; i < 3; i++) { await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp"); } await p.keyboard.press("Enter"); // cell 0 = 4, the top
-  ck("boost to a new top tile says it earns no reward", /Boosted to 32\. Boosts earn no reward\./.test(await p.textContent("#toast")) && await p.evaluate(() => !document.getElementById("toast").classList.contains("bad")));
+  ck("boost to a new top tile says it earns no reward", /Boosted to 32\. Boosted tiles earn no reward\./.test(await p.textContent("#toast")) && await p.evaluate(() => !document.getElementById("toast").classList.contains("bad")));
   const tb = await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(); return [t.top, t.bottom, document.querySelector("h1").getBoundingClientRect().bottom, document.getElementById("board").getBoundingClientRect().top, document.getElementById("games").getBoundingClientRect().top]; });
   ck("toast sits inside the top of the board, clear of the title and the games row (F2)", tb[0] >= tb[2] && tb[0] <= tb[3] + 40 && tb[1] < tb[4], JSON.stringify(tb));
   // Enter on a focused button presses that button only (R9)
@@ -122,15 +124,16 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.keyboard.press("Escape");
   // end screen: New best only when the run beat the old best
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; s.score = window.__numberics.bestBefore + 500; s.over = true; window.__numberics.state = s; });
+  await card(p);
   ck("a new best says New best.", await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
-  ck("summary reads Top tile ... · score ...", /^Top tile \d+ · score [\d,]+$/.test(await p.textContent("#over-text")));
+  ck("summary reads Top tile ... · Score ... (round 3 wording)", /^Top tile \d+ · Score [\d,]+$/.test(await p.textContent("#over-text")));
   ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.querySelector("#over h2"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
   await shot(p, "over-best");
   await p.click("#again");
   await p.evaluate(() => { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 1000, bestTop: 8, bestBefore: 1000, state: window.__numberics.state })); });
   await p.reload();
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.score = 900; s.over = true; window.__numberics.state = s; });
-  ck("a run below the saved best does not claim one", await p.isVisible("#over") && !(await p.isVisible("#over-best")));
+  ck("a run below the saved best does not claim one", await card(p) && !(await p.isVisible("#over-best")));
   await p.evaluate(() => { const s = window.__numberics.state; s.score = 1004; window.__numberics.state = s; });
   ck("a run above the saved best does", await p.isVisible("#over-best"));
   ck("no page errors in round 1 checks", e5.length === 0, e5.join("|"));
@@ -176,6 +179,74 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.goto(url);
   ck("R17: ...and no move was made on the way out", await p.evaluate(m => window.__numberics.state.moves === m, mv));
   ck("no page errors in round 2 checks", e7.length === 0, e7.join("|"));
+  await ctx.close();
+
+  // 4b3. Round 3 fixes (docs/reviews/TRIAGE3.md)
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); const e8 = []; p.on("pageerror", x => e8.push(x.message));
+  await p.goto(url);
+  // cold #5: a tap on a power-up within 50 ms of the swipe that earned it arms it on the first tap
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[8] = 5; s.grid[9] = 5; s.grid[15] = 1; s.top = 5;
+    s.power = { undo: 9, smash: 9, swap: 0, boost: 9 }; s.prev = null; s.free = false; s.marks = new Array(16).fill(0); s.over = false; window.__numberics.state = s; });
+  const cdp = await ctx.newCDPSession(p);
+  const sb = await p.locator("#board").boundingBox(), swb = await p.locator("#tray .pw:nth-child(3)").boundingBox();
+  const sy = sb.y + sb.height * 0.6;
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: sb.x + sb.width * 0.8, y: sy }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: sb.x + sb.width * 0.2, y: sy }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  const tSwipe = Date.now();
+  await p.touchscreen.tap(swb.x + swb.width / 2, swb.y + swb.height / 2);
+  const tapMs = Date.now() - tSwipe;
+  ck("the swipe earned Swap (New tile 64 +Swap)", await p.evaluate(() => window.__numberics.state.power.swap === 1 && window.__numberics.state.grid[8] === 6));
+  ck("cold #5: the first tap on Swap, " + tapMs + " ms after the swipe, arms it", tapMs <= 50 && await p.evaluate(() => !!window.__numberics.targeting && window.__numberics.targeting.name === "swap"), "tap at " + tapMs + " ms");
+  await shot(p, "r3-swap-armed");
+  await p.tap("#tray .pw:nth-child(3)");
+  ck("tapping Swap again cancels", await p.evaluate(() => !window.__numberics.targeting));
+  // R2 by tile: Boost the 32 beside the 64, a dummy swipe, then the merge: neutral toast says why
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[0] = 6; s.grid[1] = 5; s.grid[15] = 1; s.top = 6;
+    s.power = { undo: 0, smash: 0, swap: 0, boost: 1 }; s.prev = null; s.free = false; s.marks = new Array(16).fill(0); window.__numberics.state = s; });
+  await p.tap("#tray .pw:nth-child(4)");
+  await p.touchscreen.tap(sb.x + sb.width * 0.375, sb.y + sb.height * 0.125); // cell 1
+  await p.evaluate(() => { window.__numberics.state = Object.assign(window.__numberics.state, { free: false }); }); // as after a dummy swipe
+  await p.waitForTimeout(300); await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(80);
+  ck("R2 by tile: the 128 from a boosted tile pays nothing and the info toast says why", await p.evaluate(() => { const s = window.__numberics.state, t = document.getElementById("toast");
+    return s.grid[0] === 7 && s.power.undo + s.power.smash + s.power.swap + s.power.boost === 0 && s.marks[0] === 1 && /^New tile 128\. Swapped and boosted tiles earn no reward\.$/.test(t.textContent) && t.classList.contains("info"); }));
+  // R15 (critic S2): a full stock says so
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[0] = 7; s.grid[1] = 7; s.top = 7; s.power = { undo: 9, smash: 9, swap: 9, boost: 9 };
+    s.marks = new Array(16).fill(0); s.free = false; window.__numberics.state = s; });
+  await p.waitForTimeout(300); await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(80);
+  ck("R15: a reward with every slot full says Power-ups full", await p.evaluate(() => /^New tile 256\. Power-ups full\.$/.test(document.getElementById("toast").textContent)));
+  // one end-card pattern: the locked board holds 1.5 s, the page New game hides with its space kept, focus to the card
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,0,4,3,4]; s.top = 4; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 };
+    s.prev = null; s.free = false; s.marks = new Array(16).fill(0); s.over = false; s.score = 1; window.__numberics.state = s; });
+  const howY0 = await p.evaluate(() => document.querySelector(".how").getBoundingClientRect().top);
+  await p.keyboard.press("ArrowLeft"); const tLock = Date.now();
+  await p.waitForTimeout(700);
+  ck("the locked board shows undimmed first (no card at 0.7 s)", await p.evaluate(() => window.__numberics.state.over && document.getElementById("over").hidden));
+  await shot(p, "r3-hold");
+  await card(p); const heldMs = Date.now() - tLock;
+  ck("the card follows after about 1.5 s (" + heldMs + " ms)", heldMs >= 1400 && heldMs <= 2300, heldMs);
+  ck("focus moves to the card's New game", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  ck("the page New game hides and keeps its space (no gap jump)", await p.evaluate(y => getComputedStyle(document.getElementById("new")).visibility === "hidden" && Math.abs(document.querySelector(".how").getBoundingClientRect().top - y) < 1, howY0));
+  ck("subline reads Top tile 16 · Score N", /^Top tile 16 · Score [\d,]+$/.test(await p.textContent("#over-text")));
+  ck("the card offers See the board", (await p.textContent("#over-view")) === "See the board");
+  await shot(p, "r3-over");
+  await p.tap("#over-view");
+  ck("See the board hides the card and says how to come back", await p.evaluate(() => document.getElementById("over").hidden && window.__numberics.viewing) && (await p.textContent("#hint")) === "Tap the board for the summary.");
+  await p.touchscreen.tap(sb.x + sb.width / 2, sb.y + sb.height / 2);
+  ck("a tap on the board brings the card back", await p.isVisible("#over") && await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  await p.click("#over-view"); await p.keyboard.press("Escape");
+  ck("Esc brings it back too", await p.isVisible("#over"));
+  ck("the help copy names the R2 rule exactly", /Swapped and boosted tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost\./.test((await p.textContent(".how")).replace(/\s+/g, " ")));
+  ck("no page errors in round 3 checks", e8.length === 0, e8.join("|"));
+  await ctx.close();
+  // a run that loads already over shows the card at once (no hold on reload)
+  ctx = await b.newContext({ viewport: { width: 375, height: 812 } }); p = await ctx.newPage();
+  await p.addInitScript(() => { try { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 10, state: { size: 4, grid: [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3], power: { undo: 0, smash: 0, swap: 0, boost: 0 }, score: 5, top: 4, moves: 30, seed: 1, over: true, prev: null } })); } catch (e) {} });
+  await p.goto(url);
+  ck("a saved finished run shows its card at once", await p.isVisible("#over"));
+  // 375px: a targeting state, for the eye
+  await p.evaluate(() => window.__demo()); await p.keyboard.press("2"); await shot(p, "r3-aim-375");
   await ctx.close();
 
   // 4c. a phone (no hover): no "Esc", and 320px does not scroll sideways
@@ -237,7 +308,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await shot(p, "sudoku");
   await p.evaluate(() => { const s = window.__sudoku.state; const g = s.solution.slice(); const hole = s.puzzle.findIndex(v => !v); s.grid = g.slice(); s.grid[hole] = 0; window.__sudoku.state = s; window.__sudoku.select(hole); });
   await p.keyboard.press(String(await p.evaluate(() => { const s = window.__sudoku.state; return s.solution[s.grid.findIndex(v => !v)]; })));
-  ck("finishing the grid shows Solved", await p.isVisible("#win"));
+  ck("finishing the grid shows Solved", await p.waitForSelector("#win", { state: "visible", timeout: 3000 }).then(() => true, () => false)); // Sudoku holds the solved board 1.5 s first
   await shot(p, "sudoku-solved");
   ck("no sudoku page errors", e3.length === 0, e3.join("|"));
   await p.addInitScript(() => {}); await ctx.close();
