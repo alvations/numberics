@@ -221,7 +221,8 @@
     m.u = m.u.map(function (u, i) { return starts[i] ? u : 0; });
     var seen = {};
     m.b = m.b.filter(function (b) {
-      var k = b[0] + ":" + b[1], ok = starts[b[0]] && ends[b[1]] && !seen[k]; seen[k] = true; return ok;
+      var k = b[0] + ":" + b[1], ok = starts[b[0]] && ends[b[1]] && !seen[k] && !L.some(function (l) { return l.i === b[0] && l.j === b[1]; });
+      seen[k] = true; return ok; // a bracket must sit on literal edges and group two literals or more
     }).sort(function (x, y) { return x[0] - y[0] || y[1] - x[1]; });
     return m;
   }
@@ -419,17 +420,15 @@
   // parts of the known solution a Peek can show: sub-expressions (biggest first) with their values
   function parts(tokens, sol) {
     var Ls = literals(tokens, sol.g), tree = parse(text(tokens, sol)), out = [], seen = {}, q = [];
-    var root = tree; while (root.t === "s" || root.t === "f") root = root.a;
-    if (root !== tree) q.push(root);
-    if (root.t === "b") q.push(root.a, root.b);
+    var kids = function (nd) { return nd.t === "b" ? [nd.a, nd.b] : nd.t === "n" ? [] : [nd.a]; };
+    q.push.apply(q, kids(tree));
     while (q.length) {
-      var nd = q.shift(), top = nd;
+      var nd = q.shift();
       if (nd.hi > nd.lo || nd.t !== "n") {
         var i = Ls[nd.lo].i, j = Ls[nd.hi].j, v = evaluate(nd), k = i + ":" + j + ":" + key(v);
         if (!seen[k]) { seen[k] = true; out.push({ i: i, j: j, v: show(v) }); }
       }
-      while (top.t === "s" || top.t === "f") top = top.a;
-      if (top.t === "b") q.push(top.a, top.b);
+      q.push.apply(q, kids(nd));
     }
     return out;
   }
