@@ -151,5 +151,46 @@ t("every live game in games.json has mobile + desktop screenshots", () => {
   }));
 });
 
+// ---- replay: the rule-set refactor must keep Endless byte-identical ----
+// A seeded driver plays 20 games of 1,000 actions (moves plus every power-up, with valid and invalid
+// targets) and hashes every result. The fixture was recorded from the engine BEFORE the refactor.
+// Re-record only for an intended rule change: RECORD_ENDLESS_REPLAY=1 node tests/test.js
+function endlessReplay(seed) {
+  const h = require("crypto").createHash("sha256");
+  let s = N.newGame(seed), d = seed * 7919 + 1, games = 1;
+  const r = () => { const x = N.rand(d); d = x[1]; return x[0]; };
+  for (let i = 0; i < 1000; i++) {
+    if (s.over) { s = N.newGame(seed * 1000 + games++); h.update(JSON.stringify(s)); continue; }
+    const k = r();
+    let res;
+    if (k < 0.9) res = N.move(s, N.DIRS[Math.floor(r() * 4)]);
+    else {
+      const name = N.POWERS[Math.floor(r() * 4)];
+      if (s.power[name] < 1 && r() < 0.7) s = Object.assign({}, s, { power: Object.assign({}, s.power, { [name]: 1 }) });
+      res = N.use(s, name, Math.floor(r() * 18) - 1, Math.floor(r() * 18) - 1);
+    }
+    h.update(JSON.stringify(res)); s = res.state;
+  }
+  return { seed, hash: h.digest("hex"), games, final: { grid: s.grid, score: s.score, top: s.top, moves: s.moves, power: s.power, over: s.over } };
+}
+const REPLAY = path.join(__dirname, "fixtures", "endless-replay.json");
+if (process.env.RECORD_ENDLESS_REPLAY) {
+  fs.mkdirSync(path.dirname(REPLAY), { recursive: true });
+  const all = []; for (let sd = 1; sd <= 20; sd++) all.push(endlessReplay(sd));
+  fs.writeFileSync(REPLAY, JSON.stringify(all, null, 1) + "\n");
+}
+t("replay: 20 seeded games x 1,000 actions match the recorded Endless fixture exactly", () => {
+  const want = JSON.parse(fs.readFileSync(REPLAY, "utf8"));
+  eq(want.length, 20);
+  want.forEach(w => eq(endlessReplay(w.seed), w, "seed " + w.seed));
+});
+t("replay: the default rule set is Endless and make() with it plays the same game", () => {
+  ok(typeof N.make === "function" && N.ENDLESS, "rule-set factory exported");
+  const E = N.make(N.ENDLESS);
+  let a = N.newGame(77), b = E.newGame(77);
+  for (let i = 0; i < 300 && !a.over; i++) { const dd = N.DIRS[i % 4]; a = N.move(a, dd).state; b = E.move(b, dd).state; }
+  eq(a, b);
+});
+
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

@@ -17,7 +17,7 @@
     "id": "fibonacci",
     "name": "Fibonacci",
     "path": "fibonacci/",
-    "status": "planned",
+    "status": "live",
     "blurb": "2584 with no ceiling: merge neighbours in the Fibonacci sequence."
   },
   {

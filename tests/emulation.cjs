@@ -15,8 +15,8 @@ const srv = http.createServer((q, r) => {
 let pass = 0, fail = 0;
 const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d || ""); } };
 (async () => {
-  await new Promise(r => srv.listen(8071, r));
-  const url = "http://127.0.0.1:8071/";
+  await new Promise(r => srv.listen(0, "127.0.0.1", r));
+  const url = "http://127.0.0.1:" + srv.address().port + "/";
   const b = await chromium.launch();
   const shot = async (p, n) => { if (process.env.SHOTS) await p.screenshot({ path: path.join(process.env.SHOTS, n + ".png") }); };
 
