@@ -371,9 +371,9 @@
   // Screenshot hook (tools/shots.cjs): a fixed mid-round state, not reachable from the UI.
   window.__demo = function () {
     var s = E.newGame(2026, "climb");
-    var pick = function (n) { var id = E.BANK.findIndex(function (b) { return b.t === 1 && b.n === n; }); var b = E.BANK[id]; return { id: id, t: b.t, n: b.n.split(" "), g: b.g, d: b.d, sol: b.s }; };
-    s.lines = ["3 3 3", "2 2 2", "7 7 7", "8 8 8", "1 1 1", "0 0 0"].map(pick);
-    s.idx = 3; s.solved = 3; s.edits = 9; s.streak = 0;
+    var pick = function (n) { var id = E.BANK.findIndex(function (b) { return b.n === n; }); var b = E.BANK[id]; return { id: id, t: b.t, n: b.n.split(" "), g: b.g, d: b.d, h: b.h, sol: b.s }; };
+    s.lines = ["1 1 1", "12 12 12", "37 37 37", "18 18 18", "8 8 8", "0 0 0"].map(pick); // a Tier 3 round
+    s.round = 3; s.idx = 4; s.solved = 16; s.edits = 9; s.streak = 0;
     s.cur = { g: ["/", "+"], u: [0, 0, 0], b: [[0, 2, 1]] };
     s.power = { hint: 1, skip: 1, peek: 2, undo: 1 };
     mode = "climb"; drag = null; anchor = -1; bracketMode = false; cursor = 0; state = s; render();

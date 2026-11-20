@@ -198,6 +198,55 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("runs with storage blocked", e2.length === 0 && (await st(p)).cur.g[0] === "+", e2.join("|"));
   await ctx.close();
 
+  // 10. round 2 fixes, on a fresh phone at 390x844
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); const e4 = []; p.on("pageerror", e => e4.push(e.message));
+  await p.goto(page);
+  ck("BEST reads a dimmed none before any play", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
+  ck("fits 390x844 without scrolling", await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight), await p.evaluate(() => document.documentElement.scrollHeight));
+  ck("the target is shown once in the board panel (the tier label names tools, not the target)",
+    !/make|\b6\b/i.test(await p.textContent("#tier")) && (await p.textContent("#board .goal")) === "make6" && await p.evaluate(() => (document.querySelector("#board").innerText.match(/\bmake\b/gi) || []).length === 1));
+  ck("an empty gap looks live: gold ring, bold ?", await p.evaluate(() => { const b = getComputedStyle(document.querySelector(".gp.empty b")); return b.borderTopColor === "rgb(242, 184, 75)" && +b.fontWeight >= 700 && b.color === "rgb(242, 184, 75)"; }));
+  ck("Show answer looks like a run-ender in Climb", await p.locator("#reveal.ender").count() === 1);
+  // the mechanics repro: 3 ? 3 ? 3, drag 1-2, then 1-3 (add), then 1-3 again (remove): no "Maximum call stack size exceeded"
+  await p.evaluate(() => {
+    const E = window.__six.E, s = JSON.parse(JSON.stringify(window.__six.state));
+    const id = E.BANK.findIndex(b => b.n === "3 3 3"), b = E.BANK[id];
+    s.lines[s.idx] = { id, t: b.t, n: b.n.split(" "), g: b.g, d: b.d, h: b.h, sol: b.s }; s.cur = E.blank(3); s.done = false;
+    window.__six.state = s;
+  });
+  const dragN = async (i, j) => {
+    const a = await p.locator('.num[data-i="' + i + '"]').boundingBox(), z = await p.locator('.num[data-i="' + j + '"]').boundingBox();
+    await p.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await p.mouse.down();
+    await p.mouse.move(z.x + z.width / 2, z.y + z.height / 2, { steps: 8 }); await p.mouse.up();
+  };
+  await dragN(0, 1); ck("drag 1-2 groups", (await p.textContent("#expr")) === "(3 ? 3) ? 3");
+  await dragN(0, 2); ck("drag 1-3 adds the outer group", (await p.textContent("#expr")) === "((3 ? 3) ? 3)");
+  await dragN(0, 2); ck("drag 1-3 again removes it", (await p.textContent("#expr")) === "(3 ? 3) ? 3");
+  ck("bracket drags over an existing span throw nothing", e4.length === 0, e4.join("|"));
+  ck("nested bars sit on two rows", await p.evaluate(() => { const s = window.__six.state; return s.cur.b.length === 1; }));
+  await dragN(0, 2);
+  ck("two nested bars draw on rows 1 and 2", JSON.stringify(await p.$$eval("#bars .bar", bs => bs.map(b => b.style.gridRow).sort())) === '["1","2"]');
+  ck("fits 390x844 with two bracket rows", await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight));
+  // the Climb-ending warning is never under a toast: Hint toasts, then Show answer arms
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.power.hint = 2; window.__six.state = s; });
+  await p.focus("#board"); await p.keyboard.press("2");
+  ck("Hint shows a neutral info toast", await p.locator("#toast.on.info").count() === 1);
+  await p.click("#reveal");
+  ck("arming Show answer clears the toast, the warning is readable", !(await p.locator("#toast.on").count()) && /ends the Climb run/.test(await p.textContent("#hint")));
+  await p.locator('.gp[data-g="1"]').click();
+  ck("an edit disarms Show answer (its warning never goes stale)", (await p.textContent("#reveal")) === "Show answer" && !/ends the Climb run/.test(await p.textContent("#hint")));
+  // R17: Enter on a focused games-row link navigates
+  await p.focus('#games a[href$="nine/"], #games a:not([aria-current])');
+  const href = await p.evaluate(() => document.activeElement.getAttribute("href"));
+  const before17 = JSON.stringify((await st(p)).cur);
+  await Promise.all([p.waitForURL(u => !/\/six\/?$/.test(u.toString()), { timeout: 4000 }).catch(() => {}), p.keyboard.press("Enter")]);
+  ck("R17: Enter on a games-row link navigates", !/\/six\/?$/.test(p.url()), href + " -> " + p.url());
+  await p.goto(page);
+  ck("and the line was not edited by that Enter", JSON.stringify((await st(p)).cur) === before17);
+  ck("round 2 checks: no page errors", e4.length === 0, e4.join("|"));
+  await ctx.close();
+
   // 9. reduced motion: plays the same
   ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" });
   p = await ctx.newPage(); const e3 = []; p.on("pageerror", e => e3.push(e.message));
