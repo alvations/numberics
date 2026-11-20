@@ -81,7 +81,8 @@ const INIT = `(() => {
   };
   P.startFrames = () => {
     P.playStart = performance.now(); let prev = 0;
-    const tick = t => { if (prev) P.frames.push(t - prev); prev = t; if (!P.playEnd) requestAnimationFrame(tick); };
+    // performance.now(), not the rAF timestamp: headless Chromium hands rAF an evenly spaced frame time that hides jank.
+    const tick = () => { const t = performance.now(); if (prev) P.frames.push(t - prev); prev = t; if (!P.playEnd) requestAnimationFrame(tick); };
     requestAnimationFrame(tick);
   };
 })();`;
