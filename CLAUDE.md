@@ -41,7 +41,8 @@ same commit as any visible change. `npm test` fails if a live game has no screen
   LEVELS (n means 2^n), so there is no overflow. The only end state is a locked board with no usable power-up.
 - **Engine is pure and deterministic.** All randomness is `state.seed` (mulberry32). Same seed + same
   inputs = same game. Any new rule goes in `engine.js` with a test; the client only renders.
-- **Power-ups come from play, never farmed.** A NEW highest tile of 32 or more awards one random power-up.
+- **Power-ups come from play, never farmed.** A NEW highest tile of 32 or more (Fibonacci: 55) awards one random power-up;
+  a move right after a board-changing power-up never pays (R2, `state.free`).
   Undo snapshots the full pre-move state (power-ups and top tile included) so rewinding cannot farm rewards;
   Boost never awards. Stock caps at 9 each. Tune in `docs/DESIGN.md`, not by feel.
 - **Wrap every `localStorage` call in try/catch.** Sandboxes throw. Degrade to in-memory. A test enforces it.
