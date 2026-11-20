@@ -214,7 +214,7 @@
   var WINF = 1000000, PBAG = [0, 0, 0, 0, 0];
   function setBag(b) { BAG = b.slice(); PBAG = [0, 0, 0, 0, 0]; BAG.forEach(function (n) { PBAG[n] += 1 / BAG.length; }); }
   setBag(BAG);
-  var LV = { easy: { depth: 2, nodes: 4000 }, medium: { depth: 6, nodes: 60000 }, hard: { depth: 14, nodes: 120000 } };
+  var LV = { easy: { depth: 2, nodes: 3000 }, medium: { depth: 6, nodes: 20000 }, hard: { depth: 14, nodes: 40000 } };
 
   function Search(own, num, toMove, masks, budget) {
     this.own = Int8Array.from(own); this.num = Int8Array.from(num);
@@ -421,17 +421,17 @@
     if (!base || base.score > -WINF + 64) return base ? base.best : null;
     var bestS = base.score, plan = null;
     if (pw.tune) for (var t = 1; t <= 4; t++) if (t !== n) {
-      var rt = analyse(s, { n: t, nodes: 20000, depth: 8 });
+      var rt = analyse(s, { n: t, nodes: 5000, depth: 8 });
       if (rt && rt.score > bestS) { bestS = rt.score; plan = ["tune", t]; }
     }
     if (pw.hold && s.held[side]) {
-      var rh = analyse(s, { n: s.held[side], nodes: 20000, depth: 8 });
+      var rh = analyse(s, { n: s.held[side], nodes: 5000, depth: 8 });
       if (rh && rh.score > bestS) { bestS = rh.score; plan = ["hold"]; }
     }
     if (pw.pop) for (var pc = 0; pc < N; pc++) {
       if (s.own[pc] !== 1) continue;
       var pp = popResult(s.own, s.num, pc); if (!pp) continue;
-      var rp = analyse(s, { own: pp.own, num: pp.num, nodes: 8000, depth: 6 });
+      var rp = analyse(s, { own: pp.own, num: pp.num, nodes: 1500, depth: 4 });
       if (rp && rp.score > bestS) { bestS = rp.score; plan = ["pop", pc]; }
     }
     if (!plan) return base.best;
