@@ -51,6 +51,8 @@
 .tile.run.still::after{ animation:none; opacity:1; mix-blend-mode:normal; background:none;
   border:3px solid; border-image:linear-gradient(90deg,#ff5a52,#ffe14a,#5fd37a,#4fb0ff,#c77dff) 1; border-radius:0; }
 .tile.flushed{ animation:nm-pop 180ms ease-out; }
+/* a dealt tile appears in its cell; it never slides in across the board frame (craft #3) */
+.tiles .tile.new{ transition:none; }
 
 @media (prefers-reduced-motion:reduce){
   .tiles .tile{ transition:none; }

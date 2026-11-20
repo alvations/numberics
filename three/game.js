@@ -294,9 +294,9 @@
     var s = E.newGame(2026);
     s.grid = [3, 6, 1, 2,
               9, 12, 3, 0,
-              2, 15, 24, 6,
-              1, 3, 18, 21];
-    s.next = 3; s.score = 1284; s.moves = 87; s.flushes = 4; s.top = 24;
+              2, 18, 24, 6,
+              1, 3, 36, 48];
+    s.next = 3; s.score = 1284; s.moves = 87; s.flushes = 4; s.top = 48;
     s.power = { undo: 1, smash: 2, swap: 1, third: 1 }; s.prev = null; s.over = false;
     state = s; render();
   };

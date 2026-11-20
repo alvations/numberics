@@ -185,7 +185,7 @@
     if (state.matchOver === "you") {
       $("over-title").textContent = "Match won";
       $("over-text").textContent = "Match won " + sc + " · " + state.level + " tiles";
-      $("over-note").textContent = (aw ? aw + " " : "") + (state.level < N.MAX_TILES ? "Next match: " + (state.level + 1) + " tiles." : "Nine tiles again: the top level.");
+      $("over-note").textContent = (aw ? aw + (/\.$/.test(aw) ? " " : ". ") : "") + (state.level < N.MAX_TILES ? "Next match: " + (state.level + 1) + " tiles." : "Nine tiles again: the top level.");
       $("again").textContent = "Next match";
     } else if (state.matchOver === "cpu") {
       $("over-title").textContent = "Run over";
