@@ -148,7 +148,7 @@ t("play(): without an element or WAAPI it returns null; reduced keeps only opaci
 });
 t("conventions for the motion module", () => {
   const fs = require("fs"), s = fs.readFileSync(require.resolve("../shared/motion.js"), "utf8");
-  ok(/SPDX-License-Identifier: Apache-2\.0/.test(s) && !/—/.test(s) && !/document\.write|localStorage/.test(s));
+  ok(/SPDX-License-Identifier: Apache-2\.0/.test(s) && !/\u2014/.test(s) && !/document\.write|localStorage/.test(s));
   const css = fs.readFileSync(require("path").join(__dirname, "../shared/theme.css"), "utf8");
   const blk = css.slice(css.indexOf("/* ===== B2 motion"), css.indexOf("/* ===== end B2 motion ===== */"));
   ok(blk.length > 200, "delimited block present");
