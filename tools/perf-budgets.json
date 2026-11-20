@@ -1,0 +1,4 @@
+{
+  "defaults": { "external": { "max": 0 }, "pageErrors": { "max": 0 } },
+  "games": {}
+}
