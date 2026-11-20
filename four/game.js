@@ -14,7 +14,10 @@
     { id: "hold", label: "Hold", desc: "Put your next disc aside, or swap it back." },
     { id: "tune", label: "Tune", desc: "Choose your next disc's number." },
   ];
-  var RULE = "Four of yours in a row, or four that make ten with two of yours.";
+  var RULE = "Four of yours in a row, or four that make ten with two of yours."; // the hint band holds two lines
+  // round 3 (cold blocker, critic #1): what a drop would open, said in the hint line for the aimed column
+  var MARK = { above: "Dropping here lets the computer win on top of it.", any: "Dropping here lets the computer win.",
+               some: "Red dashed ring: dropping there lets the computer win.", two: "Two blue rings: the computer can win in two places." };
   var SHOW_THREATS = { easy: true, medium: true, hard: false }; // round 2 (cold #5): Hard keeps its ambushes
   var NAMES = { undo: "Undo", pop: "Pop", hold: "Hold", tune: "Tune" };
   var LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
@@ -54,17 +57,27 @@
   function mini(el, n) { el.textContent = n ? String(n) : "none"; el.classList.toggle("none", !n); }
   function landing(col) { var h = F.height(state.own, col); return h < ROWS ? h * COLS + col : -1; }
   function myTurn() { return !state.over && state.turn === 1; }
+  // the columns your drop would open for the computer (Easy and Medium, your turn, not while aiming a power-up)
+  function warn() { return SHOW_THREATS[state.level] && myTurn() && !targeting ? F.opens(state) : {}; }
+  function ringsInReach() {
+    var th = F.threats(state); return th.filter(function (x) { return landing(x % COLS) === x; }).length;
+  }
 
   function render() {
     var over = state.over, winCells = {};
     if (over && over.line) over.line.forEach(function (x) { winCells[x] = 1; });
     var ghost = myTurn() && !targeting ? landing(cursor) : -1, popping = targeting && targeting.name === "pop";
-    var threat = {};
+    var threat = {}, marks = warn(), risky = {}, opened = {};
     if (SHOW_THREATS[state.level] && !over) F.threats(state).forEach(function (x) { threat[x] = 1; });
+    Object.keys(marks).forEach(function (c) { risky[landing(+c)] = 1; });
+    if (ghost >= 0 && marks[cursor]) marks[cursor].cells.forEach(function (x) { opened[x] = 1; });
     slots.forEach(function (slot, cell) {
       slot.textContent = ""; slot.className = "slot";
       if (threat[cell]) { slot.classList.add("threat"); slot.setAttribute("aria-label", "the computer's next disc wins here"); }
+      else if (risky[cell]) { slot.classList.add("risky"); slot.setAttribute("aria-label", "dropping here lets the computer win"); }
+      else if (opened[cell]) { slot.classList.add("opens"); slot.setAttribute("aria-label", "your drop would let the computer win here"); }
       else slot.removeAttribute("aria-label");
+      if (threat[cell] && opened[cell]) slot.classList.add("opens");
       if (!targeting && myTurn() && cell % COLS === cursor) slot.classList.add("aim");
       if (popping && cell === popCur) slot.classList.add("cur");
       var who = state.own[cell], n = state.num[cell];
@@ -103,6 +116,7 @@
       onInfo: function (id, text) { targeting = null; note = text; render(); },
     });
     boardEl.classList.toggle("targeting", !!targeting);
+    $("new").style.visibility = over ? "hidden" : ""; // the card's New game is the one; the space is kept
     renderHint();
     if (!over) { viewing = false; $("over").hidden = true; clearTimeout(overTimer); overTimer = null; }
     else if (viewing) $("over").hidden = true;
@@ -125,7 +139,11 @@
     }
     if (state.over) { if (viewing) h.textContent = "Tap the board for the summary."; return; }
     if (state.turn === 2) { h.textContent = state.moves ? "The computer is thinking\u2026" : "The computer opens this game."; return; }
-    h.textContent = SHOW_THREATS[state.level] && F.threats(state).length ? "Blue ring: the computer's next disc would win there." : RULE;
+    if (!SHOW_THREATS[state.level]) { h.textContent = RULE; return; }
+    var marks = warn(), m = marks[cursor], reach = ringsInReach();
+    h.textContent = m ? (m.above ? MARK.above : MARK.any) : reach >= 2 ? MARK.two
+      : F.threats(state).length ? "Blue ring: the computer's next disc would win there."
+      : Object.keys(marks).length ? MARK.some : RULE;
   }
 
   function showOver() {
@@ -142,13 +160,16 @@
     var gen = state.moves;
     clearTimeout(overTimer);
     // R13: the winning line shows on the bare board first, then the card
-    overTimer = setTimeout(function () { overTimer = null; if (state.over && state.moves === gen && !viewing) $("over").hidden = false; }, OVER_DELAY);
+    overTimer = setTimeout(function () { overTimer = null; if (state.over && state.moves === gen && !viewing) card(); }, OVER_DELAY);
+  }
+  function card() { // one end-card pattern: the card shows and its primary button takes the focus
+    $("over").hidden = false; $("again").focus({ preventScroll: true });
   }
   function view(on) { // R13: "See the board" hides the card; a tap on the board or Esc brings it back
     viewing = on; note = "";
     if (!on) { clearTimeout(overTimer); overTimer = null; }
     render();
-    if (!on && state.over) $("over").hidden = false;
+    if (!on && state.over) card();
     else boardEl.focus();
   }
   function finish() {
@@ -315,7 +336,7 @@
   $("over-view").addEventListener("click", function () { view(true); });
 
   render();
-  if (state.over) { showOver(); $("over").hidden = false; }
+  if (state.over) { showOver(); clearTimeout(overTimer); overTimer = null; card(); }
   else if (state.turn === 2) scheduleCpu();
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.

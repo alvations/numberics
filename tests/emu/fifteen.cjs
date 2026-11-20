@@ -28,7 +28,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("pills are You, Computer, Record", (await p.locator(".stat > span").allTextContents()).join() === "You,Computer,Record", (await p.locator(".stat > span").allTextContents()).join());
   ck("empty record reads none, dimmed", (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
   ck("round number in the hint at the start of a round", /^Round 1 of 5\. Your turn/.test(await p.textContent("#hint")), await p.textContent("#hint"));
-  ck("R14: the how-to says the computer can use power-ups on Hard", /On Hard .*computer can Erase and\s+Double/.test(await p.textContent(".how")));
+  ck("R14: the how-to says the computer can use power-ups on Hard", /On Hard [\s\S]*computer can Erase and\s+Double/.test(await p.textContent(".how")) && /without Erase, Double or Peek/.test(await p.textContent(".how")) && /On Hard a draw gives you an Erase, so perfect play wins/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
   await forge(p, { diff: "easy" });
   await tile(p, 5).click();
   ck("click claims 5 for you", (await S(p)).owner[4] === 1);
@@ -81,10 +81,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // R9: keyboard targeting from anywhere: key 2 arms Erase, arrows move, Enter erases
   await forge(p, { owner: B([5, 2], [8, 1]), turn: 1, power: { undo: 0, erase: 1, peek: 0, double: 0 } });
-  await p.evaluate(() => { document.querySelector('.ft[data-n="5"]').focus(); document.activeElement.blur(); });   // cursor on 5
+  await p.evaluate(() => { document.querySelector('.ft[data-n="3"]').focus(); document.activeElement.blur(); });   // cursor on 3
   await p.keyboard.press("2");
   ck("Erase armed", await p.locator("#board.targeting").count() === 1);
-  // cursor starts on the centre cell (5); move to 8 (bottom middle in Numbers view)
+  // Numbers view is 1-5 over 6-9: down from 3 is 8
   await p.keyboard.press("ArrowDown");
   ck("arrows move the cursor while targeting", await p.evaluate(() => document.activeElement.dataset.n === "8"), await p.evaluate(() => document.activeElement.dataset.n));
   await p.keyboard.press("Enter");
@@ -220,7 +220,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, wins: [0, 2, 0], rounds: [1, 1], round: 3 });
   const rec0 = await p.evaluate(() => Object.assign({}, window.__fifteen.record));
   await tile(p, 7).click(); await card(p);
-  ck("3-0 ends the match with the overlay", await p.locator("#over").isVisible() && /You win the match/.test(await p.textContent("#over-title")));
+  ck("3-0 ends the match with the overlay", await p.locator("#over").isVisible() && (await p.textContent("#over-title")) === "You win");
   ck("R16 match summary", /^Match won 3-0 · Medium$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
   ck("R16: the record counts the match once", (await p.textContent("#rec")) === (rec0.won + 1) + "-" + rec0.lost, await p.textContent("#rec"));
   ck("match end offers New game, not Next round", await p.locator("#again").isVisible() && await p.locator("#next").isHidden() && (await p.textContent("#again")) === "New game");

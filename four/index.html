@@ -19,9 +19,9 @@
       <p class="sub"><a href="../">Numberics</a> &middot; Four in a row, or four that make ten.</p>
     </div>
     <div class="stats" aria-live="off">
-      <div class="stat"><span>You</span><b id="next" class="mini you" aria-label="your next disc"></b></div>
+      <div class="stat"><span>Your next</span><b id="next" class="mini you" aria-label="your next disc"></b></div>
       <div class="stat"><span>Held</span><b id="held" class="mini you" aria-label="your held disc"></b></div>
-      <div class="stat"><span>Computer</span><b id="cnext" class="mini cpu" aria-label="the computer's next disc"></b></div>
+      <div class="stat"><span>Its next</span><b id="cnext" class="mini cpu" aria-label="the computer's next disc"></b></div>
       <div class="stat"><span>Record</span><b id="rec">0-0</b></div>
     </div>
   </header>
@@ -48,10 +48,10 @@
   </div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Tap a column (or arrows and Enter) to drop your next disc. Win with four of yours in a row, or four in
-     a row of any colours that make ten, two of them yours. Discs are mostly 1s. On Easy and Medium a blue ring marks
-     where the computer's next disc would win; on Hard it can also Pop, Hold and Tune. Block a three or set up a ten
-     to earn power-ups.</p>
+  <p class="how">Tap a column (or arrows and Enter) to drop your next disc. Win with four of yours in a row, or four
+     of any colours that make ten, two of them yours. Half the discs are 1s. On Easy and Medium a blue ring marks
+     where the computer can win next, and a red dashed ring a drop that would let it win. Block a three or set up a
+     ten to earn power-ups. On Hard the computer uses power-ups too.</p>
   <nav id="games" class="games" data-root="../" data-current="four" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
