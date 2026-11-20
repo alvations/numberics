@@ -177,7 +177,7 @@ t("R9: Enter or Space on a focused button is left to the button", () => {
 t("history carries only the owner's authorship (no AI author, co-author or trailer)", () => {
   let log;
   try { log = require("child_process").execSync("git log --format=%an%n%ae%n%cn%n%ce%n%B", { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }
-  catch (e) { return; } // not a git checkout (e.g. a zip download): nothing to scan
+  catch (e) { console.log("SKIP authorship history scan: git or a git checkout is not available here"); return; } // e.g. a zip download
   const bad = new RegExp(["cl" + "aude", "anthr" + "opic", "co-authored-by", "noreply@", "generated with"].join("|"), "i");
   const hit = log.split("\n").find(l => bad.test(l.replace(/\bCLAUDE\.md\b/g, "")));  // the memory file's name is not attribution
   ok(!hit, "attribution found in history: " + hit);

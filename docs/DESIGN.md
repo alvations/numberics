@@ -41,8 +41,8 @@ Tuning knobs live at the top of `engine.js`: `AWARD_FROM_LEVEL` (5), `POWER_CAP`
   only if the puzzle still has exactly one solution (solver stops counting at 2).
 - Difficulty is clue count only (easy 40, medium 32, hard 26 or fewer). It is a simple, honest knob; a
   technique-graded rating (naked pairs, X-wing) is a possible future refinement.
-- Helpers are honest: red marks show rule conflicts only, never whether a digit is right. Hint is the one
-  way to learn the truth and it disqualifies the best time.
+- Helpers are honest: red marks show rule conflicts only, never whether a digit is right. The Reveal power-up is
+  the one way to learn the truth; pure and assisted best times are kept apart.
 
 ---
 
@@ -117,9 +117,9 @@ deviation from the plan with its reason. All measurements are seeded Node bot ru
   won round.
 
 ## Sudoku power-ups
-- Start: 1 Reveal (keeps the old Hint's job). Units pay once each, at most one charge per move, odds weighted
-  Reveal 1 : Check 2 : Candidates 3 (equal odds and one per unit filled every slot to the cap).
-- Hard, easiest-cells-first solver: first charge at ~9% of cells, ~1.8 / 2.3 / 3.2 in stock at half way.
+- Superseded in QA round 1: charges are earned by progress (see "QA round 1" below and CLAUDE.md), not by
+  completed units. Start: 1 Reveal. Layout deviation: Sudoku has no hint line (its tray sits below the board), so
+  tray explanations use the neutral info toast.
 
 ---
 

@@ -78,6 +78,7 @@
     var label = btn.textContent, armed = null;
     btn.addEventListener("click", function () {
       if (isRisky() && !armed) {
+        clearToast(); // a toast must never hide the warning
         btn.textContent = sureLabel || "Sure? This ends the run";
         armed = setTimeout(function () { armed = null; btn.textContent = label; }, 3000); return;
       }

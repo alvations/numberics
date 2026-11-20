@@ -1,7 +1,7 @@
 {
   "name": "numberics",
   "version": "0.1.0",
-  "description": "Numberics: Endless (2048 with no ceiling and power-ups) and Sudoku. No build step.",
+  "description": "Numberics: ten number games (Endless, Sudoku, Fibonacci, Seven, Three, Four, Five, Six, Fifteen, Nine). No build step.",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {

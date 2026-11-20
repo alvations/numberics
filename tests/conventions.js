@@ -14,7 +14,7 @@ module.exports = function (t, ok, rel) {
   t("conventions: no CDN or external requests", () => files.forEach(([f, s]) => ok(!/(src|href)\s*=\s*["']https?:/.test(s) && !/https?:\/\/(cdn|unpkg|cdnjs|fonts\.)/.test(s), f)));
   t("conventions: every localStorage call sits inside a try", () => files.forEach(([f, s]) => {
     const lines = s.split("\n");
-    lines.forEach((ln, i) => { if (/localStorage\./.test(ln)) ok(/try\s*\{/.test(lines.slice(Math.max(0, i - 2), i + 1).join(" ")), f + ":" + (i + 1)); });
+    lines.forEach((ln, i) => { if (/localStorage\./.test(ln)) ok(/try\s*\{/.test(lines.slice(Math.max(0, i - 6), i + 1).join(" ")) && !/\}\s*catch/.test(lines.slice(Math.max(0, i - 6), i).join(" ").split(/try\s*\{/).pop()), f + ":" + (i + 1)); });
   }));
   t("conventions: page links the shared theme, kit and nav, and has a toast", () => files.filter(([f]) => f.endsWith("index.html")).forEach(([f, s]) => {
     ok(/shared\/theme\.css/.test(s), f + " theme"); ok(/shared\/kit\.js/.test(s), f + " kit"); ok(/shared\/nav\.js/.test(s), f + " nav");
