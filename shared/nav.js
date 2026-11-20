@@ -8,6 +8,7 @@
     ["endless", "Endless", ""],
     ["sudoku", "Sudoku", "sudoku/"],
     ["fibonacci", "Fibonacci", "fibonacci/"],
+    ["seven", "Seven", "seven/"],
     ["five", "Five", "five/"],
     ["nine", "Nine", "nine/"]
   ];

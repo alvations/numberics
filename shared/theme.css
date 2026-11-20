@@ -18,7 +18,7 @@ h1{ margin:0; font-size:2rem; letter-spacing:.02em; color:var(--accent); }
 .sub{ margin:0; color:var(--mute); font-size:.85rem; } .sub a{ color:var(--mute); }
 .stats{ display:flex; gap:8px; }
 .stat{ background:var(--panel); border-radius:10px; padding:6px 12px; min-width:64px; text-align:center; }
-.stat span{ display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
+.stat > span{ display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
 .stat b{ font-size:1.1rem; font-variant-numeric:tabular-nums; }
 /* power-up tray: 4 slots, gold count badges (identical to Endless) */
 .tray{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:6px; }
