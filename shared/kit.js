@@ -44,7 +44,12 @@
   function toast(msg, kind, el) {
     if (kind && typeof kind === "object") { el = kind; kind = null; }
     el = el || document.getElementById("toast"); if (!el) return;
-    el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.toggle("info", kind === "info"); el.classList.add("on");
+    el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.toggle("info", kind === "info");
+    // sit just inside the top of the board: never over the title, the controls or the games row
+    try {
+      var b = document.querySelector("#board, .board"), r = b && b.getBoundingClientRect();
+      if (r && r.height) el.style.top = Math.max(12, Math.min(window.innerHeight - 60, r.top + 10)) + "px";
+    } catch (e) { /* keep the CSS position */ } el.classList.add("on");
     clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
   }
   // Two-step destructive button ("New game" -> "Sure? ..."), no blocking confirm() dialog.

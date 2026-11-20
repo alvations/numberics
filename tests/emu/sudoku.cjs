@@ -35,7 +35,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 2. tray info on a phone: tapping an empty slot explains it in a neutral toast
   await p.click("#pw-check", { force: true });
   ck("tapping an empty Check explains it and how to earn it (R5)", await toastIs(p, /^Check: Mark wrong digits, briefly\. Earn one for every 9 cells you fill\.$/, true), await p.textContent("#toast"));
-  ck("toast sits at the top, clear of the games row (F2)", await p.evaluate(() => document.getElementById("toast").getBoundingClientRect().top < 60));
+  ck("toast is clear of the title and the games row (F2)", await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), h = document.querySelector("h1").getBoundingClientRect(), g = document.getElementById("games").getBoundingClientRect(); return t.top >= h.bottom && t.bottom <= g.top; }));
   await p.click("#pw-undo", { force: true });
   ck("tapping Undo with nothing to undo says so", await toastIs(p, /Nothing to undo yet/, true));
 
