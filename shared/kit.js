@@ -45,13 +45,34 @@
     if (kind && typeof kind === "object") { el = kind; kind = null; }
     el = el || document.getElementById("toast"); if (!el) return;
     el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.toggle("info", kind === "info");
-    // sit just inside the top of the board: never over the title, the controls or the games row
+    // Sit just above the board, over the hint line (round 2: inside the board it hid the top row;
+    // at the top of the screen it hid the title). Fall back to inside the board when there is no room.
     try {
       var b = document.querySelector("#board, .board"), r = b && b.getBoundingClientRect();
-      if (r && r.height) el.style.top = Math.max(12, Math.min(window.innerHeight - 60, r.top + 10)) + "px";
+      if (r && r.height) {
+        var h = el.offsetHeight || 40, top = r.top - h - 6;
+        if (top < 12) top = r.top + 8;
+        el.style.top = Math.max(12, Math.min(window.innerHeight - h - 12, top)) + "px";
+      }
     } catch (e) { /* keep the CSS position */ } el.classList.add("on");
     clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
+    watchOverlay(el);
   }
+  // A toast never sits on an end screen: while one shows, any visible .over overlay hides it at once.
+  var watchT = null;
+  function overlayUp() {
+    var o = document.querySelectorAll(".over");
+    for (var i = 0; i < o.length; i++) if (!o[i].hidden && o[i].offsetParent !== null) return true;
+    return false;
+  }
+  function watchOverlay(el) {
+    clearInterval(watchT);
+    watchT = setInterval(function () {
+      if (!el.classList.contains("on")) { clearInterval(watchT); return; }
+      if (overlayUp()) { el.classList.remove("on"); clearInterval(watchT); }
+    }, 60);
+  }
+  function clearToast(el) { el = el || document.getElementById("toast"); if (el) el.classList.remove("on"); }
   // Two-step destructive button ("New game" -> "Sure? ..."), no blocking confirm() dialog.
   function twoStep(btn, isRisky, onGo, sureLabel) {
     var label = btn.textContent, armed = null;
@@ -81,5 +102,5 @@
   function fmt(n) { return Number(n).toLocaleString("en-US"); }
   function clock(t) { return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2); }
   return { rand: rand, rng: rng, freshSeed: freshSeed, daySeed: daySeed, store: store, reducedMotion: reducedMotion,
-           toast: toast, twoStep: twoStep, swipe: swipe, arrowKey: arrowKey, hue: hue, fmt: fmt, clock: clock };
+           toast: toast, clearToast: clearToast, twoStep: twoStep, swipe: swipe, arrowKey: arrowKey, hue: hue, fmt: fmt, clock: clock };
 });
