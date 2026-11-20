@@ -1,0 +1,41 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Seven: only what shared/theme.css does not cover. A 7x7 well of round discs. */
+.cells,.discs{ position:absolute; inset:var(--gap); }
+.discs{ pointer-events:none; }
+.cells{ display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(7,1fr); gap:calc(var(--gap) * .6); }
+.cells div{ background:var(--cell); border-radius:50%; transition:background-color 120ms; }
+.cells div.col{ background:#2f3346; }
+.board:not(.targeting) .cells div.top.col{ box-shadow:0 0 0 2px var(--accent) inset; }
+/* a disc: the Endless tile, made round. --r/--c place it, --h colours it */
+.disc{ position:absolute; left:0; top:0; border-radius:50%;
+  width:calc((100% - 6 * var(--gap) * .6) / 7); height:calc((100% - 6 * var(--gap) * .6) / 7);
+  transform:translate(calc(var(--c) * (100% + var(--gap) * .6)), calc(var(--r) * (100% + var(--gap) * .6)));
+  transition:transform 140ms ease-in, opacity 140ms; font-size:7.4cqw; }
+.disc.egg{ background:#8b8d9e; box-shadow:inset 0 -3px 0 rgba(0,0,0,.18); }
+.disc.cracked{ background:#8b8d9e center/70% no-repeat
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 9 L7 12 L10 7 L13 12 L17 8' fill='none' stroke='%2315151d' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.disc.ghost{ opacity:.32; }
+.disc.popping{ animation:sv-pop 150ms ease-out forwards; }
+.disc.gone{ opacity:0; }
+.disc.flash{ animation:sv-flash 220ms ease-out; }
+@keyframes sv-pop{ 40%{ scale:1.18; } 100%{ scale:.2; opacity:0; } }
+@keyframes sv-flash{ 50%{ scale:1.1; filter:brightness(1.25); } }
+.board.targeting .disc:not(.ghost){ cursor:crosshair; }
+/* the next disc in a stat pill, and the held disc in the Hold button */
+.mini{ display:inline-flex; align-items:center; justify-content:center; width:1.45em; height:1.45em; border-radius:50%;
+  font-weight:800; font-size:.95rem; color:#15151d; background:hsl(var(--h,40) 62% 60%); vertical-align:middle; line-height:1; }
+.mini.egg,.mini.cracked{ background:#8b8d9e; }
+.mini.cracked{ background:#8b8d9e center/70% no-repeat
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 9 L7 12 L10 7 L13 12 L17 8' fill='none' stroke='%2315151d' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.stat b.next{ display:block; height:1.54rem; }
+.pw .mini{ font-size:.72rem; margin-left:5px; width:1.5em; height:1.5em; }
+/* drops left before the next row of eggs rises */
+.pips{ display:flex; justify-content:center; gap:4px; margin:8px 0 0; min-height:6px; flex-wrap:wrap; }
+.pips i{ width:6px; height:6px; border-radius:50%; background:var(--accent); }
+.pips i.used{ background:var(--line); }
+.over .row{ margin:4px 0 0; }
+.over .btn[hidden]{ display:none; }
+@media (prefers-reduced-motion:reduce){
+  .disc{ transition:opacity 140ms; }
+  .disc.popping,.disc.flash{ animation:none; }
+}

@@ -1,0 +1,36 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Five: only what shared/theme.css does not cover. */
+.board{ display:flex; flex-direction:column; justify-content:space-between; padding:4% 6%; }
+.side{ display:flex; flex-direction:column; align-items:center; gap:2.4cqw; }
+.who{ color:var(--mute); font-size:3.4cqw; text-transform:uppercase; letter-spacing:.1em; }
+.side.bottom .who{ color:var(--accent); }
+.pair{ display:grid; grid-template-columns:repeat(2,34cqw); gap:8cqw; }
+.slot{ position:relative; width:34cqw; height:34cqw; border-radius:var(--tile-radius); background:var(--cell); cursor:pointer; }
+.slot .tile{ position:absolute; inset:0; font-size:17cqw; transition:translate var(--anim) ease-out; }
+.slot.dead{ cursor:default; }
+.slot.dead::after{ content:""; position:absolute; inset:28%; border-radius:50%; border:2px dashed var(--line); }
+.slot.cur{ outline:2px dashed var(--ink); outline-offset:3px; }
+.slot.sel .tile{ box-shadow:0 0 0 3px var(--accent), 0 0 0 7px rgba(242,184,75,.25); translate:0 -2cqw; }
+.slot.can .tile{ box-shadow:0 0 0 2px rgba(242,184,75,.55); }
+.tile.v4{ box-shadow:0 0 18px hsl(var(--h) 80% 60% / .55); }
+.slot.shield .tile{ outline:3px dashed var(--accent); outline-offset:-9px; }
+.slot.shield::before{ content:"Shield"; position:absolute; left:50%; bottom:-1.2cqw; translate:-50% 50%; z-index:1;
+  background:var(--accent); color:#1b1b22; font-size:2.6cqw; font-weight:700; padding:.2cqw 1.6cqw; border-radius:99px; }
+.pips{ display:flex; justify-content:center; align-items:center; gap:2cqw; }
+.pips i{ width:3.2cqw; height:3.2cqw; border-radius:50%; background:var(--cell); border:1px solid var(--line); }
+.pips i.p{ background:var(--accent); border-color:var(--accent); }
+.pips i.c{ background:var(--mute); border-color:var(--mute); }
+.pips i.now{ box-shadow:0 0 0 2px var(--ink); }
+.fx{ position:absolute; inset:0; pointer-events:none; }
+.fly{ position:absolute; font-size:12cqw; transition:translate 200ms ease-in, scale 200ms ease-in, opacity 200ms ease-in; z-index:2; }
+.ghost{ position:absolute; font-size:17cqw; animation:five-burst 320ms ease-out forwards; z-index:2; }
+@keyframes five-burst{ to{ opacity:0; scale:1.45; } }
+.over h2{ color:var(--ink); }
+.over h2.win{ color:var(--accent); }
+@media (prefers-reduced-motion:reduce){
+  .slot .tile{ transition:none; }
+  .slot.sel .tile{ translate:none; }
+  .fly{ transition:opacity 200ms; }
+  .ghost{ animation:five-fade 320ms ease-out forwards; }
+}
+@keyframes five-fade{ to{ opacity:0; } }

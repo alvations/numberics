@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Fifteen: only what shared/theme.css does not cover. One set of nine tiles; the two views only move them. */
+.stat{ min-width:58px; padding:6px 10px; }
+.tiles,.hash{ position:absolute; inset:var(--gap); }
+/* a number tile: a cell with its number while free, the Endless tile once claimed */
+.ft{ position:absolute; left:0; top:0; width:calc((100% - 2*var(--gap))/3); height:calc((100% - 2*var(--gap))/3);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0;
+  border:0; border-radius:var(--tile-radius); background:var(--cell); color:var(--ink); font:inherit; padding:0; cursor:pointer;
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))));
+  transition:transform 380ms cubic-bezier(.3,.7,.2,1), opacity 200ms, box-shadow 200ms, background-color 200ms; }
+.ft b{ font-size:15cqw; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+.ft small{ font-size:3.2cqw; font-weight:700; letter-spacing:.12em; text-transform:uppercase; min-height:1.2em; margin-top:.4cqw; }
+.ft:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; z-index:1; }
+.ft.mine,.ft.theirs{ background:hsl(var(--h) 62% 60%); color:#15151d; cursor:default; }
+/* ownership: yours a gold edge, the computer's a cool edge; a dark seam keeps the edge readable on any hue */
+.ft.mine{ box-shadow:0 0 0 3px var(--accent), inset 0 0 0 2px var(--bg); }
+.ft.theirs{ box-shadow:0 0 0 3px var(--cool), inset 0 0 0 2px var(--bg); }
+.ft.mine small{ color:#15151d; } .ft.theirs small{ color:#15151d; opacity:.75; }
+.ft.fresh{ animation:ft-in 260ms ease-out; }
+@keyframes ft-in{ from{ opacity:.25; } }
+.ft.dim{ opacity:.32; }
+.ft.win{ z-index:1; animation:ft-win 900ms ease-in-out 2; }
+.ft.win.mine{ box-shadow:0 0 0 3px var(--accent), 0 0 18px 2px var(--accent), inset 0 0 0 2px var(--bg); }
+.ft.win.theirs{ box-shadow:0 0 0 3px var(--cool), 0 0 18px 2px var(--cool), inset 0 0 0 2px var(--bg); }
+@keyframes ft-win{ 50%{ filter:brightness(1.15); } }
+.ft.peek{ box-shadow:inset 0 0 0 3px var(--accent); }
+.ft.mine.peek,.ft.theirs.peek{ box-shadow:0 0 0 3px var(--accent), inset 0 0 0 4px var(--bg); }
+.ft.blocked{ opacity:.45; cursor:not-allowed; }
+.ft.target{ cursor:crosshair; box-shadow:0 0 0 3px var(--cool), 0 0 0 6px var(--accent); }
+/* Grid view: the # lines of tic-tac-toe fade in behind the tiles */
+.hash i{ position:absolute; background:var(--line); border-radius:2px; opacity:0; transition:opacity 380ms; }
+.hash i:nth-child(1),.hash i:nth-child(2){ top:4%; bottom:4%; width:3px; margin-left:-1.5px; }
+.hash i:nth-child(1){ left:calc((100% - 2*var(--gap))/3 + var(--gap)/2); }
+.hash i:nth-child(2){ left:calc((100% - 2*var(--gap))*2/3 + var(--gap)*1.5); }
+.hash i:nth-child(3),.hash i:nth-child(4){ left:4%; right:4%; height:3px; margin-top:-1.5px; }
+.hash i:nth-child(3){ top:calc((100% - 2*var(--gap))/3 + var(--gap)/2); }
+.hash i:nth-child(4){ top:calc((100% - 2*var(--gap))*2/3 + var(--gap)*1.5); }
+.board.grid .hash i{ opacity:1; }
+.board.targeting{ cursor:default; }
+.views{ display:flex; gap:0; }
+.views .btn{ padding:9px 14px; }
+.views .btn:first-child{ border-radius:10px 0 0 10px; } .views .btn:last-child{ border-radius:0 10px 10px 0; margin-left:-1px; }
+.views .btn[aria-pressed="true"]{ position:relative; z-index:1; }
+#next[hidden]{ display:none; }
+@media (max-width:380px){ .stat{ min-width:52px; padding:6px 8px; } .views .btn{ padding:9px 10px; } }
+@media (prefers-reduced-motion:reduce){
+  .ft{ transition:opacity 200ms, box-shadow 200ms, background-color 200ms; } /* no sliding between views */
+  .ft.win{ animation:none; }
+  .ft.fresh{ animation:ft-in 260ms ease-out; } /* opacity is not motion */
+}

@@ -1,0 +1,213 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Numberics Nine: pure rules (UMD: browser global NumbericsNine AND require). No DOM, storage or clock.
+ * Nim with number tiles 1 to 9. Take any amount from one tile; whoever takes last wins (Misere: loses).
+ * A run climbs levels: a match is best of five rounds on N tiles (3 up to 9); win the match to add a tile.
+ * All randomness comes from state.seed (mulberry32 via NumbericsKit.rand), so a seed replays exactly. */
+(function (root, factory) {
+  if (typeof module === "object" && module.exports) module.exports = factory(require("../shared/kit.js"), require("../shared/power.js"));
+  else root.NumbericsNine = factory(root.NumbericsKit, root.NumbericsPower);
+})(typeof self !== "undefined" ? self : this, function (Kit, Power) {
+  "use strict";
+  var POWERS = ["undo", "add", "pass", "peek"];
+  var MAX = 9, MIN_TILES = 3, MAX_TILES = 9, WIN_ROUNDS = 3; // best of five: first to three
+  var DIFFS = ["easy", "medium", "hard"];
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function rnd(s) { var r = Kit.rand(s.seed); s.seed = r[1]; return r[0]; }
+  function pickIn(s, arr) { return arr[Math.floor(rnd(s) * arr.length)]; }
+  function other(who) { return who === "you" ? "cpu" : "you"; }
+
+  // ---- pure Nim theory ----
+  function nimSum(h) { return h.reduce(function (a, v) { return a ^ v; }, 0); }
+  function total(h) { return h.reduce(function (a, v) { return a + v; }, 0); }
+  // Is the side to move winning? Normal play: nim-sum != 0. Misere (last take loses): the same, except when
+  // every tile is 0 or 1, where the mover wins exactly when the count of 1s is even. An empty row means the
+  // previous player took last: the mover has lost in normal play and has won in Misere.
+  function winning(h, misere) {
+    if (!misere) return nimSum(h) !== 0;
+    var big = h.some(function (v) { return v > 1; });
+    if (big) return nimSum(h) !== 0;
+    return total(h) % 2 === 0;
+  }
+  function legalMoves(h) {
+    var out = [];
+    h.forEach(function (v, i) { for (var to = v - 1; to >= 0; to--) out.push({ tile: i, to: to }); });
+    return out;
+  }
+  function after(h, m) { var n = h.slice(); n[m.tile] = m.to; return n; }
+  // Every move that leaves the opponent in a losing position (empty list when the mover is losing).
+  function winningMoves(h, misere) {
+    return legalMoves(h).filter(function (m) { return !winning(after(h, m), misere); });
+  }
+  // Peek: one winning move, or null. Prefers the smallest take (it teaches the idea, not a shortcut).
+  function peek(h, misere) {
+    var w = winningMoves(h, misere);
+    if (!w.length) return null;
+    w.sort(function (a, b) { return (h[a.tile] - a.to) - (h[b.tile] - b.to) || a.tile - b.tile; });
+    return w[0];
+  }
+
+  // ---- dealing: every start is a win for the player, who moves first ----
+  function deal(s, n) {
+    for (var k = 0; k < 1000; k++) {
+      var h = [];
+      for (var i = 0; i < n; i++) h.push(1 + Math.floor(rnd(s) * MAX));
+      if (winning(h, s.misere)) return h;
+    }
+    var f = []; for (var j = 0; j < n; j++) f.push(j === 0 ? 2 : 1); // 2,1,1..: winning in both modes
+    if (!winning(f, s.misere)) f[0] = 3;
+    return f;
+  }
+
+  function opts(o) {
+    o = o || {};
+    return { diff: DIFFS.indexOf(o.diff) >= 0 ? o.diff : "medium", misere: !!o.misere,
+             level: Math.max(MIN_TILES, Math.min(MAX_TILES, o.level | 0 || MIN_TILES)) };
+  }
+  function freshRound(s) {
+    s.heaps = deal(s, s.level); s.turn = "you"; s.acted = false; s.added = false;
+    s.lastTurn = null; s.last = null; s.prev = null; s.roundOver = null; s.award = null;
+  }
+  // A new run: level 3 (or o.level), round 1 of a best of five, one Undo each side.
+  function newGame(seed, o) {
+    o = opts(o);
+    var s = { v: 1, seed: seed >>> 0, diff: o.diff, misere: o.misere, level: o.level, round: 1,
+              score: { you: 0, cpu: 0 }, power: { you: Power.stock(POWERS, { undo: 1 }), cpu: Power.stock(POWERS, { undo: 1 }) },
+              used: 0, cpuUsed: 0, ply: 0, matchOver: null, runOver: false, wonMatches: 0 };
+    freshRound(s);
+    return s;
+  }
+  // After a round ends (and the match goes on): deal the next round.
+  function nextRound(s0) {
+    if (!s0.roundOver || s0.matchOver) return s0;
+    var s = clone(s0); s.round++; s.ply++; freshRound(s); return s;
+  }
+  // After a match the player won: one more tile (cap 9), the player keeps the stock, the computer starts over.
+  function nextMatch(s0) {
+    if (s0.matchOver !== "you") return s0;
+    var s = clone(s0);
+    s.level = Math.min(MAX_TILES, s.level + 1); s.round = 1; s.score = { you: 0, cpu: 0 };
+    s.power.cpu = Power.stock(POWERS, { undo: 1 }); s.cpuUsed = 0; s.matchOver = null; s.ply++;
+    freshRound(s); return s;
+  }
+
+  function snapshot(s) { var c = clone(s); c.prev = null; return c; }
+  function endTurn(s, kind) {
+    s.lastTurn = { who: s.turn, kind: kind };
+    s.turn = other(s.turn); s.added = false; s.ply++;
+    if (s.turn === "you") s.acted = false;
+  }
+  function finishRound(s, taker) {
+    var winner = s.misere ? other(taker) : taker;
+    s.roundOver = winner; s.score[winner]++;
+    // Winning a round earns one power-up. The computer earns too, on Hard only (it only plays them on Hard).
+    s.award = null;
+    if (winner === "you" || s.diff === "hard") {
+      var name = Power.award(s.power[winner], POWERS, rnd(s));
+      if (name) s.award = { who: winner, name: name };
+    }
+    if (s.score[winner] >= WIN_ROUNDS) {
+      s.matchOver = winner;
+      if (winner === "you") s.wonMatches++; else s.runOver = true;
+    }
+  }
+  function live(s) { return !s.roundOver && !s.matchOver; }
+
+  // The side to move lowers tile i by `amount` (1 up to its value). Illegal input returns {ok:false}.
+  function take(s0, tile, amount) {
+    if (!live(s0)) return { ok: false, state: s0 };
+    var v = s0.heaps[tile];
+    if (!Number.isInteger(tile) || !Number.isInteger(amount) || v === undefined || amount < 1 || amount > v) return { ok: false, state: s0 };
+    var s = clone(s0);
+    if (s.turn === "you" && !s.acted) { s.prev = snapshot(s0); s.acted = true; }
+    s.heaps[tile] = v - amount;
+    s.last = { who: s.turn, kind: "take", tile: tile, from: v, to: v - amount, added: s.added };
+    var taker = s.turn;
+    endTurn(s, "take");
+    if (total(s.heaps) === 0) finishRound(s, taker);
+    return { ok: true, state: s };
+  }
+
+  function canPass(s) { return live(s) && !(s.lastTurn && s.lastTurn.kind === "pass") && (s.power[s.turn].pass || 0) > 0; }
+  function canAdd(s, tile) {
+    var v = s.heaps[tile];
+    return live(s) && !s.added && (s.power[s.turn].add || 0) > 0 && Number.isInteger(v) && v >= 1 && v < MAX;
+  }
+  function canUndo(s) { return !!s.prev && (s.power.you.undo || 0) > 0 && !s.prev.matchOver; }
+
+  // Power-ups for the side to move (the player calls this with s.turn === "you"; undo is the player's only).
+  //   undo        restores the start of the player's last turn, stock included (no farming)
+  //   add, tile   +1 to one live tile, never past 9; once per turn; you still take after it
+  //   pass        skip this turn; not right after the other side passed (no pass-back)
+  //   peek        spends a charge and returns one winning move in .move (null when there is none)
+  function use(s0, name, tile) {
+    var fail = { ok: false, state: s0 };
+    if (name === "undo") {
+      if (!canUndo(s0)) return fail;
+      var u = clone(s0.prev); u.power.you.undo--; u.used++; u.ply = s0.ply + 1;
+      return { ok: true, state: u };
+    }
+    if (!live(s0)) return fail;
+    var who = s0.turn, s;
+    if (name === "add") {
+      if (!canAdd(s0, tile)) return fail;
+      s = clone(s0);
+      if (who === "you" && !s.acted) { s.prev = snapshot(s0); s.acted = true; }
+      Power.spend(s.power[who], "add"); s.heaps[tile]++; s.added = true; s.ply++;
+      s.last = { who: who, kind: "add", tile: tile, from: s0.heaps[tile], to: s.heaps[tile] };
+      if (who === "you") s.used++; else s.cpuUsed++;
+      return { ok: true, state: s };
+    }
+    if (name === "pass") {
+      if (!canPass(s0)) return fail;
+      s = clone(s0);
+      if (who === "you" && !s.acted) { s.prev = snapshot(s0); s.acted = true; }
+      Power.spend(s.power[who], "pass");
+      if (who === "you") s.used++; else s.cpuUsed++;
+      s.last = { who: who, kind: "pass" };
+      endTurn(s, "pass");
+      return { ok: true, state: s };
+    }
+    if (name === "peek") {
+      if (!(s0.power[who].peek > 0)) return fail;
+      s = clone(s0); Power.spend(s.power[who], "peek"); s.ply++;
+      if (who === "you") s.used++; else s.cpuUsed++;
+      return { ok: true, state: s, move: peek(s.heaps, s.misere) };
+    }
+    return fail;
+  }
+
+  // ---- the computer ----
+  function randomMove(s) { return pickIn(s, legalMoves(s.heaps)); }
+  function liveCount(h) { return h.filter(Boolean).length; }
+  // Decide the computer's move on s (mutates s.seed only). Returns {tile, to}.
+  function chooseMove(s) {
+    var h = s.heaps, best = peek(h, s.misere);
+    if (s.diff === "easy") return randomMove(s);
+    if (s.diff === "medium") return best && liveCount(h) <= 2 ? best : randomMove(s);
+    if (best) return pickIn(s, winningMoves(h, s.misere));
+    // Hard, losing: stall with the smallest take so a slip by the player can still be punished.
+    var live1 = []; h.forEach(function (v, i) { if (v) live1.push(i); });
+    var t = pickIn(s, live1); return { tile: t, to: h[t] - 1 };
+  }
+  // The computer's whole turn. Hard turns a lost position around with Pass or Add when it holds one.
+  function cpuTurn(s0) {
+    if (!live(s0) || s0.turn !== "cpu") return s0;
+    var s = clone(s0), r;
+    if (s.diff === "hard" && !winning(s.heaps, s.misere)) {
+      if (canPass(s)) { r = use(s, "pass"); if (r.ok) return r.state; }
+      if (s.power.cpu.add > 0 && !s.added) {
+        var adds = [];
+        s.heaps.forEach(function (v, i) { if (canAdd(s, i)) { var h = s.heaps.slice(); h[i]++; if (winning(h, s.misere)) adds.push(i); } });
+        if (adds.length) s = use(s, "add", pickIn(s, adds)).state;
+      }
+    }
+    var m = chooseMove(s);
+    return take(s, m.tile, s.heaps[m.tile] - m.to).state;
+  }
+
+  return { POWERS: POWERS, MAX: MAX, MIN_TILES: MIN_TILES, MAX_TILES: MAX_TILES, WIN_ROUNDS: WIN_ROUNDS, DIFFS: DIFFS,
+           nimSum: nimSum, winning: winning, legalMoves: legalMoves, winningMoves: winningMoves, peek: peek,
+           newGame: newGame, nextRound: nextRound, nextMatch: nextMatch, take: take, use: use,
+           canPass: canPass, canAdd: canAdd, canUndo: canUndo, chooseMove: chooseMove, cpuTurn: cpuTurn };
+});
