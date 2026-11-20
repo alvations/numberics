@@ -87,9 +87,28 @@ t("a ten-line needs EXACTLY ten: 11 and 9 do not win", () => {
   ok(!F.drop(board(base, { turn: 1, next: [1, 1] }), 3).state.over, "sum 9");
 });
 t("a ten-line completed by the opponent's disc is theirs, not yours", () => {
-  // three of the player's discs sum to 7: whoever drops a 3 at the end completes it
-  const s = board([[0, 0, 1, 2], [0, 1, 1, 2], [0, 2, 1, 3]], { turn: 2, next: [1, 3] });
+  // two of the player's discs and one of the computer's sum to 7: the computer's 3 completes it with two of its own
+  const s = board([[0, 0, 1, 2], [0, 1, 2, 2], [0, 2, 1, 3]], { turn: 2, next: [1, 3] });
   const r = F.drop(s, 3); ok(r.state.over); eq(r.state.over.winner, 2); eq(r.state.over.type, "ten");
+});
+// round 1 (cold blocker, mechanics #5): a ten-line must hold at least two discs of the side that completes it
+t("ten-line rule: one disc of yours is not enough (the other side's three discs plus yours never win)", () => {
+  const s = board([[0, 0, 1, 2], [0, 1, 1, 2], [0, 2, 1, 3]], { turn: 2, next: [1, 3] });
+  const r = F.drop(s, 3); ok(r.ok); ok(!r.state.over, "the computer completed a 10 holding only one disc of it");
+  eq(F.linesAt(s.own, s.num, at(0, 3), 2, 3), []); eq(F.linesAt(s.own, s.num, at(0, 3), 1, 3).length, 1, "the player's own 3 still wins");
+  eq(F.MINE, 2);
+});
+t("ten-line rule: exactly two of yours is enough, in every direction", () => {
+  for (const [cells, dropC] of [[[[0, 1], [0, 2], [0, 3]], 4], [[[0, 5], [1, 5], [2, 5]], 5]]) {
+    const discs = [[cells[0][0], cells[0][1], 2, 4], [cells[1][0], cells[1][1], 1, 1], [cells[2][0], cells[2][1], 2, 3]];
+    const s = board(discs, { turn: 1, next: [2, 1] });
+    const r = F.drop(s, dropC); ok(r.state.over && r.state.over.type === "ten" && r.state.over.winner === 1, JSON.stringify(r.state.over));
+  }
+});
+t("ten-line rule: the computer's search never counts a ten it holds only one disc of", () => {
+  // the player's three discs sum to 7 and the computer holds a 3: no win in one for the computer
+  const s = board([[0, 0, 1, 2], [0, 1, 1, 2], [0, 2, 1, 3]], { turn: 2, next: [1, 3], level: "hard" });
+  const a = F.analyse(s, { depth: 1 }); ok(a.score < 1000000 - 64, "score " + a.score);
 });
 t("colour wins outrank ten-lines in the report when one drop makes both", () => {
   const s = board([[0, 0, 1, 1], [0, 1, 1, 2], [0, 2, 1, 3]], { turn: 1, next: [4, 1] });
@@ -112,17 +131,23 @@ t("the computer takes an immediate colour win", () => {
   for (const lv of ["easy", "medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.state.over && r.state.over.winner, 2, lv); }
 });
 t("the computer takes an immediate ten-line", () => {
-  const s = board([[0, 1, 1, 4], [0, 2, 1, 2], [0, 3, 1, 1]], { turn: 2, next: [1, 3] });
+  const s = board([[0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [1, 3] });
   for (const lv of ["easy", "medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.state.over && r.state.over.type, "ten", lv); eq(r.state.over.winner, 2); }
 });
-t("the computer blocks an immediate colour loss", () => {
+// blocks: Hard on every turn it is not loose; Easy and Medium play loose turns (tuned), so they are measured over seeds
+function blockRate(s, lv, col) {
+  let n = 0; for (let k = 0; k < 100; k++) { const x = JSON.parse(JSON.stringify(s)); x.level = lv; x.aiSeed = k * 7919 + 1;
+    const r = F.computerTurn(x); if (r.actions[r.actions.length - 1].arg === col) n++; }
+  return n / 100;
+}
+t("the computer blocks an immediate colour loss (Hard always, Medium mostly, Easy often)", () => {
   const s = board([[0, 0, 1, 1], [1, 0, 1, 1], [2, 0, 1, 1], [0, 3, 2, 1], [0, 4, 2, 2]], { turn: 2, next: [1, 1] });
-  for (const lv of ["medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.actions[r.actions.length - 1].arg, 0, lv); ok(!r.state.over); }
+  eq(blockRate(s, "hard", 0), 1, "hard"); ok(blockRate(s, "medium", 0) >= 0.75, "medium"); ok(blockRate(s, "easy", 0) >= 0.4, "easy");
 });
 t("the computer blocks an immediate ten-line loss (the player holds the 3 it needs)", () => {
-  // (0,1..3) = 4 2 1 needs a 3 at (0,4); (0,0) is filled so that is the only hole
+  // (0,1..3) = 4 2 1 needs a 3 at (0,4); (0,0) is filled so that is the only hole; two of them are the player's
   const s = board([[0, 0, 2, 1], [0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [3, 1] });
-  for (const lv of ["easy", "medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.actions[r.actions.length - 1].arg, 4, lv); ok(!r.state.over); }
+  eq(blockRate(s, "hard", 4), 1, "hard"); ok(blockRate(s, "medium", 4) >= 0.75, "medium"); ok(blockRate(s, "easy", 4) >= 0.4, "easy");
 });
 t("Easy is deterministic by seed", () => {
   const run = seed => { let s = F.newGame(seed, { level: "easy" }), cols = [];
@@ -136,10 +161,11 @@ t("fair play: the computer reads the bag's contents, never its hidden order", ()
   eq(F.computerTurn(t2).actions[0], a[0]);
 });
 t("Hard spends Tune to win when its own number would not", () => {
-  const s = board([[0, 1, 1, 4], [0, 2, 1, 2], [0, 3, 1, 1]], { turn: 2, next: [1, 1], level: "hard" });
+  const s = board([[0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [1, 1], level: "hard" });
   s.board = null; s.own[at(0, 0)] = 2; s.num[at(0, 0)] = 2; // close the left hole: only (0,4) needs a 3
   s.power[1].tune = 1;
-  const r = F.computerTurn(s); eq(r.actions[0], { type: "tune", arg: 3 }); eq(r.state.over.winner, 2); eq(r.state.over.type, "ten");
+  let r; for (let k = 0; k < 20; k++) { s.aiSeed = k + 1; r = F.computerTurn(s); if (r.actions[0].type === "tune") break; } // past a loose turn
+  eq(r.actions[0], { type: "tune", arg: 3 }); eq(r.state.over.winner, 2); eq(r.state.over.type, "ten");
 });
 t("Medium and Easy never use power-ups", () => {
   const s = board([[0, 1, 1, 4], [0, 2, 1, 2], [0, 3, 1, 1], [0, 0, 2, 2]], { turn: 2, next: [1, 1] });
@@ -176,10 +202,18 @@ t("Undo is refused with no snapshot, on the computer's turn and with no charge",
   const s2 = F.drop(s, 3).state; ok(!F.use(s2, "undo").ok, "computer to move");
   const s3 = F.computerTurn(s2).state; s3.power[0].undo = 0; ok(!F.use(s3, "undo").ok);
 });
-t("Undo works after a loss (the game is over)", () => {
-  const s = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1], [1, 0, 1, 1]], { turn: 1, next: [1, 1], level: "medium" });
+// R1 (round 1: critic Four 1, mechanics Four 1): Undo never crosses a decided result, so a record cannot be farmed
+t("R1: Undo is refused after a loss", () => {
+  const s = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1], [1, 0, 1, 1]], { turn: 1, next: [1, 1], level: "hard" });
+  s.power[0].undo = 3;
   let x = F.drop(s, 6).state; x = F.computerTurn(x).state; ok(x.over && x.over.winner === 2);
-  const u = F.use(x, "undo"); ok(u.ok); ok(!u.state.over); eq(u.state.own[at(0, 6)], 0);
+  ok(x.prev, "a snapshot exists"); ok(!F.use(x, "undo").ok, "undo after a loss");
+});
+t("R1: Undo is refused after a win, so one game can be won only once", () => {
+  const s = board([[0, 0, 2, 4], [0, 1, 1, 1], [0, 2, 2, 2]], { turn: 1, next: [3, 1] }); s.power[0].undo = 3;
+  const w = F.drop(s, 3).state; ok(w.over && w.over.winner === 1); ok(!F.use(w, "undo").ok, "undo after a win");
+  const d = Object.assign(JSON.parse(JSON.stringify(w)), { over: { winner: 0, type: "draw", line: [], cells: [] } });
+  ok(!F.use(d, "undo").ok, "undo after a draw");
 });
 t("Pop removes any disc and the column drops", () => {
   const s = board([[0, 2, 1, 1], [1, 2, 2, 3], [2, 2, 1, 2]], { turn: 1 }); s.power[0].pop = 1;
@@ -215,11 +249,23 @@ t("earn: making a ten-line threat that only your next number completes", () => {
   const s2 = board([[0, 0, 2, 4], [0, 1, 2, 1]], { turn: 1, next: [2, 3] }); s2.bag[0] = [3];
   eq(F.drop(s2, 2).earned, null, "no threat if the opponent's next number would also complete it");
 });
-t("earn: the computer earns by the same rules, never Undo", () => {
+t("earn: Hard's computer earns by the same rules, never Undo", () => {
   for (let k = 0; k < 30; k++) {
-    const r = F.drop(board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1]], { turn: 2, next: [1, 1], seed: k }), 3);
+    const r = F.drop(board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1]], { turn: 2, next: [1, 1], seed: k, level: "hard" }), 3);
     eq(r.earned, "block"); ok(r.award && r.award !== "undo", r.award);
   }
+});
+t("earn: the computer earns nothing on Easy and Medium (only Hard spends power-ups; critic Four 3)", () => {
+  for (const lv of ["easy", "medium"]) {
+    const r = F.drop(board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1]], { turn: 2, next: [1, 1], level: lv }), 3);
+    eq(r.earned, null, lv); eq(r.state.power[1], { undo: 0, pop: 0, hold: 0, tune: 0 }, lv);
+  }
+});
+t("earn: a threat counts when the opponent's equal number could not complete it (it lacks a disc there)", () => {
+  // player discs 4 and 1 at (0,0),(0,1); the player drops at (0,2): needs 3 more, the computer also holds a 3
+  // but has no disc in that line, so only the player can ever complete it
+  const s = board([[0, 0, 1, 4], [0, 1, 1, 1]], { turn: 1, next: [2, 3] }); s.bag[0] = [3];
+  eq(F.drop(s, 2).earned, "threat");
 });
 t("the stock caps at 9", () => {
   const s = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1]], { turn: 1, next: [1, 1] });

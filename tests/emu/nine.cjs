@@ -66,6 +66,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "peek");
   await p.keyboard.press("2");
   ck("add arms targeting", await p.locator("#board.targeting").count() === 1);
+  await shot(p, "targeting");
   await p.keyboard.press("Escape");
   ck("escape cancels targeting", await p.locator("#board.targeting").count() === 0);
   await p.keyboard.press("2");
