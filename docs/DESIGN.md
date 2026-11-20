@@ -39,91 +39,96 @@ Tuning knobs live at the top of `engine.js`: `AWARD_FROM_LEVEL` (5), `POWER_CAP`
 ## Sudoku
 - Generation: fill a grid by seeded randomised backtracking, then remove cells in random order, keeping a removal
   only if the puzzle still has exactly one solution (solver stops counting at 2).
-- Difficulty is clue count only (easy 40, medium 32, hard 26 or fewer). It is a simple, honest knob; a
+- Difficulty is clue count only (easy 40, medium 32, hard exactly 26). It is a simple, honest knob; a
   technique-graded rating (naked pairs, X-wing) is a possible future refinement.
 - Helpers are honest: red marks show rule conflicts only, never whether a digit is right. The Reveal power-up is
   the one way to learn the truth; pure and assisted best times are kept apart.
 
 ---
 
-# The family (built 20 Nov 2026)
+# The family: how each game stands now (after QA round 3)
 
-The plan is `docs/ROADMAP.md`. This is what was built, the numbers behind every tuning choice, and every
-deviation from the plan with its reason. All measurements are seeded Node bot runs (reproducible).
+This section is kept current (rewrite it, do not append). The plan is `docs/ROADMAP.md`; how each game got here is in
+the round histories below and in `docs/reviews/` (four reviews and a triage per round). Every number is a seeded
+measurement, reproducible with the tools named.
 
 ## Shared
-- `shared/theme.css` is the Endless look as tokens and components; `kit.js` (seeded rng, storage with fallback,
-  toast, two-step button, swipe), `power.js` (stock, award with cap 9, tray), `nav.js` (the games row, mirrored
-  from `games.json` by a test).
-- Endless and Sudoku keep their own CSS (so their look did not move); both now show the games row (plan Q0 default).
-- **Undo and spent charges.** In the slide games (Endless, Fibonacci, Seven, Three) Undo restores the whole snapshot.
-  Where a power-up *reveals information* (Sudoku Reveal/Check, Six Hint/Peek, Nine Peek), a spent charge stays
-  spent through Undo; otherwise "reveal, then undo" would show answers free.
+- `shared/theme.css` (the Endless look), `kit.js` (seeded rng, storage with fallback, toast, two-step, swipe),
+  `power.js` (stock, award with cap 9, tray that explains itself), `nav.js` (games row; the home page shows each game
+  with its description and a "vs computer" tag). Endless and Sudoku keep their own CSS and mirror shared changes.
+- Family rules R1-R17 (`docs/reviews/TRIAGE1-3.md`): Undo never crosses a decided result; a power-up never earns one;
+  information power-ups (Peek, Hint, Reveal, Check) stay spent and count as help; solved-game opponents lose to perfect
+  play; quitting a live game counts as a loss; the result shows on the board for 1.5 s before the card, which offers
+  "See the board"; one end-card pattern; the toast never covers an end card, a warning or a status-line change.
+- R2 depth: tile games mark the tiles a power-up touched (Endless, Fibonacci); drop games make the next move unpaid
+  (Seven, Four); round games pay nothing for a round won after a power-up, Peek included (Five, Fifteen, Nine); Sudoku
+  and Six treat any help on the current line or cell as help.
 
-## Fibonacci
-- Rules (2584, well known; the reference page could not be reached from the build network): merge consecutive
-  Fibonacci numbers or 1+1, spawn 1 (90%) / 2 (10%), score += merged value, no ceiling.
-- `engine.js` became a rule-set engine; Endless replays byte-identical (`tests/fixtures/endless-replay.json`, and
-  0 differences on 200 further seeds).
-- Award threshold kept at 34: greedy bot, Endless 71 moves per award, Fibonacci 132 (runs last ~3x longer);
-  21 or 55 move that only to 114 / 158.
+## Endless and Fibonacci
+- Rule-set engine (`engine.js`, `make(rules)`); Endless behaviour is pinned by `tests/fixtures/endless-replay.json`.
+- Swapped and boosted tiles carry a mark through merges and never earn; Smash makes the next move unpaid.
+- Fibonacci (2584 rules: merge consecutive numbers or 1 + 1; equal tiles do not merge): award floor 55; greedy bot
+  149 moves per reward vs Endless 66; 111-degree hue step so neighbours differ. Merge rule confirmed by a published
+  write-up; spawn odds (1: 90%, 2: 10%) assumed.
+
+## Sudoku
+- Exactly 40 / 32 / 26 clues; every puzzle has one solution.
+- Power-ups (Undo free; Reveal, Check, Candidates) earned by progress: each new multiple of 9 clash-free player cells
+  on a high-water mark (honest solve 4 / 5 / 6; typing 1 everywhere 0). Revealed cells never count. Accepted: wrong but
+  clash-free digits count (the rule rewards progress, and totals cap at an honest solve's).
+- Layout deviation: no hint line (tray below the board), so explanations use the neutral info toast.
 
 ## Seven
-- 16% eggs; rises every 20 drops in Classic, minus one per level down to 5; Blitz fixed at 5; 12 starting discs.
-- Disc points 7 x wave^2.5; rise bonus 70 x level; Lucky Seven 777; cleared well 7000.
-- Shape-playing bot, Classic: median 186 drops, 14 chains of 3+ waves and 1.25 Lucky Sevens per game, ~15 power-ups.
-- Power-up chains score but never earn; an egg touching several pops cracks one step per wave.
+- 16% eggs; rises every 20 drops in Classic (minus one per level, floor 5), Blitz 5; disc points 7 x wave^2.5.
+- The drop after Smash, Hold or Crack pays nothing; rewards skip Undo once three are held (`RULES.undoKeep`).
+- An overflow with Undo in stock offers "Undo the last drop" or "End the run".
 
 ## Three
-- Step merges are essential: without them values stay 3 x 2^n, 9 never exists and no flush can form.
-- Flush minimum 3 (a minimum of 4 effectively never fires).
-- Bag of three 1s, three 2s, six 3s: a flush every 29.4 moves (greedy), 26.0 (flush-seeking), 1% of games
-  without a flush. Threes' own bag gives one every ~41. Reproduce with `node tools/sim-three.js`.
-- Rainbow by k = value / 3, octaves marked by rings; the flushed tile lands on the run's highest tile.
+- Bag: four 1s, four 2s, two 3s. 1 + 2 = 3; from 3 up equal tiles merge; the only other step merge is 3 + 6 = 9, so
+  values stay on a pairable ladder and 15 never exists. A Flush (3, 6, 9 or 6, 9, 12 in a line) scores sum x length,
+  pays a power-up and clears its run.
+- Human-like bot: median 165 swipes, a flush every 22.6 (`tools/sim-three.js`). 14-rung colour ladder.
 
 ## Four
-- Even 1-4 bag: ten-lines decided ~72% of games (too dominant). Shipped bag 1,1,1,1,2,2,3,4: ten-lines decide
-  46% (random play) to 62-64% (between levels), so both win paths matter.
-- AI sees only public information (both next numbers, held discs, remaining bag counts). Deterministic node
-  budgets; Hard's slowest move ~93 ms in Node.
-- vs random: Easy 94%, Medium 97%, Hard 98%. Hard beats Medium 55% (luck from unknown numbers caps skill).
-- Pop cannot complete a line; power-ups do not pass the turn; the computer never earns Undo.
+- Discs 1-4 from a bag of 1,1,1,1,2,2,3,4; win with four of your colour or a ten-line (four in a row summing to 10
+  with at least two of the completer's discs).
+- Easy and Medium mark danger: red ring on a column whose drop would let the computer win right after; blue ring on
+  the cell a drop would open and on every immediate threat. Hard shows none.
+- Careful bot (plays only on what the page shows): Easy 78%, Medium 44%, Hard 36%; safe-move bot 71 / 39 / 39%
+  (`tools/measure-four.js`). Easy misses ten-line wins 40% of the time; Medium loose 0.75.
 
 ## Five
-- Solve: 576 live positions, 432 wins / 144 losses / 0 draws for the side to move. **The first mover loses from
-  1-1-1-1**, so the computer always opens and the player holds the winning seat (no alternation).
-- Plain play cannot loop (tiles only grow), so rounds last at most 16 turns; the draw rule only guards power-up play.
-- vs random (rounds / matches): Easy 61.8% / 67.2%, Medium 87.1% / 98.4%, Hard 95.0% / 100%.
-- Split is a power-up, not a basic move.
+- Each side has two number tiles starting at 1; add one onto another; at 5 or more it bursts. The computer opens
+  (the first mover loses from 1-1-1-1), its opening varies by seed (`OPEN_OWN` 0.5 / 0.5 / 0.25), it never uses
+  power-ups, and perfect play wins 100% on every level. Greedy player: Easy 89%, Medium 35.5%, Hard 4.5%.
 
 ## Six
-- Verified bank of 101 lines (`six/bank.js`, rebuilt by `node six/make-bank.js`, every line re-solved by tests).
-- Difficulty = log10(expressions / solutions) + extra signs in the shortest solution; tier medians 4.1, 5.9, 5.9,
-  9.3, 12.0 (a test requires them never to fall).
-- Starts with Undo + one Hint (lifts the weakest 10% of bot players past round 1). Answer button for stuck lines.
-- Known gap: only ~20 tier-5 lines, so long Climb runs repeat (the last 24 are avoided).
+- Verified bank of 108 lines (`node six/make-bank.js`, byte-identical rebuild, re-solved by the tests). Tiers by
+  measured tools needed: 1 = + − × ÷ and one bracket group, 2 = one root or factorial, 3 = more signs, 4 = join
+  digits, 5 = all tools. Climb opens with three lines that need no brackets; deals vary by seed.
+- Exact fractions; never `eval`. Undo, Hint, Skip, Peek; help on a line means that line pays nothing.
 
 ## Fifteen
-- The 8 magic lines are exactly the 15-sum triples of 1-9 (tested on all 19,683 boards).
-- Hard is perfect, so a perfect player could only ever draw and never earned a power-up. Decision: on Hard the
-  player starts each match with one Erase. Result: perfect play beats Hard in 100% of matches (4.24 rounds on
-  average); a takes-wins-and-blocks player still loses 95%. The computer earns only Erase and Double.
+- Tic-tac-toe as Pick 15; Numbers view 1-5 over 6-9, Grid view the magic square.
+- On Hard the player gets an Erase only after a drawn round: perfect play wins every match 2-0. Sensible player:
+  Easy 99%, Medium 52%, Hard 24.5%. A round won after Erase, Double or Peek pays nothing.
 
 ## Nine
-- Every dealt start has a non-zero nim-sum and the player moves first, so perfect play always wins.
-- Hard vs a player who finds the winning move 95% of the time: player wins 79% at 3 tiles, 24% at 9.
-- First visit defaults to Easy (on Medium a random player wins only 2% at 3 tiles).
-- Add does not use the turn (otherwise it could never turn a lost position); no pass-back; Undo never crosses a
-  won round.
+- Nim with tiles up to nine; runs climb from 3 to 9 tiles; Misère unlocks after the first win; Easy is the default.
+- Easy and Medium always deal a winning start; Hard deals a losing start 1 time in 5 and hides the live nim-sum.
+  Hard, perfect play with power-ups: 88.5% of matches; a perfect Hard run effectively never ends (accepted).
+- Pass once per round per side; a round won after Add, Pass or Peek pays nothing; deals never repeat.
 
-## Sudoku power-ups
-- Superseded in QA round 1: charges are earned by progress (see "QA round 1" below and CLAUDE.md), not by
-  completed units. Start: 1 Reveal. Layout deviation: Sudoku has no hint line (its tray sits below the board), so
-  tray explanations use the neutral info toast.
+## Known gaps
+- Long power-up explanations can take three lines at 375 px and move the board down for a moment (family-wide;
+  needs shorter copy or another place).
+- Six tier 2 has 17 lines; tier 5 about 20 (content work).
 
 ---
 
-# QA round 1 (20 Nov 2026): what changed
+# History
+
+## QA round 1 (20 Nov 2026): what changed
 
 Reviews and decisions: `docs/reviews/REVIEW*1.md`, `TRIAGE1.md` (family rules R1-R11). Highlights, with numbers:
 
@@ -154,7 +159,7 @@ Reviews and decisions: `docs/reviews/REVIEW*1.md`, `TRIAGE1.md` (family rules R1
 
 ---
 
-# QA round 2 (20 Nov 2026): what changed
+## QA round 2 (20 Nov 2026): what changed
 
 Reviews and decisions: `docs/reviews/REVIEW*2.md`, `TRIAGE2.md` (R2 everywhere with a property test per game, R12-R17).
 
