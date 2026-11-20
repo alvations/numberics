@@ -59,9 +59,10 @@ same commit as any visible change. `npm test` fails if a live game has no screen
   tests check this on many seeds and all three difficulties.
 - Difficulty is clue count (easy 40, medium 32, hard 26 or fewer). Puzzles are a pure function of seed + difficulty.
 - Conflicts (a digit repeated in a row/column/box) are painted red, but the game never says which digit is
-  *correct* except through the **Reveal** power-up. Power-ups (Undo free; Reveal, Check, Candidates earned by
-  completing a correct row/column/box, one charge per move at most) follow docs/ROADMAP.md 0a, except that a
-  spent charge stays spent after Undo (else Reveal + Undo shows answers free). Best times: pure (no power-ups)
+  *correct* except through the **Reveal** power-up. Power-ups (Undo free; Reveal, Check, Candidates) are earned **by
+  progress, not correctness**: one charge each time the high-water count of player-filled cells passes a new
+  multiple of 9 (never lowered by Erase or Undo; Reveal-filled cells and the solving move never pay), so a reward
+  reveals nothing. Undo never touches the stock. Undo is refused once the puzzle is solved. Best times: pure (no power-ups)
   and assisted (with the count) are kept apart.
 - A solved board locks. The timer pauses in a background tab. Notes are bitmasks; placing a digit clears it from peers.
 - Sudoku keeps its own style.css (not shared/theme.css) so its look never changed; it loads kit, power and nav.

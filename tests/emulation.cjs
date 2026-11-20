@@ -190,7 +190,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.keyboard.press("n"); await p.keyboard.press("Backspace");
   const wrong = (truth % 9) + 1;
   await p.keyboard.press(String(wrong));
-  const clash = await p.evaluate((i) => { const s = window.__sudoku.state; return s.grid.some((v, k) => v === s.grid[i] && k !== i); }, empty);
+  const clash = await p.evaluate((i) => { const s = window.__sudoku.state; const S = window.NumbericsSudoku; return S.PEERS[i].some(k => s.grid[k] === s.grid[i]); }, empty);
   if (clash) ck("a rule-breaking digit is painted red", await p.locator(".c.bad").count() >= 1);
   await shot(p, "sudoku");
   await p.evaluate(() => { const s = window.__sudoku.state; const g = s.solution.slice(); const hole = s.puzzle.findIndex(v => !v); s.grid = g.slice(); s.grid[hole] = 0; window.__sudoku.state = s; window.__sudoku.select(hole); });

@@ -68,6 +68,7 @@ a:focus-visible{ border-radius:6px; }
 .toast.on{ opacity:1; }
 /* warnings and losses: neutral, never the gold reward pill */
 .toast.bad{ background:var(--panel); color:var(--ink); border:1px solid var(--bad); font-weight:600; }
+.toast.info{ background:var(--panel); color:var(--ink); border:1px solid var(--line); font-weight:600; }
 .over{ position:absolute; inset:0; border-radius:var(--radius); background:rgba(20,21,28,.95); display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:10px; text-align:center; padding:20px; z-index:3; }
 .over[hidden]{ display:none; } .over h2{ margin:0; font-size:1.6rem; line-height:1.2; text-wrap:balance; }

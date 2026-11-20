@@ -38,12 +38,13 @@
     try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; }
   }
   var toastT = null;
-  // toast(msg) is a reward or passing note (gold); toast(msg, "bad") is a warning or loss (neutral).
+  // toast(msg) is a reward (gold); toast(msg, "bad") is a warning or loss (neutral, red edge);
+  // toast(msg, "info") is a plain explanation (neutral).
   // An element may still be passed as the second or third argument.
   function toast(msg, kind, el) {
     if (kind && typeof kind === "object") { el = kind; kind = null; }
     el = el || document.getElementById("toast"); if (!el) return;
-    el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.add("on");
+    el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.toggle("info", kind === "info"); el.classList.add("on");
     clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
   }
   // Two-step destructive button ("New game" -> "Sure? ..."), no blocking confirm() dialog.
