@@ -83,3 +83,5 @@ a:focus-visible{ border-radius:6px; }
 .games.detail a b{ display:block; color:var(--ink); font-size:.95rem; } .games.detail a:hover{ border-color:#4b4f6a; }
 @media (max-width:340px){ .games.detail{ grid-template-columns:1fr; } }
 .pw.empty:focus-visible{ opacity:1; }
+.games.detail a b .vs{ font-style:normal; font-weight:600; font-size:.66rem; letter-spacing:.06em; text-transform:uppercase; color:var(--cool); margin-left:6px; vertical-align:1px; }
+.stat b.none,.stat .none{ color:var(--mute); font-weight:600; font-size:1.1rem; }

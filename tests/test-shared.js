@@ -22,7 +22,7 @@ t("nav LIVE list matches the live games in games.json, in order", () => {
   const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).filter(g => g.status === "live");
   const src = fs.readFileSync(path.join(root, "shared/nav.js"), "utf8");
   const live = JSON.parse(src.match(/var LIVE = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"'));
-  ok(JSON.stringify(live) === JSON.stringify(games.map(g => [g.id, g.name, g.path, g.blurb])), "nav: " + JSON.stringify(live));
+  ok(JSON.stringify(live) === JSON.stringify(games.map(g => [g.id, g.name, g.path, g.blurb].concat(g.vs ? [1] : []))), "nav: " + JSON.stringify(live));
 });
 t("every games.json entry is well formed and paths are unique", () => {
   const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8"));
