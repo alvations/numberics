@@ -93,4 +93,5 @@ same commit as any visible change. `npm test` fails if a live game has no screen
 - Sound, share card, achievements/collection and save-file export (all exist in melon-eight) are not built.
 - Sudoku ideas: daily puzzle by date seed, automatic notes fill, killer/diagonal variants.
 - Only a 4x4 board is wired in the UI; the engine already accepts other `size` values.
-- Deploy target not chosen (GitHub Pages from `main` / root would work as is).
+- **Deploy:** GitHub Pages at https://alvations.github.io/numberics/ serves the `gh-pages` branch, which
+  `.github/workflows/pages.yml` rebuilds from `main` after `node tests/run.js` passes. Never edit `gh-pages` by hand.

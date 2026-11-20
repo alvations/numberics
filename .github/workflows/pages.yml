@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
 # Publish Numberics to GitHub Pages on every push to main, after the engine tests pass.
-# The site is static (no build step): the repo root is the site, Endless is the home page.
+# Pages serves the gh-pages branch; this job rebuilds that branch from main (static site, no build step).
+# Commits on gh-pages carry the owner's identity (CLAUDE.md: authorship is the owner's only).
 name: Deploy to GitHub Pages
 
 on:
@@ -9,16 +10,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: false
 
 jobs:
-  test:
+  test-and-publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,26 +26,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node tests/run.js
-
-  deploy:
-    needs: test
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Assemble the site (only what the pages load)
+      - name: Unit tests (every game)
+        run: node tests/run.js
+      - name: Assemble the site (only what the pages load; live games from games.json)
         run: |
           mkdir -p _site
-          cp -r index.html engine.js game.js style.css games.json .nojekyll shared screenshots _site/
-          for g in sudoku fibonacci seven three four five six fifteen nine; do cp -r "$g" _site/; done
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          cp -r index.html engine.js game.js style.css games.json .nojekyll shared screenshots LICENSE NOTICE _site/
+          for p in $(node -e 'require("./games.json").filter(g => g.status === "live" && g.path).forEach(g => console.log(g.path))'); do
+            cp -r "$p" _site/
+          done
+      - name: Publish to gh-pages
+        run: |
+          cd _site
+          git init -q -b gh-pages
+          git add -A
+          git -c user.name=alvations -c user.email=alvations@gmail.com commit -q -m "Publish Numberics (site from main ${GITHUB_SHA::7})"
+          git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" gh-pages

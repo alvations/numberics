@@ -1,5 +1,7 @@
 # Numberics
 
+**Play: https://alvations.github.io/numberics/**
+
 Ten number games, no build step, no tracking. Open `index.html` (Endless) and use the games row to switch.
 
 **Numberics Endless** is 2048 with the ceiling removed. Merge past 2048 and keep going: there is no winning
