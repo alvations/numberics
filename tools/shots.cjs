@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Screenshots of every live game in games.json -> screenshots/<id>-{mobile,desktop}.png
- * Run: NODE_PATH=$(npm root -g) node tools/shots.cjs   (npm run shots)
+ * Run: NODE_PATH=$(npm root -g) node tools/shots.cjs [id ...]   (npm run shots)
+ * With ids, shoots exactly those games whatever their status (use it while building a planned game).
  * A game opts into a representative state by defining window.__demo(); otherwise its fresh page is shot. */
 "use strict";
 const { chromium } = require("playwright");
@@ -19,14 +20,15 @@ const VIEWS = [
 ];
 (async () => {
   fs.mkdirSync(out, { recursive: true });
-  await new Promise(r => srv.listen(8072, r));
-  const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).filter(g => g.status === "live");
+  await new Promise(r => srv.listen(0, "127.0.0.1", r));
+  const port = srv.address().port, ids = process.argv.slice(2);
+  const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).filter(g => ids.length ? ids.includes(g.id) : g.status === "live");
   const b = await chromium.launch();
   let bad = 0;
   for (const g of games) for (const v of VIEWS) {
     const ctx = await b.newContext({ viewport: v.viewport, deviceScaleFactor: 2, reducedMotion: "reduce" });
     const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
-    await p.goto("http://127.0.0.1:8072/" + g.path);
+    await p.goto("http://127.0.0.1:" + port + "/" + g.path);
     await p.evaluate(() => { if (typeof window.__demo === "function") window.__demo(); });
     await p.waitForTimeout(400);
     const file = path.join(out, g.id + "-" + v.tag + ".png");

@@ -5,8 +5,8 @@
   "license": "Apache-2.0",
   "private": true,
   "scripts": {
-    "test": "node tests/test.js && node tests/test-sudoku.js",
-    "test:browser": "node tests/emulation.cjs",
+    "test": "node tests/run.js",
+    "test:browser": "node tests/emulation.cjs && node tests/emu/run.cjs",
     "start": "python3 -m http.server 8070",
     "shots": "node tools/shots.cjs"
   }
