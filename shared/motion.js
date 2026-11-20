@@ -131,6 +131,8 @@
   // slide (ms, default T.slide; Three uses T.step), clip (true: tiles outside the layer are clipped) } ----
   function layer(el, opts) {
     opts = opts || {};
+    if (!el || !el.classList) // no board (a page without one, or Node): an inert layer, so callers never need a guard
+      return { sync: function () {}, finish: function () {}, busy: function () { return false; }, get: function () { return null; }, count: function () { return 0; } };
     var cols = opts.cols || 4, rows = opts.rows || cols, slide = opts.slide || T.slide;
     var doc = el.ownerDocument || w.document;
     var nodes = {}, last = {}, gone = [], anims = [], flagged = [], timer = null, gen = 0;

@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+     Test page for shared/motion.js (tests/emu/shared-motion.cjs): the real Two engine driven through the keyed tile
+     layer exactly as REDESIGN.md 5.3 describes doMove(dir). Not linked from the site. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#12131a">
+<script src="../../shared/boot.js"></script>
+<title>Motion probe</title>
+<link rel="stylesheet" href="../../shared/theme.css">
+<style>
+  .probe-board{ width:min(92vw,440px); margin:24px auto; }
+  .probe-cells{ position:absolute; inset:var(--gap); display:grid; grid-template-columns:repeat(4,1fr); gap:var(--gap); }
+  .probe-cells i{ background:var(--board-cell); border-radius:var(--tile-radius); }
+  .probe-board .face{ font-size:9cqw; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="board probe-board" id="board"><div class="probe-cells" id="cells"></div><div id="tiles"></div></div>
+</div>
+<script src="../../shared/kit.js"></script>
+<script src="../../shared/settings.js"></script>
+<script src="../../shared/motion.js"></script>
+<script src="../../engine.js"></script>
+<script>
+(function () {
+  "use strict";
+  var M = window.NumbericsMotion, N = window.Numberics, q = new URLSearchParams(location.search);
+  for (var i = 0; i < 16; i++) document.getElementById("cells").appendChild(document.createElement("i"));
+  var state = N.newGame(+(q.get("seed") || 7)), ids = [], next = 1;
+  var layer = M.layer(document.getElementById("tiles"), {
+    cols: 4, rows: 4,
+    paint: function (node, t) {
+      node.firstChild.textContent = N.label(t.l);
+      node.style.setProperty("--h", (t.l * 37) % 360);
+      node.classList.toggle("lo", t.l === 1); node.classList.toggle("lo2", t.l === 2);
+    }
+  });
+  function tilesOf(s, map) {
+    var out = []; s.grid.forEach(function (l, c) { if (l) out.push({ id: map[c], cell: c, l: l }); }); return out;
+  }
+  function rekey(fx) { var k = M.rekey(state.grid, next); ids = k.ids; next = k.next; layer.sync(tilesOf(state, ids), fx || null); }
+  rekey();
+  var handlerMs = [];
+  function move(dir) {
+    var t0 = performance.now();
+    layer.finish();
+    var r = N.move(state, dir);
+    if (!r.moved) return false;
+    var fx = M.track(ids, r.trace, r.spawned, next);
+    state = r.state; ids = fx.ids; next = fx.next;
+    layer.sync(tilesOf(state, ids), fx);
+    handlerMs.push(performance.now() - t0);
+    return true;
+  }
+  function undo() {
+    layer.finish();
+    var u = N.use(state, "undo"); if (!u.ok) return false;
+    state = u.state; rekey({ fade: true }); return true;
+  }
+  // a fixed board for the merge / spawn checks: 2 2 . 4 on the top row
+  function demo() {
+    layer.finish();
+    state = N.newGame(3); state.grid = [1, 1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3]; state.marks = new Array(16).fill(0);
+    state.power.undo = 9; state.prev = null;
+    rekey();
+  }
+  var KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down" };
+  document.addEventListener("keydown", function (e) { var d = KEYS[e.key]; if (d) { e.preventDefault(); move(d); } });
+  window.__probe = {
+    move: move, undo: undo, demo: demo, layer: layer, handlerMs: handlerMs,
+    get state() { return state; }, get ids() { return ids.slice(); },
+    onBoard: function () { return state.grid.filter(Boolean).length; }
+  };
+})();
+</script>
+</body>
+</html>

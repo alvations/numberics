@@ -14,7 +14,7 @@
   "use strict";
   var NAMES = "tick slide merge land pop burst pip place best power trophy win lose bad".split(" ");
   var P = [0, 2, 4, 7, 9];
-  // C4 upward on a pentatonic ladder, capped at k = 14 (about 1568 Hz)
+  // C4 upward on a pentatonic ladder, capped at k = 14 (A6, 1760 Hz; k = 13 is G6, 1568 Hz)
   function note(k) {
     k = Math.max(0, Math.min(14, Math.floor(+k) || 0));
     return 261.63 * Math.pow(2, (P[k % 5] + 12 * Math.floor(k / 5)) / 12);
@@ -153,7 +153,7 @@
       if (!eng) return;
       try {
         var g = eng.master.gain, t = eng.c.currentTime;
-        if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t); else { var cur = g.value; g.cancelScheduledValues(t); g.setValueAtTime(cur, t); }
+        var cur = g.value; g.cancelScheduledValues(t); g.setValueAtTime(cur, t); // not cancelAndHoldAtTime: Chromium misreads it
         g.linearRampToValueAtTime(target(), t + RAMP);
       } catch (e) { /* closed context */ }
     }
@@ -242,7 +242,7 @@
       stats: function () {
         if (eng) try { prune(); } catch (e) { /* closed */ }
         return { contexts: made, state: eng ? eng.c.state : "none", voices: voices.length,
-          master: eng ? eng.master.gain.value : 0, target: target() };
+          master: eng ? eng.master.gain.value : 0, target: target(), time: eng ? eng.c.currentTime : 0 };
       },
     };
     NAMES.forEach(function (n) { A[n] = function (arg) { return play(n, arg); }; });
