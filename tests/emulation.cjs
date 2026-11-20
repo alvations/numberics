@@ -65,7 +65,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; s.over = true; window.__numberics.state = s; });
   ck("overlay shows when locked", await p.isVisible("#over"));
   await shot(p, "over");
-  ck("overlay scrim is the darker one (R8, F7)", await p.evaluate(() => /0\.95\)/.test(getComputedStyle(document.getElementById("over")).backgroundColor)));
+  ck("overlay scrim is the darker one (R8, F7)", await p.evaluate(() => /0\.9[5-9]\d*\)/.test(getComputedStyle(document.getElementById("over")).backgroundColor)));
   ck("only one New game on screen while over (E2)", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden"));
   ck("game over focuses the overlay's New game", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
   await ctx.close();

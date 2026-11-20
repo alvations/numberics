@@ -59,7 +59,7 @@
       }
     } catch (e) { /* keep the CSS position */ } el.classList.add("on");
     clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
-    watchOverlay(el);
+    shownAt = Date.now(); watchOverlay(el); watchHint(el);
   }
   // A toast never sits on an end screen: while one shows, any visible .over overlay hides it at once.
   var watchT = null;
@@ -74,6 +74,20 @@
       if (!el.classList.contains("on")) { clearInterval(watchT); return; }
       if (overlayUp()) { el.classList.remove("on"); clearInterval(watchT); }
     }, 60);
+  }
+  // The status line always wins: when the hint text changes (targeting instructions, "thinking", a result), any toast
+  // over it clears at once (round 3 craft #1: the two were drawn over each other).
+  var hintObs = null, shownAt = 0;
+  function watchHint(el) {
+    if (hintObs || typeof MutationObserver === "undefined") return;
+    var hint = document.getElementById("hint"); if (!hint) return;
+    var last = hint.textContent;
+    hintObs = new MutationObserver(function () {
+      var now = hint.textContent; if (now === last) return; last = now;
+      // the same tick that raised the toast often redraws the hint: only a later change hides it
+      if (Date.now() - shownAt > 150) el.classList.remove("on");
+    });
+    hintObs.observe(hint, { childList: true, characterData: true, subtree: true });
   }
   function clearToast(el) { el = el || document.getElementById("toast"); if (el) el.classList.remove("on"); }
   // Two-step destructive button ("New game" -> "Sure? ..."), no blocking confirm() dialog.

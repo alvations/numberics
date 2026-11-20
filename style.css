@@ -50,7 +50,7 @@ h1{ margin:0; font-size:2rem; letter-spacing:.02em; color:var(--accent); }
 .tile.pop{ animation:pop 140ms ease-out; } .tile.new{ animation:appear 160ms ease-out; }
 @keyframes pop{ 50%{ transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap)))) scale(1.14); } }
 @keyframes appear{ from{ opacity:0; scale:.6; } }
-.over{ position:absolute; inset:0; border-radius:14px; background:rgba(20,21,28,.95); z-index:3; display:flex; flex-direction:column;
+.over{ position:absolute; inset:0; border-radius:14px; background:rgba(20,21,28,.985); z-index:3; display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:10px; text-align:center; padding:20px; }
 .over[hidden]{ display:none; } .over h2{ margin:0; font-size:1.6rem; line-height:1.2; text-wrap:balance; }
 .over p{ margin:0; color:var(--mute); text-wrap:balance; } .over .best{ color:var(--accent); font-weight:700; }

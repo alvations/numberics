@@ -241,7 +241,7 @@ t("R7/F2/F3: toast at the top with a neutral bad variant; warnings use it", () =
   ok(/toast\([^;]*"bad"\)/.test(src["game.js"]), "a warning passes bad");
 });
 t("R8/F7: darker scrim, New best line, gold best", () => {
-  ok(/\.over\{[^}]*rgba\(20,21,28,\.95\)/.test(src["style.css"]), "scrim .95");
+  ok(/\.over\{[^}]*rgba\(20,21,28,\.9[5-9]\d*\)/.test(src["style.css"]), "scrim .95 or darker");
   ok(/id="over-best" class="best" hidden>New best\.</.test(src["index.html"]), "New best line");
   ok(/\.over \.best\{/.test(src["style.css"]), "best style");
 });

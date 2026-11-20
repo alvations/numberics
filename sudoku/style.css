@@ -57,7 +57,7 @@ h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
 .how{ color:var(--mute); font-size:.82rem; text-align:center; margin:8px 0; }
 /* end card: the family overlay (shared .over, R8), a full scrim over the board */
 .wrap{ position:relative; }
-.over{ position:absolute; inset:0; border-radius:8px; background:rgba(20,21,28,.95); display:flex; flex-direction:column;
+.over{ position:absolute; inset:0; border-radius:8px; background:rgba(20,21,28,.985); display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:10px; text-align:center; padding:20px; z-index:3; }
 .over[hidden]{ display:none; } .over h2{ margin:0; font-size:1.6rem; line-height:1.2; text-wrap:balance; }
 .over p{ margin:0; color:var(--mute); text-wrap:balance; } .over .best{ color:var(--accent); font-weight:700; }
