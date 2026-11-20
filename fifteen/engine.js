@@ -22,9 +22,10 @@
  * - Undo (you only) rewinds to the start of your last turn, the computer's reply included, restoring the
  *   whole snapshot (stock, score, round) minus the Undo charge spent, and a Peek spent since then stays
  *   spent (R3). It never crosses a decided round or match (R1), nor into a new round.
- * - On Hard you start each match with one Undo, and EVERY round with at least one Erase (perfect play is
- *   a draw; the Erase breaks it, so a perfect player wins every Hard round and the match 3-0, while a
- *   round won with it still earns nothing: tests/test-fifteen.js measures both).
+ * - On Hard you start each match with one Undo and no Erase; a round that follows a DRAWN round starts
+ *   you with at least one Erase (perfect play is a draw; the Erase breaks it, so a perfect player draws,
+ *   wins with the Erase, and so on: every Hard match won, 2-0. A round won with it earns nothing, and Hard
+ *   stays harder than Medium for a sensible player: tests/test-fifteen.js measures both).
  * - The round that decides the match earns nothing: a new match starts a fresh stock, so that reward
  *   could never be used. A reward skipped because every slot is full says so (result.why "full", R15).
  * - The computer earns power-ups only on Hard, by the same rule, only Erase or Double (the two it
@@ -159,8 +160,8 @@
       rounds: [],                // winner of each finished round (0 draw)
       result: null,              // {winner, line: [a,b,c] | null, earned: name|null, why: null|"powered"|"full"|"match"}
       match: null,               // {winner: 0|1|2} once the match is decided
-      // Hard is a solved draw, so on Hard you start with one Erase to break it (the computer does not)
-      power: stock(diff === "hard" ? { undo: 1, erase: 1 } : { undo: 1 }), cpuPower: stock({}),
+      // Hard is a solved draw: after a drawn Hard round you get an Erase to break it (nextRound)
+      power: stock({ undo: 1 }), cpuPower: stock({}),
       prev: null, moves: 0, last: [],
     };
   }
@@ -326,12 +327,12 @@
 
   function nextRound(state) {
     if (!state.result || state.match) return state;
-    var s = clone(state);
+    var s = clone(state), drawn = state.result.winner === 0;
     s.round++; s.starter = 3 - s.starter; s.turn = s.starter;
     s.owner = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     s.claimsLeft = 1; s.usedPower = false; s.blocked = 0; s.acted = false; s.powered = [false, false, false];
     s.result = null; s.prev = null; s.last = [];
-    if (s.diff === "hard") s.power.erase = Math.max(s.power.erase, 1);   // one Erase every Hard round
+    if (s.diff === "hard" && drawn) s.power.erase = Math.max(s.power.erase, 1);   // a drawn Hard round hands you an Erase
     return s;
   }
   // a fresh match keeps the difficulty, resets the stock (each run starts with one Undo)

@@ -104,10 +104,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("first tap on Hard asks Sure?", (await p.textContent('#diff button[data-d="hard"]')) === "Sure?" && (await S(p)).diff === "medium");
   await p.click('#diff button[data-d="hard"]');
   ck("second tap starts a Hard match", (await S(p)).diff === "hard" && (await p.textContent('#diff button[data-d="hard"]')) === "Hard");
-  ck("Hard tells you about the round's Erase at the start", /^Round 1 of 5\. Your turn; you hold an Erase\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
-  await p.evaluate(() => { const st = window.__fifteen.state; st.power.erase = 0; window.__fifteen.state = st; });
+  ck("Hard round 1: no Erase", (await S(p)).power.erase === 0 && /^Round 1 of 5\. Your turn\. Claim any number\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await p.locator("#tray .pw").nth(1).click({ force: true });
-  ck("empty Erase on Hard says how it comes back", /On Hard you get one every round/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("empty Erase on Hard says how it comes", /On Hard you get one after a drawn round/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await p.evaluate(() => { const st = window.__fifteen.state; st.round = 2; st.rounds = [0]; st.wins = [1, 0, 0]; st.power.erase = 1; window.__fifteen.state = st; });
+  ck("after a draw, Hard tells you about the round's Erase", /^Round 2 of 5\. Your turn; you hold an Erase\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await p.click('#diff button[data-d="medium"]');
 
   // 2. the two views: same board, tiles move, note on first switch, persists

@@ -243,7 +243,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   if (!(await st(p)).roundOver) {
     await p.click('#levels button[data-level="hard"]'); await p.click('#levels button[data-level="medium"]');
     ck("only one level button says Sure? at a time", (await p.locator('#levels button').allTextContents()).join(",") === "Easy,Sure?,Hard", (await p.locator('#levels button').allTextContents()).join(","));
-    ck("the hint says the switch counts as a loss", /^Tap Medium again: this match counts as a loss\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+    ck("the hint says the switch counts as a loss", /^Tap Medium again: it counts as a loss\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
     await p.click('#levels button[data-level="medium"]'); await idle(p);
     ck("R12: the level switch recorded the loss", (await st(p)).level === "medium" && await p.evaluate(() => window.__five.record.lost) === lost0 + 2);
   } else ck("round ended early (unexpected)", false);

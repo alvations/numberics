@@ -94,7 +94,7 @@
     boardEl.classList.toggle("targeting", !!armed);
     var hint = "";
     if (armed) hint = PW_HINT[armed] + (keys ? " (Esc cancels)" : "");
-    else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again: this match counts as a loss.";
+    else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again: it counts as a loss.";
     else if (state.roundOver) hint = state.roundOver === "draw" ? "Drawn: the same position came up 3 times, or 40 turns passed without a burst."
       : viewing ? "Tap the board for the summary." : holding ? lastWords() : ""; // one line: the ringed slot shows what burst
     else if (state.turn === "c" || busy) hint = "The computer is thinking\u2026";

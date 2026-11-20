@@ -104,11 +104,11 @@ t("Medium can be beaten by a fork; Hard cannot", () => {
 t("a match starts with exactly one Undo", () => {
   const s = F.newMatch(1, "medium"); eq(s.power, { undo: 1, erase: 0, peek: 0, double: 0 });
 });
-t("on Hard you start with one Undo and one Erase; the computer starts with nothing", () => {
-  eq(F.newMatch(1, "hard").power, { undo: 1, erase: 1, peek: 0, double: 0 });
+t("on Hard you start with one Undo and no Erase; the computer starts with nothing", () => {
+  eq(F.newMatch(1, "hard").power, { undo: 1, erase: 0, peek: 0, double: 0 });
   eq(F.newMatch(1, "hard").cpuPower, { undo: 0, erase: 0, peek: 0, double: 0 });
   eq(F.newMatch(1, "easy").power, { undo: 1, erase: 0, peek: 0, double: 0 });
-  eq(F.setDiff(F.newMatch(1, "easy"), "hard").power.erase, 1, "switching to Hard starts a match with the Erase");
+  eq(F.setDiff(F.newMatch(1, "easy"), "hard").power.erase, 0, "round 1 of a Hard match has no Erase");
 });
 t("the computer only earns power-ups it uses (Erase, Double)", () => {
   const seen = new Set();
@@ -289,21 +289,27 @@ t("R4: with one Erase you force a round win against any defence, whoever starts;
   ok(F.solve(z(), 2, 1) < 0, "the computer starts, you hold an Erase: every opening loses for it");
   eq(F.solve(z(), 1, 0), 0); eq(F.solve(z(), 2, 0), 0);
 });
-t("Hard: every round starts you with an Erase (topped up, not stacked); other levels do not", () => {
-  let s = F.newMatch(3, "hard"); eq(s.power.erase, 1);
-  s.owner = B([2, 6], [1, 3]); s.power.erase = 0; s = must(F.claim(s, 7));
-  eq(F.nextRound(s).power.erase, 1, "spent last round: a fresh one");
-  s.power.erase = 3; eq(F.nextRound(s).power.erase, 3, "earned ones are kept, nothing is added on top");
-  let m = F.newMatch(3, "medium"); m.owner = B([2, 6], [1, 3]); m = must(F.claim(m, 7)); eq(F.nextRound(m).power.erase, 0);
+t("Hard: a round after a DRAWN round starts you with an Erase (topped up, not stacked); a won or lost one does not", () => {
+  const draw = () => { const s = at(B([1, 2, 4, 7], [3, 5, 6, 9]), 1, "hard"); return must(F.claim(s, 8)); };
+  let d = draw(); eq(d.result.winner, 0, "fixture: a draw"); d.power.erase = 0;
+  eq(F.nextRound(d).power.erase, 1, "after a draw: a fresh one");
+  d.power.erase = 3; eq(F.nextRound(d).power.erase, 3, "earned ones are kept, nothing is added on top");
+  let w = must(F.claim(at(B([2, 6], [1, 3]), 1, "hard"), 7)); w.power.erase = 0; eq(F.nextRound(w).power.erase, 0, "after a win: none");
+  let l = F.cpuTurn(at(B([3, 4], [8, 1]), 2, "hard")).state; eq(l.result.winner, 2); l.power.erase = 0; eq(F.nextRound(l).power.erase, 0, "after a loss: none");
+  let m = at(B([1, 2, 4, 7], [3, 5, 6, 9]), 1, "medium"); m = must(F.claim(m, 8)); eq(F.nextRound(m).power.erase, 0, "Medium never hands one out");
 });
-t("R4 + R2: perfect play wins every Hard match 3-0, and no Erase round pays (60 seeds, both starters)", () => {
+t("R4 + R2: perfect play wins every Hard match (draw, then win with the Erase), and no Erase round pays (60 seeds, both starters)", () => {
   for (let seed = 1; seed <= 60; seed++) {
     let s = F.newMatch(seed, "hard"); if (seed % 2) { s.starter = 2; s.turn = 2; }
     while (!s.match) {
-      if (s.result) { eq(s.result.winner, 1, "seed " + seed + " round " + s.round); eq(s.result.earned, null, "the Erase round earned"); s = F.nextRound(s); continue; }
+      if (s.result) {
+        ok(s.result.winner !== 2, "seed " + seed + ": perfect play lost round " + s.round);
+        eq(s.result.winner, s.round % 2 ? 0 : 1, "seed " + seed + " round " + s.round + ": draw, then win with the Erase");
+        eq(s.result.earned, null, "a Hard round paid"); s = F.nextRound(s); continue;
+      }
       s = s.turn === 2 ? F.cpuTurn(s).state : perfectTurn(s);
     }
-    eq(s.match.winner, 1, "seed " + seed); eq(s.wins, [0, 3, 0], "seed " + seed);
+    eq(s.match.winner, 1, "seed " + seed); eq(s.wins, [2, 2, 0], "seed " + seed + ": 2-0 with two draws, decided after round 4"); eq(s.rounds.length, 4);
   }
 });
 t("Hard plays against the Erase you hold: imperfect play still loses most matches (random player, 200 seeds)", () => {

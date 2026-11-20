@@ -55,7 +55,9 @@ package.json updated; convention tests: the storage guard window and the authors
   to factorial-on-a-bracket or nested roots before line 5 of round 2 (cold #7); the Climb-ending warning is never hidden
   (shared twoStep fix plus check); target shown once in the board panel, gap buttons look active (craft #10); BEST
   shows "none" before any play (cold #10); fits 390x844 without scrolling.
-- **Fifteen:** Hard pacing (mechanics #5): on Hard the player gets one Erase at the start of **each round** (not each
+- **Fifteen:** *(as built: an Erase every round made Hard easier than Medium for a sensible player, 51% vs 47%;
+  the Erase now comes only after a drawn round: perfect play wins every Hard match 2-0, sensible 28% on Hard vs
+  46% on Medium, random 0%.)* Original line: Hard pacing (mechanics #5): on Hard the player gets one Erase at the start of **each round** (not each
   match); a round won using it still pays nothing (R2); perfect play then wins Hard matches 3-0 while imperfect play
   still loses; re-measure; R12; R13; pills and score wording per R16 below; subtitle never breaks mid-score (craft #9).
 - **Nine:** R2; R14 (disclose the computer's Pass and Add on Hard); Pass at most once per round per side (mechanics #4);
