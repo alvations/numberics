@@ -25,7 +25,7 @@
   }
   var saved = store.load() || {};
   var prefs = saved.prefs && typeof saved.prefs === "object" ? saved.prefs : {};
-  prefs = { diff: N.DIFFS.indexOf(prefs.diff) >= 0 ? prefs.diff : "medium", misere: !!prefs.misere && !!prefs.unlocked,
+  prefs = { diff: N.DIFFS.indexOf(prefs.diff) >= 0 ? prefs.diff : "easy", misere: !!prefs.misere && !!prefs.unlocked,
             learn: !!prefs.learn, unlocked: !!prefs.unlocked };
   var best = saved.best && typeof saved.best === "object" ? saved.best : {};
   var state = validState(saved.state) ? saved.state : N.newGame(K.freshSeed(), prefs);
@@ -127,9 +127,9 @@
       var xb = document.createElement("b"); xb.textContent = bin(x) + " (" + x + ")"; ln.appendChild(xb);
       ln.insertBefore(document.createTextNode("Nim-sum "), ln.firstChild);
     }
-    $("learn-btn").textContent = "Learn: " + (prefs.learn ? "on" : "off"); $("learn-btn").setAttribute("aria-pressed", String(prefs.learn));
+    $("learn-btn").setAttribute("aria-pressed", String(prefs.learn));
     var mb = $("misere"); mb.hidden = !prefs.unlocked;
-    mb.textContent = "Misere: " + (state.misere ? "on" : "off"); mb.setAttribute("aria-pressed", String(state.misere));
+    mb.setAttribute("aria-pressed", String(state.misere));
     drawOver();
   }
   function drawOver() {
@@ -162,7 +162,6 @@
       var k = bestKey(state); best[k] = Math.max(best[k] || 0, state.level);
       if (!prefs.unlocked) { prefs.unlocked = true; K.toast("Misere unlocked: the last take loses."); }
     }
-    if (state.roundOver && !prevState.roundOver && !state.matchOver && state.award && state.award.who === "you") K.toast("Round won  +" + NAME[state.award.name]);
     persist(); render(); schedule();
   }
   function schedule() {
@@ -297,13 +296,13 @@
   Array.prototype.forEach.call(document.querySelectorAll("#diff button"), function (b) {
     b.addEventListener("click", function () {
       var d = b.getAttribute("data-diff"); if (d === state.diff) return;
-      confirmNew("diff-" + d, "Tap again to start a new run on " + b.textContent, function () { prefs.diff = d; restart(); });
+      confirmNew("diff-" + d, "Tap again: new run on " + b.textContent, function () { prefs.diff = d; restart(); });
     });
   });
   $("misere").addEventListener("click", function () {
     if (!prefs.unlocked) return;
     var want = !state.misere;
-    confirmNew("misere-" + want, "Tap again to start a new run with Misere " + (want ? "on" : "off"), function () { prefs.misere = want; restart(); });
+    confirmNew("misere-" + want, "Tap again: new run, Misere " + (want ? "on" : "off"), function () { prefs.misere = want; restart(); });
   });
   function toggleLearn() { prefs.learn = !prefs.learn; persist(); render(); }
   $("learn-btn").addEventListener("click", toggleLearn);

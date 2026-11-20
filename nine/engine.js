@@ -133,10 +133,11 @@
     var v = s.heaps[tile];
     return live(s) && !s.added && (s.power[s.turn].add || 0) > 0 && Number.isInteger(v) && v >= 1 && v < MAX;
   }
-  function canUndo(s) { return !!s.prev && (s.power.you.undo || 0) > 0 && !s.prev.matchOver; }
+  // Undo is for taking back a mistake: never after a round you won (nothing to fix, and no award to rewind).
+  function canUndo(s) { return !!s.prev && (s.power.you.undo || 0) > 0 && s.roundOver !== "you"; }
 
   // Power-ups for the side to move (the player calls this with s.turn === "you"; undo is the player's only).
-  //   undo        restores the start of the player's last turn, stock included (no farming)
+  //   undo        restores the start of the player's last turn, stock included (no farming); spent Peeks stay spent
   //   add, tile   +1 to one live tile, never past 9; once per turn; you still take after it
   //   pass        skip this turn; not right after the other side passed (no pass-back)
   //   peek        spends a charge and returns one winning move in .move (null when there is none)
@@ -144,7 +145,9 @@
     var fail = { ok: false, state: s0 };
     if (name === "undo") {
       if (!canUndo(s0)) return fail;
-      var u = clone(s0.prev); u.power.you.undo--; u.used++; u.ply = s0.ply + 1;
+      var u = clone(s0.prev); u.power.you.undo--; u.used = s0.used + 1; u.ply = s0.ply + 1;
+      // Peek is information: a spent Peek stays spent after Undo, so Peek + Undo never shows a move for free.
+      u.power.you.peek = Math.min(u.power.you.peek, s0.power.you.peek);
       return { ok: true, state: u };
     }
     if (!live(s0)) return fail;

@@ -95,6 +95,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("misere: the last take loses", (await p.textContent("#over-title")) === "Round lost" && (await S(p)).score.cpu === 1);
   await p.click("#learn-btn");
   ck("learn view shows binary and the nim-sum", await p.isVisible("#learn") && /Nim-sum/.test(await p.textContent("#learn")));
+  await forge(p, { heaps: [9, 8, 7, 6, 5, 4, 3, 2, 1] });
+  ck("nine tiles fit with binary labels", await p.locator(".heap .bin").count() === 9 && await p.evaluate(() => document.documentElement.scrollWidth <= 375));
+  await shot(p, "learn");
   await forge(p, { heaps: [0, 0, 1], s: { score: { you: 0, cpu: 2 } } });
   await p.locator('.heap[data-i="2"]').click(); await p.click("#take");
   ck("losing the match ends the run", (await p.textContent("#over-title")) === "Run over");

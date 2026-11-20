@@ -8,7 +8,8 @@
     ["endless", "Endless", ""],
     ["sudoku", "Sudoku", "sudoku/"],
     ["fibonacci", "Fibonacci", "fibonacci/"],
-    ["five", "Five", "five/"]
+    ["five", "Five", "five/"],
+    ["nine", "Nine", "nine/"]
   ];
   var el = document.getElementById("games"); if (!el) return;
   var root = el.getAttribute("data-root") || "", cur = el.getAttribute("data-current");

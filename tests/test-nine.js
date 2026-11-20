@@ -176,16 +176,28 @@ t("Peek: spends a charge and returns the winning move (null when lost)", () => {
   ok(!N.use(forge({ heaps: [1, 2, 3] }), "peek").ok);
 });
 t("Undo restores the start of your last turn, stock included, and cannot farm", () => {
-  let s = forge({ heaps: [0, 0, 2], you: { undo: 1, add: 1 } });
-  s = N.use(s, "add", 2).state; s = N.take(s, 2, 3).state; // add then take the last: round won, award earned
-  eq(s.roundOver, "you"); const earned = s.power.you;
+  // a won round cannot be undone, so its award can never be rewound and re-earned
+  let w = forge({ heaps: [0, 0, 2], you: { undo: 1, add: 1 } });
+  w = N.use(w, "add", 2).state; w = N.take(w, 2, 3).state; eq(w.roundOver, "you");
+  ok(!N.canUndo(w) && !N.use(w, "undo").ok, "no undo after a won round");
+  // add, take, the computer wins: undo puts back the tiles, the Add, the score, and spends the Undo
+  let s = forge({ heaps: [0, 1, 2], you: { undo: 1, add: 1 } });
+  s = N.use(s, "add", 1).state; s = N.take(s, 2, 2).state; eq(s.heaps, [0, 2, 0]);
+  s = N.cpuTurn(s); eq(s.roundOver, "cpu"); eq(s.score, { you: 0, cpu: 1 });
   const u = N.use(s, "undo"); ok(u.ok);
-  eq(u.state.heaps, [0, 0, 2]); eq(u.state.roundOver, null); eq(u.state.score, { you: 0, cpu: 0 });
-  eq(u.state.power.you, { undo: 0, add: 1, pass: 0, peek: 0 }, "award and add rewound, undo spent " + JSON.stringify(earned));
+  eq(u.state.heaps, [0, 1, 2]); eq(u.state.roundOver, null); eq(u.state.score, { you: 0, cpu: 0 }); eq(u.state.turn, "you");
+  eq(u.state.power.you, { undo: 0, add: 1, pass: 0, peek: 0 }, "add back, undo spent");
+  eq(u.state.power.cpu, s.prev.power.cpu, "the computer's award is rewound too");
   ok(!N.use(u.state, "undo").ok, "one level only");
   // undo after the computer's winning reply takes back both moves
   let c = forge({ heaps: [2, 2, 0], diff: "hard" }); c = N.take(c, 0, 1).state; c = N.cpuTurn(c);
   ok(!N.winning(c.heaps, false)); const back = N.use(c, "undo").state; eq(back.heaps, [2, 2, 0]); eq(back.turn, "you");
+});
+t("a Peek spent after your last move stays spent through Undo", () => {
+  let s = forge({ heaps: [1, 2, 3, 5], diff: "easy", you: { undo: 1, peek: 1 } });
+  s = N.take(s, 3, 1).state; s = N.cpuTurn(s);
+  s = N.use(s, "peek").state; eq(s.power.you.peek, 0);
+  const u = N.use(s, "undo").state; eq(u.power.you.peek, 0); eq(u.heaps, [1, 2, 3, 5]); eq(u.used, 2);
 });
 t("a power-up never earns a power-up, and the computer earns only on Hard", () => {
   const s = forge({ heaps: [1, 2, 3], you: { undo: 0, add: 1, pass: 1, peek: 1 } });
