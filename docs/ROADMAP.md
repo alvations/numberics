@@ -1,6 +1,7 @@
 # Numberics roadmap: eight new games (plan only, nothing built yet)
 
-Status: **planned and decided, build from the week of 23 Nov 2026.** Nothing in this file is implemented yet.
+Status: **built (20 Nov 2026).** Every game below is live; how each one ended up, with measurements and every
+deviation from this plan, is in `docs/DESIGN.md`. This file stays as the original plan.
 
 **Owner decisions (16 Nov 2026):** every game gets power-ups; the number twists and the power-ups per game are
 the designer's call (made below); the finger game is re-imagined without fingers; the Six design is the

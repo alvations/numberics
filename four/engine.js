@@ -12,7 +12,8 @@
   var COLS = 7, ROWS = 6, N = COLS * ROWS, TEN = 10, CAP = 9;
   var POWERS = ["undo", "pop", "hold", "tune"];
   var CPU_POWERS = ["pop", "hold", "tune"]; // the computer never rewinds, so Undo is not in its pool
-  // The bag every side deals from (reshuffled when empty). Tuned in docs: see tests/test-four.js measurements.
+  // The bag every side deals from (reshuffled when empty). Ones-heavy by measurement: with 1-4 evenly, ten-lines
+  // decided ~75% of games in ~10 discs; this bag keeps both wins in play and games longer (see the report).
   var BAG = [1, 1, 1, 1, 2, 2, 3, 4];
   var ORDER = [3, 2, 4, 1, 5, 0, 6]; // centre first
   var LEVELS = ["easy", "medium", "hard"];
@@ -357,7 +358,7 @@
   function oppMask(s, side, smart) {
     var o = 1 - side, m = bit(s.next[o]);
     if (smart && s.power[o].tune) m = 30;
-    if (smart && s.power[o].hold) m |= s.held[o] ? bit(s.held[o]) : 30;
+    if (smart && s.power[o].hold && s.held[o]) m |= bit(s.held[o]); // a Hold with nothing held deals blind
     return m;
   }
   function analyse(s, opts) {

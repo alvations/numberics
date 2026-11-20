@@ -204,11 +204,11 @@ t("sudoku: every localStorage call is guarded by try", () => {
   const lines = files.find(f => f[0] === "sudoku/game.js")[1].split("\n");
   lines.forEach((ln, i) => { if (/localStorage\./.test(ln)) ok(/try\s*\{/.test(lines.slice(Math.max(0, i - 2), i + 1).join(" ")), "unguarded at line " + (i + 1)); });
 });
-t("sudoku page loads the shared kit and power scripts, but not theme.css or nav.js (no look change)", () => {
+t("sudoku page loads the shared kit, power and nav scripts (the games row), but not theme.css (no look change)", () => {
   const h = files.find(f => f[0] === "sudoku/index.html")[1];
-  ok(/shared\/kit\.js/.test(h) && /shared\/power\.js/.test(h)); ok(!/shared\/theme\.css/.test(h) && !/shared\/nav\.js/.test(h));
+  ok(/shared\/kit\.js/.test(h) && /shared\/power\.js/.test(h)); ok(!/shared\/theme\.css/.test(h) && /shared\/nav\.js/.test(h) && /id="games"/.test(h));
   ok(/id="tray"/.test(h) && /id="notes"/.test(h) && /id="erase"/.test(h) && !/id="hint"/.test(h));
 });
-// theme.css/nav.js would change the live look (owner rule), so the page check of conventions.js is skipped here
+// theme.css would change the live look (owner rule), so the page check of conventions.js is skipped here
 require("./conventions")(t, ok, ["sudoku/engine.js", "sudoku/game.js", "sudoku/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

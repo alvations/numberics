@@ -38,7 +38,7 @@
     "id": "four",
     "name": "Four",
     "path": "four/",
-    "status": "planned",
+    "status": "live",
     "blurb": "Four in a row, or any four that sum to ten."
   },
   {

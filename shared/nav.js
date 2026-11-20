@@ -10,6 +10,7 @@
     ["fibonacci", "Fibonacci", "fibonacci/"],
     ["seven", "Seven", "seven/"],
     ["three", "Three", "three/"],
+    ["four", "Four", "four/"],
     ["five", "Five", "five/"],
     ["six", "Six", "six/"],
     ["fifteen", "Fifteen", "fifteen/"],
