@@ -11,6 +11,7 @@
     ["seven", "Seven", "seven/"],
     ["three", "Three", "three/"],
     ["five", "Five", "five/"],
+    ["six", "Six", "six/"],
     ["fifteen", "Fifteen", "fifteen/"],
     ["nine", "Nine", "nine/"]
   ];

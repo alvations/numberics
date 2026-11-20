@@ -270,11 +270,11 @@
 
   // ---------- lines, tiers, difficulty ----------
   var TIERS = {
-    1: { join: false, label: "Tier 1", what: "three of a kind make 6" },
-    2: { join: false, label: "Tier 2", what: "four or five make 6" },
-    3: { join: false, label: "Tier 3", what: "two-digit numbers make 6" },
-    4: { join: true, label: "Tier 4", what: "join digits for 66 or 6.6" },
-    5: { join: true, label: "Tier 5", what: "all tools for 666 or 66.6" },
+    1: { join: false, label: "Tier 1", what: "make 6" },
+    2: { join: false, label: "Tier 2", what: "longer lines" },
+    3: { join: false, label: "Tier 3", what: "two-digit numbers" },
+    4: { join: true, label: "Tier 4", what: "join digits" },
+    5: { join: true, label: "Tier 5", what: "all tools" },
   };
   var CAT = [1, 1, 2, 5, 14, 42, 132];
   // difficulty: log10 of (expressions the line allows / expressions that hit the target) + the shortest

@@ -78,7 +78,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const n0 = (await st(p)).n.join(" "), idx0 = (await st(p)).idx;
   await p.keyboard.press("2");
   const s3 = await st(p);
-  ck("Skip gives a new line in the same place", s3.power.skip === 0 && s3.idx === idx0 && (s3.n.join(" ") !== n0 || true) && JSON.stringify(s3.cur.g.filter(Boolean)) === "[]");
+  ck("Skip gives a new line in the same place", s3.power.skip === 0 && s3.idx === idx0 && s3.n.join(" ") !== n0 && JSON.stringify(s3.cur.g.filter(Boolean)) === "[]");
   await p.locator('.gp[data-g="0"]').click();
   ck("edit made", (await st(p)).cur.g[0] === "+");
   await p.keyboard.press("4");
