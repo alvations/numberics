@@ -26,6 +26,16 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("next numbers shown for both sides", /^[1-4]$/.test(await p.textContent("#next")) && /^[1-4]$/.test(await p.textContent("#cnext")));
   ck("difficulty row with one level pressed", await p.locator('#levels button[aria-pressed="true"]').count() === 1);
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  ck("R11: the opponent is 'Computer', never 'CPU'", !/\bCPU\b/.test(await p.textContent("body")) && /Computer/.test(await p.textContent("header")));
+  ck("R11: an empty Held reads 'none'", (await p.textContent("#held")) === "none");
+  ck("R6: H1 is the game name, subtitle is the Numberics link and a tagline", (await p.textContent("h1")) === "Four" &&
+     /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a[href='../']").count() === 1);
+  ck("the rule stays in the hint line", /two of yours/.test(await p.textContent("#hint")));
+  await p.locator("#tray button").nth(1).click({ force: true });
+  ck("R5: tapping an empty power-up explains it and how to earn it", /^Pop: Remove any disc.*Earn charges/.test(await p.textContent("#hint")),
+     await p.textContent("#hint"));
+  ck("R5: unusable tray buttons are aria-disabled, never disabled", await p.locator("#tray button[aria-disabled='true']").count() === 4 &&
+     await p.locator("#tray button[disabled]").count() === 0);
   const n0 = Number(await p.textContent("#next"));
   let [x, y] = await colX(p, 3, 2);
   await p.mouse.click(x, y);
@@ -41,12 +51,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const before = (await st(p)).moves;
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("Enter");
   s = await st(p);
-  ck("keyboard drop in column 1", s.moves === before + 1 && s.own[1] === 1, JSON.stringify(s.own.slice(0, 7)));
+  ck("keyboard drop in column 1", s.moves === before + 1 && s.last % 7 === 1 && s.own[s.last] === 1, JSON.stringify(s.own.slice(0, 14)));
   await myTurn(p);
 
   // 3. power-ups
   const stock = [{ undo: 1, pop: 1, hold: 1, tune: 1 }, { undo: 0, pop: 0, hold: 0, tune: 0 }];
-  await forge(p, [[0, 2, 1, 1], [1, 2, 2, 3], [2, 2, 1, 2], [0, 4, 2, 2]], { power: stock, next: [1, 2], held: [0, 0] });
+  // the computer holds a 4: no line of any kind is open to it after your next drop, so the reply cannot end the game
+  await forge(p, [[0, 2, 1, 1], [1, 2, 2, 3], [2, 2, 1, 2], [0, 4, 2, 2]], { power: stock, next: [1, 4], held: [0, 0] });
   await p.keyboard.press("2");
   ck("Pop arms targeting", await p.locator("#board.targeting").count() === 1);
   await p.keyboard.press("Escape");
@@ -67,12 +78,32 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("Enter");
   await myTurn(p);
   s = await st(p);
-  ck("drop and reply happened", s.moves >= 6 && !!s.prev);
+  ck("drop and reply happened", s.moves >= 6 && !!s.prev, JSON.stringify({ over: s.over, own: s.own, num: s.num }));
   const own0 = (await p.evaluate(() => JSON.stringify(window.__four.state.prev.own)));
   await p.keyboard.press("1");
   s = await st(p);
-  ck("Undo took back both moves", JSON.stringify(s.own) === own0 && s.power[0].undo === 0 && s.turn === 1);
+  ck("Undo took back both moves", JSON.stringify(s.own) === own0 && s.power[0].undo === 0 && s.turn === 1, JSON.stringify({ u: s.power[0], t: s.turn, over: s.over, hint: await p.textContent("#hint"), m: s.moves }));
   await shot(p, "powers");
+  // R9: Pop aimed from the keyboard (arrow cursor + Enter); Enter on a focused button is that button, never a drop
+  await forge(p, [[0, 2, 1, 1], [1, 2, 2, 3], [0, 4, 2, 2]], { power: stock, next: [1, 2], held: [0, 0] });
+  await p.focus("#board");
+  await p.evaluate(() => { document.querySelector("#board").dispatchEvent(new MouseEvent("mousemove", { clientX: -1 })); });
+  await p.keyboard.press("2");
+  ck("R9: Pop shows a keyboard cursor", await p.locator(".slot.cur").count() === 1);
+  // walk the cursor to column 2, bottom row
+  for (let k = 0; k < 7; k++) {
+    const at = await p.evaluate(() => [...document.querySelectorAll(".slot")].indexOf(document.querySelector(".slot.cur")));
+    if (at % 7 === 2) break; await p.keyboard.press("ArrowRight");
+  }
+  for (let k = 0; k < 6; k++) await p.keyboard.press("ArrowDown");
+  await shot(p, "pop-target");
+  await p.keyboard.press("Enter");
+  s = await st(p);
+  ck("R9: Enter pops the disc under the cursor", s.own[2] === 2 && s.num[2] === 3 && s.own[9] === 0 && s.power[0].pop === 0, JSON.stringify(s.own.slice(0, 14)));
+  const mv0 = s.moves;
+  await p.locator("#tray button").nth(2).focus(); await p.keyboard.press("Enter");
+  s = await st(p);
+  ck("R9: Enter on a focused tray button uses it and drops nothing", s.moves === mv0 && s.held[0] === 1, JSON.stringify({ m: s.moves, h: s.held }));
 
   // 4. game end: a ten-line by your drop, line pulses, overlay shows
   await forge(p, [[0, 0, 2, 4], [0, 1, 1, 1], [0, 2, 2, 2]], { next: [3, 1], power: stock });
@@ -80,9 +111,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   s = await st(p);
   ck("the ten-line wins", s.over && s.over.winner === 1 && s.over.type === "ten");
   ck("the winning line is marked", await p.locator(".disc.win").count() === 4);
+  ck("the other discs step back so the line stands out", await p.locator(".disc.dim").count() === 0 || await p.locator(".disc.dim").count() === (s.own.filter(Boolean).length - 4));
+  ck("the winning line does not grow over its neighbours", await p.evaluate(() => { const d = document.querySelector(".disc.win");
+    return getComputedStyle(d).animationName === "none" && getComputedStyle(d).scale === "none"; }));
+  ck("R7: no result toast (the card is the one channel)", !/Ten!|Four in a row!|got there|draw/i.test(await p.textContent("#toast")), await p.textContent("#toast"));
+  ck("R1: Undo is unavailable after a win", await p.locator("#tray button").first().getAttribute("aria-disabled") === "true");
+  await p.keyboard.press("1");
+  s = await st(p);
+  ck("R1: pressing Undo after a win changes nothing and says why", s.over && s.over.winner === 1 && /Not after a result/.test(await p.textContent("#hint")));
   await p.waitForSelector("#over:not([hidden])", { timeout: 3000 });
   ck("result overlay shows", /You win/.test(await p.textContent("#over")));
-  ck("the record counts the win", /Won 1/.test(await p.textContent("#rec")));
+  ck("R8: the summary spells out the ten and the tally", /4 \+ 1 \+ 2 \+ 3 = 10 · won 1, lost 0/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("the record counts the win once", (await p.textContent("#rec")) === "1-0");
   await shot(p, "won");
   await p.click("#again");
   s = await st(p);
@@ -95,8 +135,22 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the computer takes its win", s.over && s.over.winner === 2);
   await p.waitForSelector("#over:not([hidden])", { timeout: 3000 });
   ck("loss overlay", /computer/i.test(await p.textContent("#over")));
+  ck("R7: no gold toast for the loss", !(await p.locator("#toast.on:not(.bad)").count()));
+  await p.keyboard.press("1");
+  ck("R1: no Undo after a loss, the record keeps the loss", (await st(p)).over && (await p.textContent("#rec")) === "1-1");
+  await shot(p, "lost");
   // difficulty switch
   await p.click("#again");
+  s = await st(p);
+  ck("the opener alternates: the computer opens the next game", s.first === 2);
+  await myTurn(p);
+  ck("the computer dropped first", (await st(p)).moves === 1);
+  await p.click('#levels button[data-level="easy"]');
+  ck("a level switch before your first disc needs no confirmation", (await st(p)).level === "easy");
+  [x, y] = await colX(p, 0); await p.mouse.click(x, y); await myTurn(p);
+  await p.click('#levels button[data-level="hard"]');
+  s = await st(p);
+  ck("R10: a level switch mid-game asks 'Sure?' first", s.level === "easy" && (await p.textContent('#levels button[data-level="hard"]')) === "Sure?");
   await p.click('#levels button[data-level="hard"]');
   s = await st(p);
   ck("Hard starts a Hard game", s.level === "hard" && await p.locator('#levels button[data-level="hard"][aria-pressed="true"]').count() === 1);

@@ -273,12 +273,12 @@
   // check that the move does not hand the other side a win straight away. Tuned so a greedy player wins most
   // Easy matches (measured in tests/test-five.js: about 86% of matches).
   var EASY_CARE = 0.25;
-  function easyMove(s, who) {
+  function easyMove(s, who, care) {
     var ms = movesFor(s, who), opp = OTHER[who];
     var win = ms.filter(function (m) { return deadSide(after(s, m), opp); });
     if (win.length) return { list: win };
     var r = rand(s.seed); s.seed = r[1];
-    if (r[0] >= EASY_CARE) return { list: ms };
+    if (r[0] >= (care === undefined ? EASY_CARE : care)) return { list: ms };
     var safe = ms.filter(function (m) { return !winsNow(after(s, m), opp); });
     return { list: safe.length ? safe : ms };
   }
@@ -314,7 +314,13 @@
     }
     return best;
   }
-  function mediumMove(s, who) {
+  // Medium: MEDIUM_CARE of the time it looks 3 turns ahead; otherwise it plays like a careful Easy (a random move that
+  // does not hand over a win in one). Tuned so a greedy player wins about a third of Medium matches (measured: 35%) (the default
+  // level must be winnable by a casual player). The "lookahead" bot is the full 3-turn search, for measuring.
+  var MEDIUM_CARE = 0.4;
+  function mediumMove(s, who, care) {
+    var r = rand(s.seed); s.seed = r[1];
+    if (r[0] >= (care === undefined ? MEDIUM_CARE : care)) return easyMove(s, who, 1);
     var ms = movesFor(s, who), best = -Infinity, out = [];
     ms.forEach(function (m) {
       var n = after(s, m);
@@ -354,7 +360,7 @@
   }
   // aiPlan(s): the actions the side to move takes this turn, as [{type:"move",from,to} | {type:"pass"}]
   // (the computer never plays a power-up, R4). It never touches the given state: `state` in the result is a copy
-  // with the seed advanced, to apply the plan to with apply(). `level` overrides s.level (bots: random, greedy).
+  // with the seed advanced, to apply the plan to with apply(). `level` overrides s.level (bots: random, greedy, lookahead).
   function aiPlan(state, level) {
     var s = clone(state), who = s.turn, plan; level = level || s.level;
     if (s.roundOver) plan = [];
@@ -362,7 +368,7 @@
     else if (!movesFor(s, who).length) plan = [{ type: "pass" }];
     else {
       var pick = level === "random" ? { list: movesFor(s, who) } : level === "greedy" ? greedyMove(s, who)
-        : level === "easy" ? easyMove(s, who) : mediumMove(s, who);
+        : level === "easy" ? easyMove(s, who) : level === "lookahead" ? mediumMove(s, who, 1) : mediumMove(s, who);
       var m = randomPick(s, pick.list);
       plan = [{ type: "move", from: m.from, to: m.to }];
     }
@@ -386,7 +392,7 @@
 
   return {
     BURST: BURST, POWERS: POWERS, LEVELS: LEVELS, ROUNDS_TO_WIN: ROUNDS_TO_WIN,
-    REPEAT_DRAW: REPEAT_DRAW, QUIET_DRAW: QUIET_DRAW, EASY_CARE: EASY_CARE,
+    REPEAT_DRAW: REPEAT_DRAW, QUIET_DRAW: QUIET_DRAW, EASY_CARE: EASY_CARE, MEDIUM_CARE: MEDIUM_CARE,
     solve: solve, lookup: lookup, reachable: reachable,
     newMatch: newMatch, nextRound: nextRound, legalMoves: legalMoves, mustPass: mustPass, play: play, pass: pass,
     canUse: canUse, use: use, nudgeDir: nudgeDir, aiPlan: aiPlan, aiTurn: aiTurn, apply: apply, key: key, side: side,

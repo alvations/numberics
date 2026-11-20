@@ -252,7 +252,7 @@
   });
 
   // ---- new game and difficulty ----
-  function inProgress() { return state.moves > 0 && !state.over; }
+  function inProgress() { return state.moves > (state.first === 2 ? 1 : 0) && !state.over; } // you have dropped a disc
   function startNew(lv) {
     clearTimeout(cpuTimer); cpuTimer = null; clearTimeout(overTimer); overTimer = null;
     targeting = null; note = ""; level = lv || level; counted = false; cursor = 3;

@@ -166,6 +166,12 @@
     animate(before, state.last, afterTurn);
   }
   function afterTurn() {
+    if (state.matchOver === "c") { // no reward toast over a lost match (R7): hide it at once, no fade
+      var t = $("toast");
+      if (t && t.classList.contains("on")) {
+        t.style.transition = "none"; t.classList.remove("on"); void t.offsetWidth; t.style.transition = "";
+      }
+    }
     if (state.roundOver) { $("again").focus({ preventScroll: true }); return; }
     if (state.turn === "c") scheduleComputer();
   }

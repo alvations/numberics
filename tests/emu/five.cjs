@@ -119,11 +119,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.waitForFunction(() => window.__five.state.roundOver && !window.__five.busy, null, { timeout: 5000 });
   s = await st(p);
   ck("the computer took the match", s.matchOver === "c", JSON.stringify(s.tiles));
+  ck("R7: the reward toast from your burst is not left over the lost-match card", await p.evaluate(() => !document.getElementById("toast").classList.contains("on")));
   const undoBtn = p.locator("#tray .pw").nth(0);
   ck("R1: Undo is aria-disabled after a lost match", (await undoBtn.getAttribute("aria-disabled")) === "true");
+  const undoLeft = s.power.p.undo;
   await undoBtn.click({ force: true }); // aria-disabled: a real tap still lands and explains
   s = await st(p);
-  ck("R1: tapping it changes nothing and says why", s.matchOver === "c" && s.power.p.undo === 2 && /Undo: Take back.*Not once a round is decided\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("R1: tapping it changes nothing and says why", s.matchOver === "c" && s.power.p.undo === undoLeft && undoLeft >= 2 && /Undo: Take back.*Not once a round is decided\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("R8: the lost-match headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.textContent === "Match to the computer" && h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
   ck("record counts the loss", (await p.textContent("#matches")) === "0-1");
   await shot(p, "lost-375");

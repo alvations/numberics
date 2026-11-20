@@ -118,8 +118,7 @@ t("Hard as the second seat wins every round from the start (power-up free)", () 
   }
 });
 t("Medium takes a win in one when it has one", () => {
-  const s = at([0, 2, 1, 4], "c"); // 4 onto 2 bursts the last player tile? 2+4 = 6 bursts it
-  eq(F.aiTurn(s, "medium").state.roundOver, "c");
+  for (let seed = 0; seed < 40; seed++) eq(F.aiTurn(Object.assign(at([0, 2, 1, 4], "c"), { seed }), "medium").state.roundOver, "c"); // 4 onto 2 = 6 bursts it
 });
 t("measured: stronger levels beat a random player more often", () => {
   const rate = (lv) => { let w = 0; for (let i = 0; i < 400; i++) { const s = F.newMatch(i * 7919 + 1, lv === "hard" ? "hard" : "easy"); if (playRound(s, { c: lv, p: "random" }).roundOver === "c") w++; } return w / 400; };
@@ -172,12 +171,14 @@ t("Hard from a lost position sets a trap: it beats a greedy player every time an
   }
   ok(gw <= 4, "greedy won " + gw + "/200"); ok(rw / rr < 0.08, "random rounds " + rw + "/" + rr);
 });
-t("measured: a greedy player wins most Easy matches; each level is harder than the one below", () => {
+t("measured: a greedy player wins most Easy matches and about a third of Medium; each level is harder than the one below", () => {
   const N = 400, rate = (lv, bot) => { let w = 0, r = 0, all = 0; for (let i = 0; i < N; i++) { const s = playMatch(i * 7919 + 13, lv, bot); if (s.matchOver === "p") w++; r += s.wins.p; all += s.wins.p + s.wins.c; } return { match: w / N, round: r / all }; };
   const g = { easy: rate("easy", "greedy"), medium: rate("medium", "greedy"), hard: rate("hard", "greedy") };
   ok(g.easy.match >= 0.75, "greedy vs easy " + JSON.stringify(g)); ok(g.medium.match < g.easy.match && g.hard.match <= g.medium.match, JSON.stringify(g));
-  const m = { easy: rate("easy", "medium"), medium: rate("medium", "medium"), hard: rate("hard", "medium") };
-  ok(m.easy.round > m.medium.round && m.medium.round > m.hard.round && m.hard.round > 0.05, "medium bot " + JSON.stringify(m));
+  ok(g.medium.match >= 0.28 && g.medium.match <= 0.42, "greedy vs medium (the default) about 30-40% " + JSON.stringify(g.medium));
+  const m = { easy: rate("easy", "lookahead"), medium: rate("medium", "lookahead"), hard: rate("hard", "lookahead") };
+  ok(m.easy.round > m.medium.round && m.medium.round > m.hard.round && m.hard.round > 0.05, "lookahead bot " + JSON.stringify(m));
+  ok(m.medium.match > g.medium.match + 0.3, "a stronger player wins Medium clearly more often " + JSON.stringify([m.medium, g.medium]));
 });
 t("deterministic: same seed, same match", () => {
   const run = () => { let s = F.newMatch(42, "hard"); for (let i = 0; i < 3; i++) { s = playRound(s, { c: "hard", p: "random" }); s = F.nextRound(s); } return JSON.stringify(s); };
