@@ -6,13 +6,15 @@
   var F = window.NumbericsFour, K = window.NumbericsKit, P = window.NumbericsPower;
   var store = K.store("numberics_four_v1");
   var COLS = F.COLS, ROWS = F.ROWS;
-  var THINK = 380, OVER_DELAY = 900;
+  var THINK = 380, OVER_DELAY = 1500; // the winning line stays in view before the result card
+  var EARN = "Earn charges by blocking a line of three or setting up a ten.";
   var DEFS = [
-    { id: "undo", label: "Undo", title: "Take back your last move and the computer's reply" },
-    { id: "pop", label: "Pop", title: "Remove any disc; the column drops" },
-    { id: "hold", label: "Hold", title: "Swap your next disc with your held one" },
-    { id: "tune", label: "Tune", title: "Set your next disc's number" },
+    { id: "undo", label: "Undo", desc: "Take back your last disc and the computer's reply." },
+    { id: "pop", label: "Pop", desc: "Remove any disc; the discs above it drop." },
+    { id: "hold", label: "Hold", desc: "Put your next disc aside, or swap it back." },
+    { id: "tune", label: "Tune", desc: "Choose your next disc's number." },
   ];
+  var RULE = "Four of your colour in a row, or any four in a row that sum to 10 with two of yours.";
   var NAMES = { undo: "Undo", pop: "Pop", hold: "Hold", tune: "Tune" };
   var LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
@@ -34,8 +36,10 @@
   var level = saved && F.LEVELS.indexOf(saved.level) >= 0 ? saved.level : "medium";
   var state = saved && valid(saved.state) ? saved.state : F.newGame(K.freshSeed(), { level: level });
   var counted = !!(saved && saved.counted);       // this game's result is already in the record
+  var nextFirst = saved && saved.nextFirst === 2 ? 2 : 1; // who opens the next game: alternates every game
   var cursor = 3, targeting = null;               // {name}
-  var cpuTimer = null, overTimer = null, fx = null, fxUntil = 0, levelArmed = null;
+  var popCur = -1, note = "";                     // Pop's keyboard cursor (a cell); a tray explanation (R5)
+  var cpuTimer = null, overTimer = null, fx = null, fxUntil = 0;
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), gridEl = $("grid"), slots = [];
@@ -44,37 +48,31 @@
     var d = document.createElement("div"); d.className = "slot"; gridEl.appendChild(d); slots[vr * COLS + c] = d;
   }
 
-  function persist() { store.save({ state: state, level: level, rec: rec, counted: counted }); }
-  function paint(el, n) {
-    el.classList.remove("lo", "lo2");
-    if (n === 1) el.classList.add("lo"); else if (n === 2) el.classList.add("lo2");
-    el.style.setProperty("--h", K.hue(n));
-  }
-  function mini(el, n) {
-    el.textContent = n ? String(n) : "-"; el.classList.toggle("none", !n);
-    if (n) paint(el, n); else el.classList.remove("lo", "lo2");
-  }
+  function persist() { store.save({ state: state, level: level, rec: rec, counted: counted, nextFirst: nextFirst }); }
+  // discs are filled by owner (gold yours, cool the computer's); the number is printed on them
+  function mini(el, n) { el.textContent = n ? String(n) : "none"; el.classList.toggle("none", !n); }
   function landing(col) { var h = F.height(state.own, col); return h < ROWS ? h * COLS + col : -1; }
   function myTurn() { return !state.over && state.turn === 1; }
 
   function render() {
     var over = state.over, winCells = {};
     if (over && over.line) over.line.forEach(function (x) { winCells[x] = 1; });
-    var ghost = myTurn() && !targeting ? landing(cursor) : -1;
+    var ghost = myTurn() && !targeting ? landing(cursor) : -1, popping = targeting && targeting.name === "pop";
     slots.forEach(function (slot, cell) {
       slot.textContent = ""; slot.className = "slot";
       if (!targeting && myTurn() && cell % COLS === cursor) slot.classList.add("aim");
+      if (popping && cell === popCur) slot.classList.add("cur");
       var who = state.own[cell], n = state.num[cell];
       if (!who && cell !== ghost) return;
       var disc = document.createElement("div");
       if (who) {
-        disc.className = "disc p" + who; paint(disc, n); disc.textContent = n;
+        disc.className = "disc p" + who; disc.textContent = n;
         disc.setAttribute("aria-label", (who === 1 ? "your " : "computer ") + n);
         if (fx && fx.cell === cell && !K.reducedMotion()) { disc.classList.add("fall"); disc.style.setProperty("--drop", ROWS - Math.floor(cell / COLS)); }
-        if (winCells[cell]) disc.classList.add("win");
-        if (targeting && targeting.name === "pop" && F.canPop(state, cell)) slot.classList.add("pick");
+        if (winCells[cell]) disc.classList.add("win"); else if (over && over.winner) disc.classList.add("dim");
+        if (popping && F.canPop(state, cell)) slot.classList.add("pick");
       } else {
-        disc.className = "disc p1 ghost"; paint(disc, state.next[0]); disc.textContent = state.next[0];
+        disc.className = "disc p1 ghost"; disc.textContent = state.next[0];
       }
       slot.appendChild(disc);
     });
@@ -82,17 +80,21 @@
     fx = null;
     mini($("next"), state.next[0]); mini($("held"), state.held[0]); mini($("cnext"), state.next[1]);
     var r = rec[level];
-    $("rec").textContent = "Won " + r.w + " · Lost " + r.l + (r.d ? " · Drawn " + r.d : "");
+    $("rec").textContent = r.w + "-" + r.l + (r.d ? "-" + r.d : "");
+    $("rec").setAttribute("aria-label", LEVEL_NAMES[level] + ": won " + r.w + ", lost " + r.l + ", drawn " + r.d);
     Array.prototype.forEach.call($("levels").children, function (b) {
       b.setAttribute("aria-pressed", String(b.getAttribute("data-level") === level));
     });
     P.tray($("tray"), DEFS, state.power[0], {
-      armed: targeting && targeting.name,
-      disabled: function (id) {
-        if (id === "undo") return !state.prev || (!state.over && state.turn !== 1);
-        return !myTurn();
+      armed: targeting && targeting.name, earn: EARN,
+      disabled: function (id) { // R5: a reason, shown in the hint line when the button is tapped
+        if (state.over) return id === "undo" ? "Not after a result. Start a new game." : "The game is over.";
+        if (state.turn !== 1) return "Wait for the computer's disc.";
+        if (id === "undo" && !state.prev) return "Nothing to take back yet.";
+        return false;
       },
       onUse: activate,
+      onInfo: function (id, text) { targeting = null; note = text; render(); },
     });
     boardEl.classList.toggle("targeting", !!targeting);
     renderHint();
@@ -101,12 +103,13 @@
 
   function renderHint() {
     var h = $("hint"); h.textContent = "";
-    if (targeting && targeting.name === "pop") { h.textContent = "Tap a disc to pop it. (Esc cancels)"; return; }
+    if (note) { h.textContent = note; return; }
+    if (targeting && targeting.name === "pop") { h.textContent = "Tap a disc to pop it, or arrows and Enter. (Esc cancels)"; return; }
     if (targeting && targeting.name === "tune") {
       h.appendChild(document.createTextNode("Your next disc becomes:"));
       var box = document.createElement("span"); box.className = "pick";
       [1, 2, 3, 4].forEach(function (n) {
-        var b = document.createElement("button"); b.type = "button"; b.textContent = n; paint(b, n);
+        var b = document.createElement("button"); b.type = "button"; b.textContent = n;
         b.disabled = n === state.next[0]; b.setAttribute("aria-label", "Tune to " + n);
         b.addEventListener("click", function (e) { e.stopPropagation(); tune(n); });
         box.appendChild(b);
@@ -114,18 +117,19 @@
       h.appendChild(box); return;
     }
     if (state.over) return;
-    if (state.turn === 2) { h.textContent = "The computer is thinking..."; return; }
-    h.textContent = state.moves < 2 ? "Four of your colour, or any four that sum to 10." : "";
+    if (state.turn === 2) { h.textContent = state.moves ? "The computer is thinking..." : "The computer opens this game."; return; }
+    h.textContent = RULE;
   }
 
   function showOver() {
     var o = state.over; if (!o) return;
     var title = o.winner === 1 ? "You win" : o.winner === 2 ? "The computer wins" : "Draw";
-    var how = o.type === "ten" ? "A ten-line" : o.type === "colour" ? "Four in a row" : "The board is full";
+    // R8: "<Result> · <tally>"; a ten-line spells out its sum so nobody has to add it up
+    var how = o.type === "ten" ? o.line.map(function (x) { return state.num[x]; }).join(" + ") + " = 10"
+      : o.type === "colour" ? "Four in a row" : "Board full";
+    var r = rec[state.level] || rec[level];
     $("over-title").textContent = title;
-    var used = state.used[0];
-    $("over-text").textContent = how + " after " + state.moves + " discs" +
-      (used ? " \u00b7 " + used + " power-up" + (used > 1 ? "s" : "") + " used" : "") + ".";
+    $("over-text").textContent = how + " \u00b7 won " + r.w + ", lost " + r.l + (r.d ? ", drawn " + r.d : "");
     var gen = state.moves;
     clearTimeout(overTimer);
     overTimer = setTimeout(function () { overTimer = null; if (state.over && state.moves === gen) $("over").hidden = false; }, OVER_DELAY);
@@ -134,14 +138,14 @@
     if (!state.over || counted) return;
     var r = rec[state.level] || rec[level];
     if (state.over.winner === 1) r.w++; else if (state.over.winner === 2) r.l++; else r.d++;
-    counted = true;
-    K.toast(state.over.winner === 1 ? (state.over.type === "ten" ? "Ten!" : "Four in a row!") : state.over.winner === 2 ? "The computer got there first" : "A draw");
+    counted = true; // R7: the result card is the one channel for the result (no toast)
   }
 
   // ---- turns ----
   function drop(col) {
     if (!myTurn() || targeting) return;
     var r = F.drop(state, col);
+    note = "";
     if (!r.ok) return;
     state = r.state; fx = { cell: r.cell };
     if (r.award) K.toast((r.earned === "block" ? "Blocked! " : "Ten threat! ") + "+" + NAMES[r.award]);
@@ -165,20 +169,20 @@
     var r = F.computerTurn(state);
     if (!r.actions.length) return;
     var used = r.actions.filter(function (a) { return a.type !== "drop"; }).map(function (a) { return NAMES[a.type]; });
-    state = r.state; fx = { cell: r.drop.cell };
-    if (used.length) K.toast("The computer used " + used.join(" and "));
+    state = r.state; fx = { cell: r.drop.cell }; note = "";
+    if (used.length) K.toast("The computer used " + used.join(" and "), "bad");
     after();
   }
   function flushCpu() { if (cpuTimer !== null) { clearTimeout(cpuTimer); cpuTimer = null; if (state.turn === 2 && !state.over) cpuMove(); } }
 
   // ---- power-ups ----
   function activate(name) {
-    flushCpu();
+    flushCpu(); note = "";
     if (targeting && targeting.name === name) { targeting = null; return render(); }
     targeting = null;
-    if (name === "undo") {
+    if (name === "undo") { // R1: the engine refuses Undo once the game has a result, so a result is counted once
       var u = F.use(state, "undo");
-      if (u.ok) { state = u.state; counted = false; persist(); K.toast("Took back both moves"); }
+      if (u.ok) { state = u.state; persist(); K.toast("Took back both moves"); }
       return render();
     }
     if (!myTurn() || !state.power[0][name]) return render();
@@ -187,17 +191,24 @@
       if (h.ok) { state = h.state; persist(); K.toast("Holding a " + state.held[0]); }
       return render();
     }
-    targeting = { name: name }; render();
+    targeting = { name: name };
+    if (name === "pop") { var h = F.height(state.own, cursor); popCur = (h ? h - 1 : 0) * COLS + cursor; }
+    render();
   }
   function tune(n) {
     var r = F.use(state, "tune", n);
     if (r.ok) { state = r.state; targeting = null; persist(); K.toast("Next disc: " + n); render(); }
   }
   function pop(cell) {
+    if (!state.own[cell]) return;
     var r = F.use(state, "pop", cell);
     if (r.ok) { state = r.state; targeting = null; persist(); K.toast("Pop!"); }
-    else K.toast("That pop would complete a line");
+    else K.toast("That pop would complete a line", "bad");
     render();
+  }
+  function movePop(dc, dr) { // R9: the Pop cursor walks the cells; Enter pops the disc under it
+    var c = (popCur % COLS + dc + COLS) % COLS, r = Math.max(0, Math.min(ROWS - 1, Math.floor(popCur / COLS) + dr));
+    popCur = r * COLS + c; render();
   }
 
   // ---- input ----
@@ -223,10 +234,18 @@
     if (e.key === "Escape") { if (targeting) { targeting = null; render(); } return; }
     var digit = ["1", "2", "3", "4"].indexOf(e.key);
     if (targeting && targeting.name === "tune" && digit >= 0) { tune(digit + 1); return; }
-    if (digit >= 0) { activate(F.POWERS[digit]); return; }
-    if (e.key === "u" || e.key === "U") { activate("undo"); return; }
-    if (targeting) return;
+    if (digit >= 0 || e.key === "u" || e.key === "U") { // keys act like a tap: an unusable slot explains itself
+      var id = digit >= 0 ? F.POWERS[digit] : "undo", b = $("tray").children[F.POWERS.indexOf(id)];
+      if (b) b.click(); return;
+    }
     var tag = (e.target && e.target.tagName) || "";
+    if (targeting && targeting.name === "pop") {
+      var mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
+      if (mv) { e.preventDefault(); movePop(mv[0], mv[1]); }
+      else if ((e.key === "Enter" || e.key === " ") && tag !== "BUTTON") { e.preventDefault(); pop(popCur); }
+      return;
+    }
+    if (targeting) return;
     if (e.key === "ArrowLeft" || e.key === "a") { e.preventDefault(); cursor = (cursor + COLS - 1) % COLS; render(); }
     else if (e.key === "ArrowRight" || e.key === "d") { e.preventDefault(); cursor = (cursor + 1) % COLS; render(); }
     else if (e.key === "ArrowDown" || e.key === "s" || ((e.key === "Enter" || e.key === " ") && tag !== "BUTTON")) { e.preventDefault(); drop(cursor); }
@@ -236,21 +255,21 @@
   function inProgress() { return state.moves > 0 && !state.over; }
   function startNew(lv) {
     clearTimeout(cpuTimer); cpuTimer = null; clearTimeout(overTimer); overTimer = null;
-    targeting = null; level = lv || level; counted = false; cursor = 3;
-    state = F.newGame(K.freshSeed(), { level: level }); persist(); render();
+    targeting = null; note = ""; level = lv || level; counted = false; cursor = 3;
+    state = F.newGame(K.freshSeed(), { level: level, first: nextFirst });
+    nextFirst = 3 - nextFirst; // the opener alternates game to game
+    persist(); render();
+    if (state.turn === 2) scheduleCpu();
   }
   K.twoStep($("new"), inProgress, function () { startNew(); }, "Sure? This ends the game");
   $("again").addEventListener("click", function () { startNew(); });
+  // R10: a level switch mid-game uses the same two-step "Sure?" as New game
   Array.prototype.forEach.call($("levels").children, function (b) {
-    b.addEventListener("click", function () {
-      var lv = b.getAttribute("data-level");
+    var lv = b.getAttribute("data-level");
+    K.twoStep(b, function () { return lv !== level && inProgress(); }, function () {
       if (lv === level && !state.over) return;
-      if (inProgress() && levelArmed !== lv) {
-        levelArmed = lv; K.toast("Tap " + LEVEL_NAMES[lv] + " again for a new game");
-        setTimeout(function () { if (levelArmed === lv) levelArmed = null; }, 3000); return;
-      }
-      levelArmed = null; startNew(lv);
-    });
+      startNew(lv);
+    }, "Sure?");
   });
 
   render();

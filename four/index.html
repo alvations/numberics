@@ -16,12 +16,13 @@
   <header>
     <div class="brand">
       <h1>Four</h1>
-      <p class="sub"><a href="../">Numberics</a> &middot; <span id="rec">count to ten</span></p>
+      <p class="sub"><a href="../">Numberics</a> &middot; Four in a row, or four that make ten.</p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Next</span><b id="next" class="mini you" aria-label="your next disc"></b></div>
       <div class="stat"><span>Held</span><b id="held" class="mini you" aria-label="your held disc"></b></div>
-      <div class="stat"><span>CPU</span><b id="cnext" class="mini cpu" aria-label="the computer's next disc"></b></div>
+      <div class="stat"><span>Computer</span><b id="cnext" class="mini cpu" aria-label="the computer's next disc"></b></div>
+      <div class="stat"><span>Record</span><b id="rec">0-0</b></div>
     </div>
   </header>
 
@@ -45,7 +46,8 @@
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
   <p class="how">Tap a column, or use the arrows and Enter, to drop your next disc. Win with four of your colour in a row,
-     or any four in a row, any colours, that add up to exactly 10. Block a line of three or set up a ten to earn power-ups.</p>
+     or a ten-line: any four in a row, any colours, that add up to exactly 10 and include at least two of your discs.
+     The opener alternates. Block a line of three or set up a ten to earn power-ups.</p>
   <nav id="games" class="games" data-root="../" data-current="four" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

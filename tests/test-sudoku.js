@@ -255,6 +255,15 @@ t("sudoku page loads the shared kit, power and nav scripts (the games row), but 
   ok(/shared\/kit\.js/.test(h) && /shared\/power\.js/.test(h)); ok(!/shared\/theme\.css/.test(h) && /shared\/nav\.js/.test(h) && /id="games"/.test(h));
   ok(/id="tray"/.test(h) && /id="notes"/.test(h) && /id="erase"/.test(h) && !/id="hint"/.test(h));
 });
+t("sudoku client: the clock is banked and saved on pagehide and when hidden (a reload cannot freeze it)", () => {
+  const g = files.find(f => f[0] === "sudoku/game.js")[1];
+  ok(/addEventListener\("pagehide",[^\n]*bank\(\);\s*save\(\)/.test(g), "pagehide");
+  ok(/addEventListener\("visibilitychange",[^\n]*bank\(\);\s*save\(\)/.test(g) && !/if \(!document\.hidden\) save\(\)/.test(g), "hidden");
+});
+t("sudoku client: no hyphen as an empty value, no '-' Best (R11), no 'Unit complete' jargon (S6)", () => {
+  const h = files.find(f => f[0] === "sudoku/index.html")[1], g = files.find(f => f[0] === "sudoku/game.js")[1];
+  ok(!/<b id="best">-<\/b>/.test(h) && !/: "-"/.test(g)); ok(!/Unit complete/.test(g));
+});
 // theme.css would change the live look (owner rule), so the page check of conventions.js is skipped here
 require("./conventions")(t, ok, ["sudoku/engine.js", "sudoku/game.js", "sudoku/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

@@ -38,9 +38,9 @@
     shield: "Your tile cannot be hit on the computer's next turn. You still move.", nudge: "Add 1 to a computer tile or take 1 off yours." };
   var DEFS = N.POWERS.map(function (p) { return { id: p, label: PW[p], desc: DESC[p] }; });
   var EARN = "Burst a computer tile to earn one. Only you have power-ups.";
-  var PW_HINT = { split: "Tap your tile to move one point onto your other tile.",
-    shield: "Tap your tile to shield it from the next hit, then move.",
-    nudge: "Tap a tile: theirs goes up 1, yours goes down 1." };
+  var PW_HINT = { split: "Tap your tile to move a point to your other.",
+    shield: "Tap your tile to shield it, then move.",
+    nudge: "Tap a tile: theirs +1, yours -1." };
 
   function myTurn() { return state.turn === "p" && !state.roundOver && !busy; }
   // why a tray button cannot act right now (a reason string), or false when it can (R5: a tap explains it)

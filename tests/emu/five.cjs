@@ -144,11 +144,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R9: keyboard aims Nudge (+1 on the computer's left tile)", s.tiles[2] === 2 && s.power.p.nudge === 0, JSON.stringify(s.tiles));
   await idle(p);
   // a warning uses the neutral toast
-  await forge(p, { tiles: [2, 1, 1, 1], power: { p: { undo: 0, split: 0, shield: 0, nudge: 1 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
-  await p.keyboard.press("4"); await slot(p, 0).click(); // a 1 cannot... your 2 goes down to 1: valid; try a dead target instead
-  await idle(p);
   await forge(p, { tiles: [2, 1, 0, 1], power: { p: { undo: 0, split: 0, shield: 0, nudge: 1 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
-  await p.keyboard.press("4"); await slot(p, 2).click();
+  await p.keyboard.press("4"); await slot(p, 2).click(); // a burst tile is not a valid target
   ck("R7: 'Pick a valid tile' is the neutral toast", await p.evaluate(() => { const t = document.getElementById("toast"); return t.textContent === "Pick a valid tile" && t.classList.contains("bad"); }));
   await p.keyboard.press("Escape");
   // R4: on Hard the computer never plays a power-up, even holding stock from an old save

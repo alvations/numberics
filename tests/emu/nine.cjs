@@ -105,7 +105,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   s = await S(p);
   ck("next round deals fresh tiles", s.round === 2 && !s.roundOver && s.heaps.every(v => v > 0));
   await forge(p, { heaps: [0, 0, 2], s: { score: { you: 2, cpu: 1 } } });
-  await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown"); await p.keyboard.press("Enter");
+  await p.focus("#board"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown"); await p.keyboard.press("Enter");
   ck("three rounds win the match", (await p.textContent("#over-title")) === "Match won");
   ck("match card: summary line and New best (R8)", /^Won 3-\d · 3 tiles$/.test(await p.textContent("#over-text")) && await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
   ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
