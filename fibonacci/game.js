@@ -36,9 +36,6 @@
   // Round 3 end-card pattern (as Endless): the locked board shows undimmed for HOLD ms, then the card; "See the
   // board" hides it again (a tap on the board, Esc or Enter brings it back). A run that loads already over shows the card.
   var HOLD = 1500, holding = false, holdT = null, viewing = false, wasOver = !!state.over;
-  // a fine pointer with hover means a keyboard is likely: only then mention Esc and the arrow keys
-  var desk = false;
-  try { desk = window.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (e) { desk = false; }
   var els = [];                   // cell index -> tile element
 
   var $ = function (id) { return document.getElementById(id); };
@@ -107,7 +104,7 @@
   }
   // "See the board" hides the card; a tap on the board, Esc or Enter brings it back (or skips the hold)
   function view(on) {
-    viewing = on; holding = false; clearTimeout(holdT); holdT = null; render();
+    viewing = on; holding = false; note = ""; clearTimeout(holdT); holdT = null; render();
     if (on) { try { boardEl.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
   }
   // Picked cells (gold) and the keyboard cursor (dashed), drawn above the tiles so a tile never hides them.
@@ -143,11 +140,16 @@
                   swap: "Tap two cells to swap them." };
   // Milestone toasts start at 13 (round 2 craft nit: "New tile 2", "New tile 3" were noise every game).
   var TOAST_FROM = 6;
-  // Round 3 (craft #13): the same targeting copy as Endless, which always says how to aim by tap; the keys and Esc
-  // only where a keyboard is likely, and a phone is told how to cancel.
+  var touchOnly = (function () { try { return window.matchMedia("(hover: none) and (pointer: coarse)").matches; } catch (e) { return false; } })();
   function targetHint() {
-    var t = targeting.name === "swap" && targeting.picks.length ? "Now tap the cell to swap it with." : PW_HINT[targeting.name];
-    return t + (desk ? " Arrows + Enter aim, Esc cancels." : " Tap " + PW[targeting.name] + " to cancel.");
+    if (targeting.kbd) {
+      // kept to one line at 375px so the board never jumps; round 3 (craft #13): it also says tapping works
+      var what = targeting.name === "swap" ? (targeting.picks.length ? "Tap the second cell" : "Tap the first cell")
+        : targeting.name === "boost" ? "Tap a tile to step up" : "Tap a tile to smash";
+      return what + ", or arrows + Enter. Esc cancels.";
+    }
+    // cold #5: there is no Esc on a phone
+    return PW_HINT[targeting.name] + (touchOnly ? " Tap " + PW[targeting.name] + " to cancel." : " (Esc cancels)");
   }
   // The tray is rebuilt only when what it shows changes, and at once after a swipe, so a tap that lands
   // while the slide animates still hits a live button (cold #2: the animation's redraw swallowed it).
@@ -169,7 +171,7 @@
     });
   }
   function renderHint() {
-    $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : "")
+    $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : note)
       : note ? note : (!N.canMove(state) ? "Stuck. Use a power-up to keep going." : "");
   }
   function toast(msg, kind) { K.toast(msg, kind); }

@@ -103,7 +103,7 @@
   }
   // "See the board" hides the card; a tap on the board, Esc or Enter brings it back (or skips the hold)
   function view(on) {
-    viewing = on; holding = false; clearTimeout(holdT); holdT = null; render();
+    viewing = on; holding = false; note = ""; clearTimeout(holdT); holdT = null; render();
     if (on) { try { boardEl.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
   }
 
@@ -133,7 +133,7 @@
   function renderTray() {
     var key = JSON.stringify([state.power, targeting && targeting.name, N.POWERS.map(trayWhy)]);
     if (key !== trayKey) { trayKey = key; drawTray(); }
-    $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : "")
+    $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : note)
       : note || (!N.canMove(state) ? "Stuck. Use a power-up to keep going." : "");
   }
   function drawTray() {

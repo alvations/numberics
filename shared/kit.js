@@ -106,6 +106,9 @@
   function swipe(el, cb) {
     var sx = 0, sy = 0, on = false;
     el.addEventListener("touchstart", function (e) { var t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; on = true; }, { passive: true });
+    // cancel the browser's own gesture while a swipe is in progress, otherwise it can swallow the next tap
+    // (round 3: the first tap on a just-earned power-up was lost)
+    el.addEventListener("touchmove", function (e) { if (on && e.cancelable) e.preventDefault(); }, { passive: false });
     el.addEventListener("touchend", function (e) {
       if (!on) return; on = false;
       var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;

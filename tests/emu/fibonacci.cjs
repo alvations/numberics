@@ -64,8 +64,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("2");
   ck("key 2 arms Smash with the cursor on the highest tile", await p.evaluate(() => window.__fibonacci.cursor === 5 && window.__fibonacci.targeting.kbd));
   ck("the cursor is drawn above the tiles", await p.locator("#marks .mark.cur").count() === 1);
-  ck("keyboard hint says how to pick", /^Arrows, then Enter to smash\. \(Esc cancels\)$/.test(await p.textContent("#hint")));
-  ck("the keyboard hint fits on one line at 375px", await p.evaluate(() => { const e = document.getElementById("hint"); return e.offsetHeight < 2 * parseFloat(getComputedStyle(e).lineHeight); }));
+  ck("keyboard hint says how to pick, by tap or by keys (round 3, craft #13)", /^Tap a tile to smash, or arrows \+ Enter\. Esc cancels\.$/.test(await p.textContent("#hint")));
   ck("the keyboard hint fits on one line at 375px", await p.evaluate(() => { const e = document.getElementById("hint"); return e.offsetHeight < 2 * parseFloat(getComputedStyle(e).lineHeight); }));
   await shot(p, "kbd-target");
   await p.keyboard.press("ArrowRight");
@@ -101,14 +100,16 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "info");
 
   // 4d. craft B2: neighbours in the sequence (the pairs that merge) get clearly different hues; no near repeat 2..610
-  ck("merge neighbours differ by 60 degrees or more", await p.evaluate(() => { const h = window.__fibonacci.hue, d = (a, b) => { const x = Math.abs(h(a) - h(b)) % 360; return Math.min(x, 360 - x); };
-    for (let i = 2; i < 40; i++) if (d(i, i + 1) < 60) return false; for (let i = 2; i <= 14; i++) for (let j = i + 1; j <= 14; j++) if (d(i, j) < 25) return false; return true; }));
+  // round 3 (craft #2): 3 vs 13 and 34 vs 144 were 27 degrees apart; any 11 values in a row now differ (delta E >= 30, tested in Node)
+  ck("merge neighbours differ by 40 degrees or more, and any 11 values in a row never share a hue", await p.evaluate(() => { const h = window.__fibonacci.hue, d = (a, b) => { const x = Math.abs(h(a) - h(b)) % 360; return Math.min(x, 360 - x); };
+    for (let i = 2; i < 40; i++) if (d(i, i + 1) < 40) return false; for (let i = 2; i <= 30; i++) for (let j = i + 1; j <= i + 10; j++) if (d(i, j) < 15) return false; return true; }));
+  ck("3 and 13, 34 and 144 now look clearly different", await p.evaluate(() => { const h = window.__fibonacci.hue, d = (a, b) => { const x = Math.abs(h(a) - h(b)) % 360; return Math.min(x, 360 - x); }; return d(3, 6) >= 40 && d(8, 11) >= 40; }));
   ck("1 and 2 look different (cream vs a hue)", await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[0] = 1; s.grid[1] = 2; window.__fibonacci.state = s;
     const t = [...document.querySelectorAll(".tiles .tile")]; return getComputedStyle(t[0]).backgroundColor !== getComputedStyle(t[1]).backgroundColor && !t[1].classList.contains("lo2"); }));
 
   // 5. award toast on a new highest tile of 55 (round 2 floor); 34 no longer pays
   const sum = () => p.evaluate(() => Object.values(window.__fibonacci.state.power).reduce((a, b) => a + b, 0));
-  const setup = (grid, top, power, free) => p.evaluate(([g, t, pw, f]) => { const s = window.__fibonacci.state; s.grid = g; s.top = t; s.power = pw; s.prev = null; s.over = false; s.free = !!f; window.__fibonacci.state = s; }, [grid, top, power, free]);
+  const setup = (grid, top, power, free) => p.evaluate(([g, t, pw, f]) => { const s = window.__fibonacci.state; s.grid = g; s.top = t; s.power = pw; s.prev = null; s.over = false; s.free = !!f; s.marks = new Array(16).fill(0); window.__fibonacci.state = s; }, [grid, top, power, free]);
   const row = (a) => a.concat(new Array(16 - a.length).fill(0));
   const none = { undo: 0, smash: 0, swap: 0, boost: 0 };
   await p.evaluate(() => window.NumbericsKit.clearToast());
@@ -132,11 +133,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.reload(); // R2 survives a reload between the power-up and the swipe
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
   ck("R2: the boost-assisted 89 pays nothing, even across a reload", await p.evaluate(() => window.__fibonacci.state.grid[0] === 10) && (await sum()) === 0);
-  ck("R2: the toast says no reward right after a power-up", /^New tile 89\. No reward right after a power-up$/.test(await p.textContent("#toast")));
+  ck("R2: the toast says no reward right after a power-up", /^New tile 89\. No reward right after a power-up\.$/.test(await p.textContent("#toast")));
   // R15: a full stock says so instead of paying silently nothing
   await setup(row([10, 11]), 11, { undo: 9, smash: 9, swap: 9, boost: 9 });
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
-  ck("R15: a full stock toasts 'Power-ups full'", /^New tile 233\. Power-ups full$/.test(await p.textContent("#toast")) && (await sum()) === 36);
+  ck("R15: a full stock toasts 'Power-ups full'", /^New tile 233\. Power-ups full\.$/.test(await p.textContent("#toast")) && (await sum()) === 36);
   // cold #2: a tray tap that lands while the slide animates is never lost
   await setup(row([1, 0, 0, 0, 2]), 2, { undo: 0, smash: 1, swap: 0, boost: 0 });
   await p.waitForTimeout(50);
@@ -151,15 +152,23 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = [1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,1]; s.power = { undo: 0, smash: 1, swap: 0, boost: 0 }; s.prev = null; s.over = false; window.__fibonacci.state = s; });
   ck("stuck with a power-up says so, no overlay", /Stuck/.test(await p.textContent("#hint")) && !(await p.isVisible("#over")));
   await p.evaluate(() => { window.__fibonacci.runBest = 1e9; const s = window.__fibonacci.state; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.over = true; window.__fibonacci.state = s; });
-  ck("overlay shows when locked", await p.isVisible("#over"));
+  const tOver = Date.now();
+  ck("the locked board shows first, card hidden (round 3)", await p.evaluate(() => document.getElementById("over").hidden && window.__fibonacci.holding));
+  ck("overlay shows when locked, about 1.5 s later", await p.waitForSelector("#over", { state: "visible", timeout: 3000 }).then(() => true, () => false) && Date.now() - tOver >= 1300, Date.now() - tOver);
+  ck("focus moves to the card's New game (craft #8)", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  ck("one New game on screen: the page button hides and keeps its space (craft #7)", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden"));
   ck("no toast sits on the end card", await p.evaluate(() => !document.getElementById("toast").classList.contains("on")));
-  ck("overlay summary is '<Result> · <score>'", /^Top tile \d[\d,]* · [\d,]+ points$/.test(await p.textContent("#over-text")));
+  ck("overlay summary is '<Result> · <score>'", /^Top tile \d[\d,]* · Score [\d,]+$/.test(await p.textContent("#over-text")));
   ck("no new best when the score did not beat it", !(await p.isVisible("#over-best")));
   await p.evaluate(() => { window.__fibonacci.runBest = 10; const s = window.__fibonacci.state; s.score = 5500; s.top = 13; window.__fibonacci.state = s; });
   ck("a new best says so (R8)", await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
   ck("end headline fits on one line at 375px", await p.evaluate(() => { const h = document.querySelector("#over h2"); return h.getClientRects().length && h.offsetHeight < 1.6 * parseFloat(getComputedStyle(h).lineHeight || 40) && h.scrollWidth <= h.clientWidth; }));
   ck("tray says why nothing works when over", await (async () => { await p.locator("#tray .pw").nth(1).click({ force: true }); return /The game is over/.test(await p.textContent("#hint")); })());
   await shot(p, "over");
+  await p.click("#over-view");
+  ck("See the board hides the card and says how to come back", await p.evaluate(() => document.getElementById("over").hidden && window.__fibonacci.viewing) && (await p.textContent("#hint")) === "Tap the board for the summary.");
+  await p.locator("#board").click({ position: { x: 20, y: 20 } });
+  ck("a tap on the board brings the card back", await p.isVisible("#over"));
   await p.click("#again");
   ck("New game from the overlay starts fresh", await p.evaluate(() => window.__fibonacci.state.moves === 0 && !window.__fibonacci.state.over) && !(await p.isVisible("#over")));
 
@@ -198,6 +207,19 @@ module.exports = async function ({ browser, url, ck, shot }) {
     await p.locator("#tray .pw").nth(i).tap();
     ck("phone: tapping " + n + " again cancels", await p.locator("#board.targeting").count() === 0);
   }
+  // round 3 (cold #5): a tap on a power-up within 50 ms of the swipe that earned it arms it on the first tap
+  await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[8] = 8; s.grid[9] = 7; s.grid[15] = 1; s.top = 8;
+    s.power = { undo: 9, smash: 9, swap: 0, boost: 9 }; s.prev = null; s.free = false; s.over = false; s.marks = new Array(16).fill(0); window.__fibonacci.state = s; });
+  const cdp = await ctx.newCDPSession(p);
+  const fb = await p.locator("#board").boundingBox(), sw = await p.locator("#tray .pw").nth(2).boundingBox(), fy = fb.y + fb.height * 0.6;
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: fb.x + fb.width * 0.8, y: fy }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: fb.x + fb.width * 0.2, y: fy }] });
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  const t0 = Date.now();
+  await p.touchscreen.tap(sw.x + sw.width / 2, sw.y + sw.height / 2);
+  const ms = Date.now() - t0;
+  ck("cold #5: the swipe earned Swap", await p.evaluate(() => window.__fibonacci.state.power.swap === 1 && window.__fibonacci.state.grid[8] === 9));
+  ck("cold #5: the first tap on Swap, " + ms + " ms after the swipe, arms it", ms <= 50 && await p.evaluate(() => !!window.__fibonacci.targeting && window.__fibonacci.targeting.name === "swap"), ms);
   await ctx.close();
 
   // 7c. R6 header at desktop: H1 is the game, subtitle links home, pills sit right of the title (board not pushed down)
