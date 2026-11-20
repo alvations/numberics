@@ -31,8 +31,6 @@
 /* round 3 (cold #23): the tile the computer just added onto, on your turn */
 .slot.last .tile{ box-shadow:0 0 0 2px var(--cool); }
 .slot.dead.last::after{ border-color:var(--cool); }
-/* round 3 (craft #11): the status line keeps two lines, so a longer line never moves the board */
-#hint{ min-height:2.8em; display:flex; align-items:center; justify-content:center; line-height:1.4; }
 .over h2{ color:var(--ink); }
 @media (prefers-reduced-motion:reduce){
   .slot .tile{ transition:none; }

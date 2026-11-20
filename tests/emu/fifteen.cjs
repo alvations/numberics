@@ -301,4 +301,98 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("reduced motion still plays", (await S(p)).owner.filter(Boolean).length === 2);
   ck("no page errors under reduced motion", errs3.length === 0, errs3.join("|"));
   await ctx.close();
+
+  // 7. round 3 (TRIAGE3)
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); const errs4 = []; p.on("pageerror", e => errs4.push(e.message));
+  await p.goto(page);
+  // cold #28: the Numbers view is 1-5 over 6-9 (the short row offset), never a 3 x 3; Grid keeps the magic square
+  await forge(p, { owner: B([], []), turn: 1 });
+  const boxes = async () => p.evaluate(() => [...Array(9)].map((_, i) => { const r = document.querySelector('.ft[data-n="' + (i + 1) + '"]').getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; }));
+  let bx = await boxes();
+  const ys = (ns) => new Set(ns.map(n => bx[n - 1].y)).size;
+  ck("Numbers: 1-5 share one row", ys([1, 2, 3, 4, 5]) === 1, JSON.stringify(bx));
+  ck("Numbers: 6-9 share the row below", ys([6, 7, 8, 9]) === 1 && bx[5].y > bx[0].y + bx[0].h);
+  ck("Numbers: two rows, not three", new Set(bx.map(b => b.y)).size === 2);
+  ck("Numbers: the short row sits offset (6 between 1 and 2), so no column lines up", bx[5].x > bx[0].x + 5 && bx[5].x < bx[1].x - 5, JSON.stringify([bx[0], bx[5], bx[1]]));
+  ck("Numbers: tiles stay a good tap size at 375px (44px or more)", bx.every(b => b.w >= 44 && b.h >= 44), JSON.stringify(bx[0]));
+  const hop = await p.evaluate(() => getComputedStyle(document.querySelector("#hash i")).opacity);
+  ck("Numbers: no grid lines drawn", hop === "0", hop);
+  ck("Numbers: the computer label fits inside its tile", await p.evaluate(() => { const t = document.querySelector('.ft[data-n="1"]'), s = t.lastChild; s.textContent = "computer"; const ok = s.scrollWidth <= t.clientWidth; s.textContent = ""; return ok; }));
+  await p.click("#v-grid"); await p.waitForTimeout(500); bx = await boxes();
+  const rowOf = (ns) => new Set(ns.map(n => bx[n - 1].y)).size === 1;
+  ck("Grid: the magic square 8 1 6 / 3 5 7 / 4 9 2", rowOf([8, 1, 6]) && rowOf([3, 5, 7]) && rowOf([4, 9, 2]) && bx[7].x < bx[0].x && bx[0].x < bx[5].x && bx[7].y < bx[2].y && bx[2].y < bx[3].y, JSON.stringify(bx));
+  await p.keyboard.press("v"); await p.waitForTimeout(450);
+  // keyboard over the two rows
+  await p.evaluate(() => document.querySelector('.ft[data-n="5"]').focus());
+  await p.keyboard.press("ArrowRight");
+  ck("Numbers: right from 5 wraps to 6", await p.evaluate(() => document.activeElement.dataset.n) === "6");
+  await p.keyboard.press("ArrowUp");
+  ck("Numbers: up from 6 is 1", await p.evaluate(() => document.activeElement.dataset.n) === "1");
+  await p.keyboard.press("ArrowLeft");
+  ck("Numbers: left from 1 wraps to 9", await p.evaluate(() => document.activeElement.dataset.n) === "9");
+  // the end-card pattern: shared "none" style for an empty record
+  const noneSt = await p.evaluate(() => { const c = getComputedStyle(document.getElementById("rec")), v = getComputedStyle(document.getElementById("you")); return [c.fontSize, c.fontWeight, v.fontSize]; });
+  ck("empty record: shared none style, same size as the values", noneSt[0] === noneSt[2] && noneSt[1] === "600", JSON.stringify(noneSt));
+
+  // craft #2: the computer's winning claim stays on the board 1.5 s before the card, even when you tap during it
+  const timeCard = async (spam) => {
+    await p.evaluate(() => {
+      window.__t = {}; const t6 = document.querySelector('.ft[data-n="6"]'), ov = document.getElementById("over");
+      new MutationObserver(() => { if (!window.__t.claim && t6.classList.contains("theirs")) window.__t.claim = performance.now(); }).observe(t6, { attributes: true });
+      new MutationObserver(() => { if (!window.__t.card && !ov.hidden) window.__t.card = performance.now(); }).observe(ov, { attributes: true });
+    });
+    await forge(p, { diff: "easy", owner: B([3, 4], [8, 1]), turn: 2 });   // the computer holds 8 1 and takes 6
+    if (spam) { await p.waitForFunction(() => !!window.__t.claim, null, { timeout: 3000 }); for (let i = 0; i < 6; i++) { await tile(p, 9).click(); await p.keyboard.press("Enter"); await p.waitForTimeout(120); } }
+    await card(p);
+    return p.evaluate(() => window.__t.card - window.__t.claim);
+  };
+  let dt = await timeCard(false);
+  ck("the computer's final claim: card no sooner than 1.5 s after it shows", dt >= 1450 && dt < 2500, Math.round(dt) + " ms");
+  ck("the lost round's headline", (await p.textContent("#over-title")) === "The computer wins round 1", await p.textContent("#over-title"));
+  ck("the card focuses its primary button", await p.evaluate(() => document.activeElement && document.activeElement.id === "next"));
+  dt = await timeCard(true);
+  ck("taps and Enter during the hold never bring the card early", dt >= 1450, Math.round(dt) + " ms");
+  // your own final claim: same hold
+  await p.evaluate(() => { window.__t = {}; const t7 = document.querySelector('.ft[data-n="7"]'), ov = document.getElementById("over");
+    new MutationObserver(() => { if (!window.__t.claim && t7.classList.contains("mine")) window.__t.claim = performance.now(); }).observe(t7, { attributes: true });
+    new MutationObserver(() => { if (!window.__t.card && !ov.hidden) window.__t.card = performance.now(); }).observe(ov, { attributes: true }); });
+  await forge(p, { owner: B([2, 6], [1, 3]), turn: 1 });
+  const newBox = await p.locator("#new").boundingBox(), rowBox = await p.locator(".row").boundingBox();
+  await tile(p, 7).click(); await card(p);
+  dt = await p.evaluate(() => window.__t.card - window.__t.claim);
+  ck("your final claim: card no sooner than 1.5 s", dt >= 1450, Math.round(dt) + " ms");
+  // one end-card pattern: the page's New game hides while the card shows, its space kept
+  ck("the page's New game is hidden under a card", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden"));
+  const newBox2 = await p.locator("#new").boundingBox(), rowBox2 = await p.locator(".row").boundingBox();
+  ck("its space is kept (no jump)", JSON.stringify(newBox) === JSON.stringify(newBox2) && JSON.stringify(rowBox) === JSON.stringify(rowBox2), JSON.stringify([newBox, newBox2]));
+  ck("focus on Next round even after a mouse tap", await p.evaluate(() => document.activeElement.id === "next"));
+  await p.click("#over-view");
+  ck("See the board: the family hint", (await p.textContent("#hint")) === "Tap the board for the summary.", await p.textContent("#hint"));
+  ck("New game back while the card is away", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "visible"));
+  // a drawn round reads "Draw round N"
+  await forge(p, { owner: B([1, 2, 4, 7], [3, 5, 6, 9]), turn: 1, wins: [0, 1, 0], rounds: [1], round: 2 });
+  await tile(p, 8).click(); await card(p);
+  ck("drawn round headline", (await p.textContent("#over-title")) === "Draw round 2", await p.textContent("#over-title"));
+  ck("drawn round subline", (await p.textContent("#over-text")) === "Nobody made 15 · You 1 : 0 Computer · 1 drawn", await p.textContent("#over-text"));
+  // a lost match reads "The computer wins", "Match lost 0-3 · Medium"
+  await forge(p, { diff: "easy", owner: B([3, 4], [8, 1]), turn: 2, wins: [0, 0, 2], rounds: [2, 2], round: 3 });
+  await card(p);
+  ck("lost match headline", (await p.textContent("#over-title")) === "The computer wins", await p.textContent("#over-title"));
+  ck("lost match subline", (await p.textContent("#over-text")) === "Match lost 0-3 · Easy", await p.textContent("#over-text"));
+  ck("match card focuses New game", await p.evaluate(() => document.activeElement.id === "again"));
+  // TRIAGE3: Peek counts as help; the copy says so
+  await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, power: { undo: 0, erase: 0, peek: 1, double: 0 } });
+  await p.locator("#tray .pw").nth(2).click();
+  ck("Peek names your win", /7 wins it/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await tile(p, 7).click(); await card(p);
+  ck("a round won after Peek pays nothing, and says why", (await p.textContent("#over-best")) === "No power-up: you used Peek this round." && (await S(p)).result.earned === null, await p.textContent("#over-best"));
+  await forge(p, { owner: B([2], []), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 0 } });
+  await p.locator("#tray .pw").nth(2).click({ force: true });
+  ck("the tray says Peek stops the reward", /Win a round without Erase, Double or Peek to earn one\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("Erase says the claim must be a different number", /then claim a different one/.test(await p.locator("#tray .pw").nth(1).getAttribute("title")));
+  // the view toggle is a quiet segment, not a button like New game (craft #2)
+  ck("view toggle is a segment, New game is a button", await p.locator(".views.seg").count() === 1 && await p.locator(".views .btn").count() === 0 && await p.locator("#new.btn").count() === 1);
+  ck("no page errors (round 3)", errs4.length === 0, errs4.join("|"));
+  await ctx.close();
 };

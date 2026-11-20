@@ -130,9 +130,19 @@ t("the computer takes an immediate colour win", () => {
   const s = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1], [1, 0, 1, 1], [1, 1, 1, 1]], { turn: 2, next: [1, 1] });
   for (const lv of ["easy", "medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.state.over && r.state.over.winner, 2, lv); }
 });
-t("the computer takes an immediate ten-line", () => {
+t("the computer takes an immediate ten-line (Medium and Hard always)", () => {
   const s = board([[0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [1, 3] });
-  for (const lv of ["easy", "medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.state.over && r.state.over.type, "ten", lv); eq(r.state.over.winner, 2); }
+  for (const lv of ["medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.state.over && r.state.over.type, "ten", lv); eq(r.state.over.winner, 2); }
+});
+// round 3 (gameplay #9): Easy sometimes misses a ten-line, so a new player can win; it never misses a colour four
+t("Easy misses a ten-line in one some of the time, never a colour four", () => {
+  const s = board([[0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [1, 3], level: "easy" });
+  let took = 0;
+  for (let k = 0; k < 200; k++) { const x = JSON.parse(JSON.stringify(s)); x.aiSeed = k * 7919 + 1; const r = F.computerTurn(x); if (r.state.over && r.state.over.winner === 2) took++; }
+  ok(took >= 90 && took <= 160, "took the ten " + took + "/200");
+  const c = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1], [1, 0, 1, 1], [1, 1, 1, 1]], { turn: 2, next: [1, 1], level: "easy" });
+  for (let k = 0; k < 100; k++) { const x = JSON.parse(JSON.stringify(c)); x.aiSeed = k * 7919 + 1; const r = F.computerTurn(x); eq(r.state.over && r.state.over.type, "colour", "seed " + k); }
+  eq(F._LV.medium.missTen, undefined); eq(F._LV.hard.missTen, undefined);
 });
 // blocks: Hard unless it blunders (a rare loose turn, tuned); Easy and Medium play loose turns (tuned), so they are measured over seeds
 function blockRate(s, lv, col) {
@@ -391,6 +401,45 @@ t("state is plain JSON (saves and loads)", () => {
   const back = JSON.parse(JSON.stringify(s)); eq(F.drop(back, 2).state.own, F.drop(s, 2).state.own);
 });
 
+// ---- round 3 (cold blocker, critic #1): marks for what YOUR drop would open ----
+t("opens: the critic's ambush (4 2 _ 3 after your 2) is marked, though no ring showed it", () => {
+  const s = board([[0, 0, 2, 4], [0, 3, 2, 3]], { turn: 1, next: [2, 1] });
+  eq(F.threats(s).filter(x => x < 7), [], "no ring on the bottom row before the drop");
+  const o = F.opens(s); ok(o[1], JSON.stringify(o)); eq(o[1].cells, [at(0, 2)]); eq(o[1].above, false);
+  const r = F.computerTurn(Object.assign(F.drop(s, 1).state, { level: "hard" })); eq(r.state.over && r.state.over.winner, 2, "the computer does win there");
+});
+t("opens: a drop under a hole the computer would fill is marked 'on top'", () => {
+  const s = board([[0, 0, 2, 1], [0, 1, 1, 2], [0, 2, 1, 1], [1, 0, 2, 1], [1, 1, 2, 1], [1, 2, 2, 1]], { turn: 1, next: [2, 1] });
+  const o = F.opens(s); ok(o[3] && o[3].above && o[3].cells.indexOf(at(1, 3)) >= 0, JSON.stringify(o));
+});
+t("opens: a winning drop and an already-open threat are not marked; the computer's turn has no marks", () => {
+  const w = board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1], [1, 0, 2, 1], [1, 1, 2, 1], [1, 2, 2, 1]], { turn: 1, next: [1, 1] });
+  ok(!F.opens(w)[3], "your drop at (0,3) wins");
+  const t2 = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1]], { turn: 1, next: [2, 1] });
+  eq(Object.keys(F.opens(t2)), [], "the ring at (0,3) is already open: other columns open nothing new");
+  eq(F.opens(Object.assign({}, t2, { turn: 2 })), {});
+});
+t("double threats: both holes are ringed", () => {
+  const s = board([[0, 1, 2, 1], [0, 2, 2, 1], [0, 3, 2, 1]], { turn: 1, next: [2, 1] });
+  const th = F.threats(s); ok(th.indexOf(at(0, 0)) >= 0 && th.indexOf(at(0, 4)) >= 0, JSON.stringify(th));
+});
+t("opens matches brute force: marked exactly when your drop gives the computer a new win in one", () => {
+  let rs = 5, checked = 0;
+  for (let g = 0; g < 60; g++) {
+    let s = F.newGame(1500 + g);
+    for (let k = 0; k < 12 && !s.over; k++) { const L = F.legal(s), r = F.rand(rs); rs = r[1]; s = F.drop(s, L[Math.floor(r[0] * L.length)]).state; }
+    if (s.over || s.turn !== 1) continue;
+    const wins = st => F.legal(st).filter(c => F.linesAt(st.own, st.num, F.height(st.own, c) * C + c, 2, s.next[1]).length).map(c => F.height(st.own, c) * C + c);
+    const before = wins(s), o = F.opens(s);
+    for (const c of F.legal(s)) {
+      const d = F.drop(s, c); if (d.state.over) { ok(!o[c]); continue; }
+      const after = wins(Object.assign({}, d.state, { turn: 1 })), fresh = after.filter(x => before.indexOf(x) < 0).sort((a, b) => a - b);
+      eq(o[c] ? o[c].cells : [], fresh, "seed " + g + " col " + c); checked++;
+    }
+  }
+  ok(checked > 100, "checked " + checked);
+});
+
 // ---- measurements (documented in the report; kept as loose guards so tuning cannot silently regress) ----
 t("measure: ten-lines and colour lines both decide games (random play, 300 games)", () => {
   let ten = 0, colour = 0, rs = 1;
@@ -425,7 +474,12 @@ function botRate(lv, games) {
   return w / games;
 }
 t("balance: a safe-move player beats Easy most of the time (target >= 65%)", () => { const r = botRate("easy", 200); ok(r >= 0.6, "easy " + r); });
-t("balance: a safe-move player beats Medium about half the time (target 40-55%)", () => { const r = botRate("medium", 60); ok(r >= 0.28 && r <= 0.65, "medium " + r); });
+t("balance: a safe-move player beats Medium often (measured 39% over 400)", () => { const r = botRate("medium", 60); ok(r >= 0.25 && r <= 0.6, "medium " + r); });
+// round 3 (TRIAGE3): the careful player plays only on what the page shows (takes its win, blocks a ring, never drops
+// in a marked column). Targets: Easy 70%+, Medium 40-50% (measured 78% and 44% over 400 games, tools/measure-four.js).
+const M4 = require("../tools/measure-four.js");
+t("balance: the careful player beats Easy 70%+ of the time", () => { const r = M4.measure("easy", "careful", 200).rate; ok(r >= 0.68, "easy " + r); });
+t("balance: the careful player beats Medium about 40-50% of the time", () => { const r = M4.measure("medium", "careful", 100).rate; ok(r >= 0.33 && r <= 0.57, "medium " + r); });
 
 require("./conventions")(t, ok, ["four/engine.js", "four/game.js", "four/index.html", "four/style.css"]);
 console.log(pass + " passed, " + fail + " failed");

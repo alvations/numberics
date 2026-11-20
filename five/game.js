@@ -98,9 +98,9 @@
     else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again: it counts as a loss.";
     else if (state.roundOver) hint = viewing ? "Tap the board for the summary." : holding || anim ? (state.roundOver === "draw" ? "Drawn: " + drawWhy() + "." : lastWords()) : "";
     else if (state.turn === "c" || busy) hint = "The computer is thinking\u2026";
-    else if (N.mustPass(state)) hint = "Nothing to hit. Tap your tile to pass, or use a power-up.";
+    else if (N.mustPass(state)) hint = "Nothing to hit: tap your tile to pass.";
     else if (sel >= 0) hint = "Add " + state.tiles[sel] + " onto which tile? Your own other tile counts.";
-    else hint = state.midTurn ? "Shield is up. Now make your move." : itsMove() + "Your turn: tap one of your tiles.";
+    else hint = state.midTurn ? "Shield is up. Now make your move." : (itsMove() ? itsMove() + "Tap one of your tiles." : "Your turn: tap one of your tiles.");
     $("hint").textContent = hint;
     var over = $("over"), ttl = $("over-title"), wasHidden = over.hidden;
     over.hidden = !state.roundOver || busy || anim || holding || viewing;
@@ -128,7 +128,8 @@
     var l = state.last; if (!l || l.side !== "c") return "";
     if (l.kind === "pass") return "It had nothing to hit. ";
     if (l.kind !== "add") return "";
-    return "It added " + l.add + " onto " + (N.side(l.to) === "c" ? "its own " : "your ") + l.prevTo + (l.burst ? ": burst" : "") + ". ";
+    var whose = N.side(l.to) === "c" ? "its own " : "your ";
+    return (l.burst ? "It burst " + whose : "It added " + l.add + " onto " + whose) + l.prevTo + ". ";
   }
 
   // what ended the round, for the hint line while the board shows (R13), and the card's detail
