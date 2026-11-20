@@ -7,7 +7,7 @@ and checks the numbers against `tools/perf-budgets.json`. It exits 1 and prints 
 
 ## Run
 ```bash
-NODE_PATH=$(npm root -g) node tools/perf.cjs              # every live game + root, 3 runs each, about 25 minutes
+NODE_PATH=$(npm root -g) node tools/perf.cjs              # every live game + root, 3 runs each, about 50 minutes
 NODE_PATH=$(npm root -g) node tools/perf.cjs four nine    # only these ids (the root page's id is "root")
 PERF_RUNS=1 PERF_PLAY_MS=5000 NODE_PATH=$(npm root -g) node tools/perf.cjs   # a quick look, not a gate run
 ```

@@ -8,6 +8,8 @@
     "test": "node tests/run.js",
     "test:browser": "node tests/emulation.cjs && node tests/emu/run.cjs",
     "start": "python3 -m http.server 8070",
-    "shots": "node tools/shots.cjs"
+    "shots": "node tools/shots.cjs",
+    "test:perf": "node tools/perf.cjs",
+    "test:perf:quick": "PERF_RUNS=1 PERF_PLAY_MS=5000 node tools/perf.cjs"
   }
 }
