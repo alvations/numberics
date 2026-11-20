@@ -7,6 +7,9 @@
  * Gravity, then pop again: each wave of a chain scores more. Every N drops a row of eggs rises from the
  * bottom; a disc pushed out of the top ends the run. Lucky Seven: a chain that pops exactly 7 discs in
  * total cracks every egg one step and earns a power-up. All randomness comes from state.seed.
+ * A power-up never earns one (family rule R2): chains a power-up sets off pay nothing, and the drop right after
+ * Smash, Hold or Crack (state.free) still scores its chains and Lucky Sevens but pays no power-up.
+ * Stock is capped: when every slot is full an award is skipped and reported (res.full, rule R15).
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(require("../shared/kit.js"), require("../shared/power.js"));
@@ -131,22 +134,25 @@
     cracks.forEach(function (k) { k.to = crackCell(s, g, k.cell); });
     return cracks;
   }
-  function awardOne(s, why, out) {
+  // pay=false (the drop right after a power-up): the reward is noted as unpaid, nothing is added.
+  function awardOne(s, why, res, pay) {
+    if (!pay) { res.unpaid.push(why); return; }
     var p = Power.award(s.power, EARNED, next01(s));
-    if (p) out.push({ power: p, why: why });
+    if (p) res.awarded.push({ power: p, why: why }); else res.full.push(why);
   }
   // A full chain from the current grid: waves, then a Lucky Seven check (once), then more waves.
   // earn=false for chains started by a power-up (a power-up never earns one, and never scores Lucky).
-  function chain(s, trace, res, earn) {
+  // pay=false keeps the scoring (Lucky included) but pays no power-up (the drop after a power-up, R2).
+  function chain(s, trace, res, earn, pay) {
     var a = resolve(s, trace, 0), waves = a.waves, popped = a.popped, last = a.lastWave;
     if (earn && popped === 7) {
       var cracks = crackAll(s, s.grid, false);
       s.score += RULES.luckyBonus; s.luckies++; res.lucky = true;
-      awardOne(s, "lucky", res.awarded);
+      awardOne(s, "lucky", res, pay);
       trace.push({ type: "lucky", cracks: cracks, points: RULES.luckyBonus, grid: s.grid.slice() });
       var b = resolve(s, trace, last); waves += b.waves; popped += b.popped;
     }
-    if (earn && waves >= RULES.chainEarn) awardOne(s, "chain", res.awarded);
+    if (earn && waves >= RULES.chainEarn) awardOne(s, "chain", res, pay);
     if (popped && !s.grid.some(Boolean)) {
       s.score += RULES.clearBonus; trace.push({ type: "clear", points: RULES.clearBonus, grid: s.grid.slice() });
     }
@@ -171,6 +177,13 @@
     return out;
   }
   function crackable(g) { return crackTargets(g).length > 0; }
+  // How close the well is to overflowing: top = columns with a disc in the top row (the next rise pushes it out),
+  // near = columns one disc from the top (the next disc there reaches the top row). The client warns with these.
+  function danger(g) {
+    var top = [], near = [];
+    for (var c = 0; c < W; c++) { if (g[c]) top.push(c); else if (g[W + c]) near.push(c); }
+    return { top: top, near: near };
+  }
   function snapshot(s) { var c = clone(s); c.prev = null; return c; }
 
   function newGame(seed, mode) {
@@ -178,7 +191,7 @@
     var s = {
       v: 1, mode: mode, seed: seed >>> 0, grid: new Array(W * H).fill(0), next: 0, held: 0,
       score: 0, drops: 0, level: 1, left: dropsFor(mode, 1), over: false,
-      bestChain: 0, luckies: 0, used: 0, out: [],
+      bestChain: 0, luckies: 0, used: 0, out: [], free: false,
       power: Power.stock(POWERS, { undo: 1 }), prev: null,
     };
     // a random start: drop discs silently, settle every chain, score nothing
@@ -211,21 +224,23 @@
     return false;
   }
 
-  // drop(state, col) -> {ok, state, trace, waves, popped, lucky, awarded, rose}
+  // drop(state, col) -> {ok, state, trace, waves, popped, lucky, awarded, unpaid, full, rose}
+  // unpaid: rewards this drop would have paid but did not (it follows a power-up); full: rewards skipped at the cap.
   // trace is the wave-by-wave story: drop, wave..., [lucky, wave...], [clear], [rise, wave...]
   function drop(state, col) {
-    var res = { ok: false, state: state, trace: [], waves: 0, popped: 0, lucky: false, awarded: [], rose: false };
+    var res = { ok: false, state: state, trace: [], waves: 0, popped: 0, lucky: false, awarded: [], unpaid: [], full: [], rose: false };
     if (state.over || col < 0 || col >= W || (col | 0) !== col) return res;
     var row = landing(state.grid, col); if (row < 0) return res;
     var s = clone(state); s.prev = snapshot(state);
+    var pay = !state.free; s.free = false; // the drop right after a power-up pays no power-up (R2)
     var disc = s.next; s.grid[row * W + col] = disc; s.drops++;
     s.next = randDisc(s);
     res.trace.push({ type: "drop", col: col, row: row, cell: row * W + col, disc: disc, grid: s.grid.slice() });
-    chain(s, res.trace, res, true);
+    chain(s, res.trace, res, true, pay);
     s.left--;
     if (s.left <= 0) {
       res.rose = true;
-      if (!rise(s, res.trace)) chain(s, res.trace, res, true);
+      if (!rise(s, res.trace)) chain(s, res.trace, res, true, pay);
     }
     checkStuck(s);
     res.ok = true; res.state = s; return res;
@@ -244,7 +259,7 @@
       p.used = state.used + 1;                      // and counted as a power-up used
       return { ok: true, state: p, trace: [] };
     }
-    var s = clone(state), trace = [], res = { waves: 0, popped: 0, awarded: [] };
+    var s = clone(state), trace = [], res = { waves: 0, popped: 0, awarded: [], unpaid: [], full: [] };
     s.prev = snapshot(state);
     if (name === "smash") {
       if (!(cell >= 0 && cell < W * H) || !s.grid[cell]) return fail;
@@ -261,12 +276,14 @@
       trace.push({ type: "crack", cracks: cracks, grid: s.grid.slice() });
     }
     s.power[name]--; s.used++;
-    if (name !== "hold") chain(s, trace, res, false);
+    s.free = true; // the next drop is power-up assisted: it scores but pays no power-up (R2)
+    if (name !== "hold") chain(s, trace, res, false, false);
     checkStuck(s);
     return { ok: true, state: s, trace: trace };
   }
 
   return { W: W, H: H, EGG: EGG, CRACKED: CRACKED, POWERS: POWERS, MODES: MODES, RULES: RULES,
            newGame: newGame, drop: drop, use: use, findPops: findPops, landing: landing, hasRoom: hasRoom,
-           dropsFor: dropsFor, wavePoints: wavePoints, crackable: crackable, crackTargets: crackTargets, canUseAny: canUseAny };
+           dropsFor: dropsFor, wavePoints: wavePoints, crackable: crackable, crackTargets: crackTargets, canUseAny: canUseAny,
+           danger: danger };
 });

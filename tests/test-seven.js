@@ -239,6 +239,74 @@ t("power-ups never earn power-ups (fuzz over Smash and Crack)", () => {
     }
   }
 });
+const tot = (s) => S.POWERS.reduce((a, n) => a + s.power[n], 0);
+t("R2 blocker repro: Smash, then a drop, pays nothing (round-2 critic F1)", () => {
+  let s = S.newGame(1, "classic"); s = S.drop(s, 0).state; s = S.drop(s, 1).state;
+  s.power.smash = 1;
+  const plain = S.drop(s, 5); eq(plain.awarded, [], "the plain drop pays nothing");
+  const u = S.use(s, "smash", 45); ok(u.ok); ok(u.state.free, "the next drop is marked as power-up assisted");
+  const r = S.drop(u.state, 5); ok(r.ok);
+  eq(r.awarded, [], "no power-up after a Smash");
+  ok(r.unpaid.length >= 1, "the chain the Smash set up would have paid: " + JSON.stringify(r.unpaid));
+  eq(tot(r.state), tot(s) - 1, "stock = before minus the Smash");
+  ok(!r.state.free, "only the one drop is unpaid");
+  ok(r.state.score > u.state.score, "the chain still scores");
+});
+t("R2: the drop right after Hold or Crack pays no power-up, the drop after that pays again", () => {
+  const lucky = (extra) => st(["e......", "e......", "777777."], 7, extra);
+  const plain = S.drop(lucky(), 6); ok(plain.awarded.some(a => a.why === "lucky"), "the control pays");
+  for (const name of ["hold", "crack", "smash"]) {
+    const s = lucky({ free: true }); const r = S.drop(s, 6);
+    ok(r.lucky, name + ": Lucky Seven still happens and scores"); eq(r.awarded, [], name); ok(r.unpaid.includes("lucky"));
+    eq(r.state.score, plain.state.score, "same score as the paid drop");
+    ok(!r.state.free); ok(S.drop(lucky({ free: false }), 6).awarded.length >= 1, "a natural drop pays again");
+  }
+  // Hold and Crack set the flag; Undo of the power-up restores the pre-power-up flag
+  const h = S.use(st(["e......"], 4, { power: { undo: 1, smash: 0, hold: 1, crack: 0 } }), "hold"); ok(h.state.free, "hold");
+  const c = S.use(st(["e3....."], 5, { power: { undo: 1, smash: 0, hold: 0, crack: 1 } }), "crack"); ok(c.ok && c.state.free, "crack");
+  const sm = S.use(st(["e3....."], 5, { power: { undo: 1, smash: 1, hold: 0, crack: 0 } }), "smash", at(6, 1)); ok(sm.state.free);
+  const un = S.use(sm.state, "undo"); ok(un.ok); ok(!un.state.free, "Undo rewinds the flag with the board");
+  ok(!S.newGame(3).free, "a fresh run starts paid");
+});
+t("R2 property: a power-up followed by any drop never raises the total stock (random games)", () => {
+  let checked = 0, blocked = 0;
+  for (let seed = 1; seed <= 60; seed++) {
+    let s = S.newGame(seed, seed % 4 ? "classic" : "blitz"), x = seed;
+    s.power = { undo: 2, smash: 4, hold: 4, crack: 4 };
+    for (let i = 0; i < 200 && !s.over; i++) {
+      x = (x * 1103515245 + 12345) >>> 0;
+      if (x % 3 === 0) {
+        const name = S.POWERS[1 + (x >>> 3) % 3], filled = s.grid.map((v, k) => v ? k : -1).filter(k => k >= 0);
+        const before = tot(s), u = S.use(s, name, filled[(x >>> 5) % Math.max(1, filled.length)]);
+        if (u.ok) {
+          ok(tot(u.state) === before - 1, "use pays nothing, seed " + seed);
+          for (let c = 0; c < 7; c++) {
+            const r = S.drop(u.state, c); if (!r.ok) continue;
+            ok(tot(r.state) < before, name + " then drop " + c + " raised the stock, seed " + seed); checked++;
+            if (r.unpaid.length) blocked++;
+          }
+          s = u.state; continue;
+        }
+      }
+      const cols = [0, 1, 2, 3, 4, 5, 6].filter(c => S.landing(s.grid, c) >= 0); if (!cols.length) break;
+      s = S.drop(s, cols[(x >>> 7) % cols.length]).state;
+      if (tot(s) < 4) s.power = { undo: 2, smash: 4, hold: 4, crack: 4 };
+    }
+  }
+  ok(checked > 1000, "exercised " + checked); ok(blocked > 20, "rewards actually blocked " + blocked);
+});
+t("R15: with every slot at the cap a reward is skipped and reported, never silently lost", () => {
+  const full = { undo: 9, smash: 9, hold: 9, crack: 9 };
+  const r = S.drop(st(["e......", "e......", "777777."], 7, { power: Object.assign({}, full) }), 6);
+  ok(r.lucky); eq(r.awarded, []); ok(r.full.includes("lucky"), "reported as full"); eq(r.state.power, full);
+  const one = S.drop(st(["e......", "e......", "777777."], 7, { power: { undo: 9, smash: 9, hold: 3, crack: 9 } }), 6);
+  eq(one.awarded.map(a => a.power), ["hold"], "goes to the one slot under the cap"); eq(one.full, []);
+});
+t("danger: columns at the top and one disc from the top (the near-full warning)", () => {
+  eq(S.danger(grid(["e......"])), { top: [], near: [] });
+  const g = grid(["..3...5", "e.e..ee", "e.e..ee", "e.e..ee", "e.e..ee", "e.e..ee", "e.e..ee"]);
+  eq(S.danger(g), { top: [2, 6], near: [0, 5] });
+});
 t("bot: a greedy player lasts long enough to see several rises (tuning sanity)", () => {
   let drops = 0, G = 12;
   for (let g = 0; g < G; g++) {

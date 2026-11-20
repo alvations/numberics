@@ -83,7 +83,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("held disc shown on the Hold button", (await p.locator("#tray .pw").nth(2).locator(".mini").count()) === 1);
   await setup(p, ["e3....e", "eee...e"], { power: { undo: 1, smash: 0, hold: 0, crack: 1 } });
   await p.keyboard.press("4"); s = await st(p); await shot(p, "crack-target");
-  ck("Crack first marks the eggs it would crack, spending nothing (cold #16)", s.power.crack === 1 && s.grid[at(5, 0)] === 8 && await p.locator(".disc.aim").count() === 2 && /to crack/.test(await p.textContent("#hint")));
+  ck("Crack first marks the eggs it would crack, spending nothing (cold #16)", s.power.crack === 1 && s.grid[at(5, 0)] === 8 && await p.locator(".disc.aim").count() === 2 && (await p.textContent("#hint")) === "Tap the well, or Enter. Esc cancels.");
   await p.keyboard.press("Escape");
   ck("targeting hint fits one line at 375px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 24));
   ck("Esc cancels Crack", (await st(p)).power.crack === 1 && await p.locator(".disc.aim").count() === 0);
@@ -104,12 +104,42 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // the idle hint labels the gold dots (craft V1)
   await setup(p, ["e......"], { left: 7 });
   ck("hint says how many drops until the eggs rise", (await p.textContent("#hint")) === "Level 1 · 7 drops until the eggs rise.");
+  // near-full warning (cold #9): one disc from the top, then at the top with a Smash nudge; each fits one line
+  await setup(p, ["e......", "e......", "e......", "e......", "e......", "e......"], { left: 7, power: { undo: 1, smash: 0, hold: 0, crack: 0 }, prev: null });
+  ck("warns a column is one disc from the top", (await p.textContent("#hint")) === "Column 1 is one disc from the top.", await p.textContent("#hint"));
+  await setup(p, ["..5....", "..e....", "..e....", "..e....", "..e....", "..e....", "..e...."], { left: 7, power: { undo: 1, smash: 1, hold: 0, crack: 0 } });
+  ck("at the top with a Smash in stock: nudges Smash", (await p.textContent("#hint")) === "Column 3 is at the top: Smash before the eggs rise.", await p.textContent("#hint"));
+  ck("the warning fits one line at 375px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 24));
+  // R2: the drop after a power-up scores but pays nothing, and says so in the neutral toast
+  await setup(p, ["e......", "e......", "777777."], { next: 7, free: true, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  await p.mouse.click(box.x + box.width * (6.5 / 7), box.y + box.height * 0.3);
+  ck("R2: the drop after a power-up says it pays no reward", /Lucky Seven!.*No reward after a power-up\./.test(await p.textContent("#toast")) && await p.locator("#toast.info").count() === 1, await p.textContent("#toast"));
+  await idle(p); s = await st(p);
+  ck("R2: nothing earned, Lucky still counted", s.luckies === 1 && s.power.smash + s.power.hold + s.power.crack === 0 && s.power.undo === 1 && !s.free);
+  // R15: every slot full: the toast says so
+  await setup(p, ["e......", "e......", "777777."], { next: 7, free: false, power: { undo: 9, smash: 9, hold: 9, crack: 9 } });
+  await p.mouse.click(box.x + box.width * (6.5 / 7), box.y + box.height * 0.3);
+  ck("R15: a reward at the cap says Power-ups full", /Power-ups full\./.test(await p.textContent("#toast")), await p.textContent("#toast"));
+  await idle(p);
+  // R2 in the client: Smash then drop
+  await setup(p, ["e......", "e......", "777777.", "......3"], { next: 7, free: false, power: { undo: 1, smash: 1, hold: 0, crack: 0 } });
+  await p.keyboard.press("2"); await p.mouse.click(box.x + box.width * (6.5 / 7), box.y + box.height * (6.5 / 7)); await idle(p);
+  ck("Smash marks the next drop as unpaid", (await st(p)).free === true && (await st(p)).power.smash === 0);
 
   // 4. rising row and the end screen: no Undo (R1), an honest final board (cold #10), a new best (R8)
   await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 9000, used: 2, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  ck("near-full warning names the column at the top and nudges Smash or a power-up (cold #9)",
+    /^Column 1 is at the top: (a power-up may help|the next rise ends the run)\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   const before = (await st(p)).grid;
   await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
   s = await st(p);
+  // R13: the final well stays in view, undimmed, before the end card
+  ck("R13: right after the end the card is held back and the board is undimmed", s.over && !(await p.isVisible("#over")) && await p.evaluate(() => window.__seven.revealing) && /Overflowed/.test(await p.textContent("#hint")));
+  await shot(p, "over-reveal");
+  await p.waitForTimeout(800);
+  ck("R13: still in view after 0.8 s", !(await p.isVisible("#over")));
+  ck("R13: the hold hint fits one line at 375px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 24));
+  await p.waitForSelector("#over", { state: "visible", timeout: 2000 });
   ck("overflow ends the run", s.over && await p.isVisible("#over"));
   ck("the end screen offers no Undo (R1)", await p.locator("#over button").count() === 2 && !(await p.locator("#over").textContent()).includes("Undo"));
   ck("Undo key after the end does nothing but explain", await (async () => { await p.keyboard.press("1"); const x = await st(p); return x.over && x.power.undo === 1 && /run is over/.test(await p.textContent("#hint")); })());
@@ -128,6 +158,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("end text fits on one line at 375px", await p.evaluate(() => ["over-title", "over-text"].every(id => { const e = document.getElementById(id); const r = document.createRange(); r.selectNodeContents(e); return r.getClientRects().length === 1; })));
   await setup(p, ["5......"], { over: true, out: [0], score: 0 });
   ck("no new best for a run below the best", !(await p.isVisible("#over-best")));
+  // R13: a tap during the hold shows the card at once
+  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, power: { undo: 0, smash: 0, hold: 0, crack: 0 } });
+  await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
+  ck("R13: held, then a tap brings the card", !(await p.isVisible("#over")) && await (async () => { await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5); return p.isVisible("#over"); })());
   await setup(p, ["e......"], { left: 1, next: 5 });
   await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
   s = await st(p);
@@ -145,6 +179,28 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click('#modes [data-mode="classic"]');
   ck("back to the Classic run", (await st(p)).mode === "classic");
   ck("no page errors", errs.length === 0, errs.join("|"));
+  // R17: Enter on a focused games-row link navigates and drops nothing
+  const d17 = (await st(p)).drops;
+  await p.focus("#games a[href]");
+  const href = await p.evaluate(() => document.activeElement.href);
+  await Promise.all([p.waitForURL(href, { timeout: 5000 }).catch(() => {}), p.keyboard.press("Enter")]);
+  ck("R17: Enter on a games-row link navigates", p.url() === href, p.url());
+  await p.goto(page);
+  ck("R17: and no disc was dropped", (await st(p)).drops === d17);
+  await ctx.close();
+  // phones: no keyboard is likely, so the targeting hint says how to cancel by tap, never Esc (critic nit 4)
+  ctx = await browser.newContext({ viewport: { width: 375, height: 800 }, hasTouch: true, isMobile: true });
+  p = await ctx.newPage(); await p.goto(page);
+  await setup(p, ["e3....e", "eee...e"], { power: { undo: 1, smash: 1, hold: 0, crack: 1 } });
+  await p.locator("#tray .pw").nth(1).tap();
+  ck("phone: Smash hint has no Esc", (await p.textContent("#hint")) === "Tap a disc to smash it. Tap Smash to cancel.", await p.textContent("#hint"));
+  await shot(p, "smash-target-phone");
+  await p.locator("#tray .pw").nth(1).tap();
+  ck("phone: tapping Smash again cancels", !(await p.evaluate(() => window.__seven.targeting)));
+  await p.locator("#tray .pw").nth(3).tap();
+  ck("phone: Crack hint has no Esc", (await p.textContent("#hint")) === "Tap the well to crack. Tap Crack to cancel.");
+  ck("phone: hints fit one line", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 24));
+  ck("the Next pill names an egg", await p.evaluate(() => { const s = window.__seven.state; s.next = 8; window.__seven.state = s; return document.querySelector("#next .mini").textContent === "egg"; }));
   await ctx.close();
   // page height: the main phone size does not scroll (craft F15)
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); p = await ctx.newPage(); await p.goto(page);
