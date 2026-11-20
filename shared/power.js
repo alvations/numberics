@@ -52,6 +52,8 @@
           if (opts.onInfo) opts.onInfo(d.id, t); else if (opts.hint) opts.hint.textContent = t;
           return;
         }
+        // arming or using a power-up clears any toast, so targeting instructions are never covered
+        try { if (typeof NumbericsKit !== "undefined") NumbericsKit.clearToast(); } catch (e) { /* no kit */ }
         if (opts.onUse) opts.onUse(d.id);
       });
       el.appendChild(b);
