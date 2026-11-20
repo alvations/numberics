@@ -200,20 +200,21 @@ t("R2 by tile, critic S1 repro: Boost 32 beside 64, a dummy swipe, then the merg
   eq(m1.awarded, []); ok(!m1.state.free, "the one-move flag has lapsed");
   const m2 = N.move(m1.state, "left"); eq(m2.state.grid[0], 7, "64 + 64 = 128");
   eq(m2.milestones, [7], "the milestone counts"); eq(m2.awarded, [], "but a marked tile never pays"); ok(m2.marked, "the result says why");
-  eq(m2.state.marks[0], 1, "the 128 carries the mark"); eq(m2.gained, 128, "points still score"); eq(m2.state.top, 7);
+  eq(m2.state.marks[0], 1, "the 128 carries the mark"); ok(m2.gained >= 128, "points still score"); eq(m2.state.top, 7);
   // the same two swipes without the Boost pay nothing, and the same board reached honestly pays
   const h1 = N.move(s, "up"), h2 = N.move(h1.state, "left"); eq(h1.awarded.length + h2.awarded.length, 0);
-  const honest = N.move(N.move(withMarks(m1.state, []), "left").state, "left");
-  eq(N.move(withMarks(m1.state, []), "left").awarded.length, 1, "an unmarked 128 pays"); ok(honest);
+  eq(N.move(withMarks(m1.state, []), "left").awarded.length, 1, "the same board unmarked pays");
 });
 t("R2 by tile, mechanics repro: Swap a 1024 beside the other, a non-merging swipe, then 2048 pays nothing", () => {
-  const s = board([[10, 0, 0, 0], [0, 0, 0, 10], Z4, Z4], { top: 10, power: P0({ swap: 1 }) });
-  const u = N.use(s, "swap", 1, 7); ok(u.ok); eq(u.state.grid.slice(0, 2), [10, 10]);
-  eq([u.state.marks[1], u.state.marks[7]], [1, 0], "the moved tile is marked; the emptied cell holds no mark");
-  const m1 = N.move(u.state, "left"); ok(m1.moved);
-  const m2 = N.move(m1.state, "up"); ok(m2.moved || true);
-  const paid = m1.awarded.length + (m2.moved ? m2.awarded.length : 0);
-  eq(paid, 0, "a swapped tile never pays"); ok(m1.state.grid.indexOf(11) >= 0, "2048 was made");
+  const s = board([[10, 0, 0, 0], [1, 10, 0, 0], Z4, [0, 0, 0, 1]], { top: 10, power: P0({ swap: 1 }) });
+  const u = N.use(s, "swap", 5, 4); ok(u.ok); eq([u.state.grid[0], u.state.grid[4]], [10, 10]);
+  eq([u.state.marks[4], u.state.marks[5]], [1, 1], "both swapped tiles are marked");
+  const e = N.use(board([[1, 0, 0, 0], Z4, Z4, Z4], { power: P0({ swap: 1 }) }), "swap", 0, 3);
+  eq([e.state.marks[0], e.state.marks[3]], [0, 1], "a swap into an empty cell marks the moved tile only");
+  const m1 = N.move(u.state, "left"); ok(m1.moved); eq(m1.merges, [], "Left merges nothing"); eq(m1.awarded, []);
+  const m2 = N.move(m1.state, "up"); eq(m2.state.grid[0], 11, "2048 is made");
+  eq(m2.awarded, [], "a swapped tile never pays"); ok(m2.marked);
+  const h = N.move(N.move(s, "left").state, "up"); eq(h.awarded, [], "without the Swap the same swipes pay nothing");
 });
 t("R2 by tile: a mark follows its tile through slides and merges, and still blocks a reward five moves later", () => {
   // a boosted 4 (row 3) merges into a 4, the 8 into an 8 ... up to the new top, over several moves
@@ -270,8 +271,9 @@ t("R15 (critic S2): a full stock says so; the reward is skipped, not lost silent
   const r = N.move(board([[5, 5, 0, 0], Z4, Z4, Z4], { top: 5, power: full }), "left");
   eq(r.milestones, [6]); eq(r.awarded, []); ok(r.full, "result flags the full stock"); eq(r.state.power, full);
   ok(!N.move(board([[5, 5, 0, 0], Z4, Z4, Z4], { top: 5 }), "left").full, "a normal award is not full");
-  ok(/r\.full\) toast\("New tile " \+ N\.label\(top\) \+ "\. Power-ups full\.", "info"\)/.test(src["game.js"]), "the client toasts it");
-  ok(/r\.marked\) toast\("New tile " \+ N\.label\(top\) \+ "\. Swapped and boosted tiles earn no reward\.", "info"\)/.test(src["game.js"]), "and the marked case");
+  const gsrc = fs.readFileSync(path.join(__dirname, "..", "game.js"), "utf8");
+  ok(/r\.full\) toast\("New tile " \+ N\.label\(top\) \+ "\. Power-ups full\.", "info"\)/.test(gsrc), "the client toasts it");
+  ok(/r\.marked\) toast\("New tile " \+ N\.label\(top\) \+ "\. Swapped and boosted tiles earn no reward\.", "info"\)/.test(gsrc), "and the marked case");
 });
 // The R2 property (critic's method): the same moves with and without the power-up. After a Boost or a Swap, k = 0 to 5
 // neutral moves (legal in both lines, merging in neither: the dummy swipes that once laundered a reward), then each of

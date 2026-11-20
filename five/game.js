@@ -115,8 +115,8 @@
         : rw === "draw" ? "Draw in" + n : rw === "p" ? "You win" + n : "The computer wins" + n;
       var got = (state.earned || []).map(function (id) { return PW[id]; });
       $("over-text").textContent = m ? (m === "p" ? "Match won " : "Match lost ") + state.wins.p + "-" + state.wins.c + " \u00b7 " + PW_LEVEL[state.level]
-        : (rw === "draw" ? cap(drawWhy()) : cardWords()) + " \u00b7 You " + state.wins.p + " : " + state.wins.c + " Computer" +
-          (state.draws ? " \u00b7 " + state.draws + " drawn" : "") + (got.length ? " \u00b7 earned " + got.join(", ") : "");
+        : (rw === "draw" ? cap(drawWhy()) : cardWords()) + " \u00b7 " + ("You " + state.wins.p + " : " + state.wins.c + " Computer").replace(/ /g, "\u00a0") + // the tally never breaks
+          (state.draws ? " \u00b7 " + state.draws + "\u00a0drawn" : "") + (got.length ? " \u00b7 earned\u00a0" + got.join(", ") : "");
       $("again").textContent = m ? "New game" : "Next round";
     }
     if (!over.hidden && wasHidden) $("again").focus({ preventScroll: true }); // focus goes to the card's primary button

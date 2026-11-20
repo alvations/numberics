@@ -96,7 +96,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const t0 = Date.now(); await card(p); const held = Date.now() - t0;
   ck("R13: the card follows after the hold", held > 900 && held < 2500, String(held));
   ck("round 3: round won reads 'You win round 1'", await p.isVisible("#over") && (await p.textContent("#over-title")) === "You win round 1", await p.textContent("#over-title"));
-  ck("round 3: subline '<what burst> · You 1 : 0 Computer', plus what the round paid (cold #24)", /^Your 1 onto their 4 made 5 · You 1 : 0 Computer · earned (Undo|Split|Shield|Nudge)(, (Undo|Split|Shield|Nudge))*$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("round 3: subline '<what burst> · You 1 : 0 Computer', plus what the round paid (cold #24)", /^Your 1 onto their 4 made 5 · You 1 : 0 Computer · earned (Undo|Split|Shield|Nudge)(, (Undo|Split|Shield|Nudge))*$/.test((await p.textContent("#over-text")).replace(/\u00a0/g, " ")), await p.textContent("#over-text"));
   ck("round 3: focus is on the card's primary button", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
   ck("round 3: the lower New game is hidden while the card shows, its space kept", await p.evaluate(() => { const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && n.getBoundingClientRect().height > 30; }));
   await p.click("#over-view");
@@ -302,7 +302,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("craft #2: the computer's deciding burst shows 1.5 s before the card", T.burst > 0 && T.card - T.burst >= 1450 && T.card - T.burst < 2200 && !T.flash, JSON.stringify(T));
   ck("craft #2: its burst is still lit after 1 s", T.ghost >= 1000, JSON.stringify(T));
   ck("round 3: round lost reads 'The computer wins round N'", (await p.textContent("#over-title")) === "The computer wins round " + s.round, await p.textContent("#over-title"));
-  ck("round 3: lost-round subline", /^Computer's 4 onto your 1 made 5 · You 0 : 2 Computer/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("round 3: lost-round subline", /^Computer's 4 onto your 1 made 5 · You 0 : 2 Computer/.test((await p.textContent("#over-text")).replace(/\u00a0/g, " ")), await p.textContent("#over-text"));
   ck("round 3: focus moved to Next round", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
   await shot(p, "lost-round-375");
   ck("no page errors (timing)", e6.length === 0, e6.join("|"));
