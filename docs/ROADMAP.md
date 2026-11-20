@@ -123,6 +123,10 @@ Seven, the rising row and overflow, Hold and Crack, determinism by seed.
 6+6=12 ...); the next tile is previewed and enters from the edge you swiped away from.
 
 **The fix for "3 becomes irrelevant": make "multiple of 3" the whole game.**
+> **As built (QA round 2, measured):** only 3 + 6 = 9 step-merges (values stay on a ladder that always pairs), and a
+> Flush scores and pays but **clears** its run instead of collapsing it; a human-like bot's median run went from 100
+> to 165 swipes with a flush every 22.6 (`tools/sim-three.js`). The text below is the original plan.
+
 1. **Step merge:** neighbouring multiples of 3 also merge into their sum: 3+6=9, 6+9=15, 9+12=21
    (3k + 3(k+1) = 3(2k+1), so it stays a multiple of 3). Every multiple exists, and you always count in threes.
 2. **Flush:** after a move, any straight line of **3 or more adjacent tiles in consecutive multiples of 3**
