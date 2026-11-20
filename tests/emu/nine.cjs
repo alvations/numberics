@@ -21,6 +21,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("every tile shows its number and its pips", await p.evaluate(() => [...document.querySelectorAll(".heap.tile")].every(t => +t.querySelector(".num").textContent === t.querySelectorAll(".pips i.on").length)));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= 375));
   ck("dealt start has a non-zero nim-sum", await p.evaluate(() => window.NumbericsNine.nimSum(window.__nine.state.heaps) !== 0));
+  ck("header: H1 Nine, subtitle is the Numberics link plus a tagline (R6)", (await p.textContent("h1")) === "Nine" &&
+     /^Numberics · [A-Z][^.]*\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 1);
+  ck("empty Best shows a dimmed none (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
+  ck("restart says New game (R11)", (await p.textContent("#new")) === "New game");
+  ck("disabled Take is the calm style, not gold", await p.evaluate(() => getComputedStyle(document.getElementById("take")).backgroundColor !== getComputedStyle(document.querySelector(".btn.primary:not(:disabled)") || document.body).backgroundColor && document.getElementById("take").disabled));
+  // R5: an empty tray button explains itself in the hint line, by tap and by key
+  await p.locator("#tray .pw").nth(1).click({ force: true });
+  ck("tapping an empty power-up explains it (R5)", /^Add: Add 1 to any tile.*Win a round to earn one\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("empty tray buttons are aria-disabled, never disabled", await p.locator('#tray .pw[aria-disabled="true"]').count() >= 3 && await p.locator("#tray .pw:disabled").count() === 0);
+  ck("tray tooltip voice: '1: Undo. Take back your last turn.'", (await p.locator("#tray .pw").first().getAttribute("title")) === "1: Undo. Take back your last turn.");
+  await p.keyboard.press("1");
+  ck("key 1 on an unusable Undo explains why", /^Undo: Take back your last turn\. Nothing to take back/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   const h0 = (await S(p)).heaps;
   await p.focus("#board");
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown");
@@ -73,6 +85,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
   s = await S(p);
   ck("undo rewinds the pass and the reply", s.turn === "you" && JSON.stringify(s.heaps) === "[1,2,3]" && s.power.you.pass === 1 && s.power.you.undo === 0);
 
+  // R1: a lost round cannot be undone, and no screen offers it
+  await forge(p, { heaps: [0, 0, 2], you: { undo: 1 } });
+  await p.locator('.heap[data-i="2"]').click(); await p.click("#take"); // leaves 1: the computer takes the last
+  await cpuDone(p);
+  ck("round lost by the computer's last take", (await p.textContent("#over-title")) === "Round lost");
+  ck("lost round card: summary line, no Undo offer", /^You 0-1 Computer · first to 3$/.test(await p.textContent("#over-text")) && !/Undo/.test(await p.textContent("#over")));
+  await p.keyboard.press("1");
+  s = await S(p);
+  ck("undo after a lost round does nothing and says why (R1)", s.roundOver === "cpu" && s.power.you.undo === 1 && /Not after a round ends/.test(await p.textContent("#hint")));
+  await p.click("#again");
+
   // 4. round end, match end, misere unlock, learn view
   await forge(p, { heaps: [0, 4, 0], s: { score: { you: 0, cpu: 0 } } });
   await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take");
@@ -84,29 +107,44 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await forge(p, { heaps: [0, 0, 2], s: { score: { you: 2, cpu: 1 } } });
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown"); await p.keyboard.press("Enter");
   ck("three rounds win the match", (await p.textContent("#over-title")) === "Match won");
+  ck("match card: summary line and New best (R8)", /^Won 3-\d · 3 tiles$/.test(await p.textContent("#over-text")) && await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
+  ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
+  await shot(p, "match");
   ck("misere unlocks after the first win", await p.isVisible("#misere"));
   await p.click("#again");
   ck("a won match adds a tile", (await S(p)).heaps.length === 4 && (await p.textContent("#tiles")) === "4");
   await p.click("#misere"); await p.click("#misere");
   s = await S(p);
-  ck("misere starts a new run", s.misere && s.level === 3 && /last take loses/.test(await p.textContent("#mode")));
+  ck("misere starts a new run", s.misere && s.level === 3 && /last take loses/.test(await p.textContent("#hint")));
   await forge(p, { heaps: [0, 1, 0] });
   await p.locator('.heap[data-i="1"]').click(); await p.click("#take");
   ck("misere: the last take loses", (await p.textContent("#over-title")) === "Round lost" && (await S(p)).score.cpu === 1);
   await p.click("#learn-btn");
-  ck("learn view shows binary and the nim-sum", await p.isVisible("#learn") && /Nim-sum/.test(await p.textContent("#learn")));
+  ck("learn view shows binary and the nim-sum", await p.isVisible("#learn") && /Nim-sum \d{4}/.test(await p.textContent("#learn")));
+  ck("learn says the goal plainly: leave a nim-sum of 0", /leave a nim-sum of 0/.test(await p.textContent("#learn")));
   await forge(p, { heaps: [9, 8, 7, 6, 5, 4, 3, 2, 1] });
   ck("nine tiles fit with binary labels", await p.locator(".heap .bin").count() === 9 && await p.evaluate(() => document.documentElement.scrollWidth <= 375));
   await shot(p, "learn");
   await forge(p, { heaps: [0, 0, 1], s: { score: { you: 0, cpu: 2 } } });
   await p.locator('.heap[data-i="2"]').click(); await p.click("#take");
   ck("losing the match ends the run", (await p.textContent("#over-title")) === "Run over");
+  ck("run over card: summary, New game, no Undo offer", /^Lost \d-3 · 3 tiles$/.test(await p.textContent("#over-text")) && (await p.textContent("#again")) === "New game" && !/Undo/.test(await p.textContent("#over")));
+  await shot(p, "runover");
   await p.click("#again");
   ck("new run after a loss", (await S(p)).score.you === 0 && !(await S(p)).matchOver);
+  await p.locator(".heap.tile").first().click(); await p.click("#take"); await cpuDone(p);
   await p.click('#diff button[data-diff="hard"]');
-  ck("difficulty change is two-step mid-run", (await S(p)).diff !== "hard" || (await S(p)).ply === 0);
+  ck("difficulty change is two-step mid-run, the button says Sure? (R10)", (await S(p)).diff !== "hard" && (await p.textContent('#diff button[data-diff="hard"]')) === "Sure?");
   await p.click('#diff button[data-diff="hard"]');
-  ck("difficulty switches to hard", (await S(p)).diff === "hard");
+  ck("difficulty switches to hard", (await S(p)).diff === "hard" && (await p.textContent('#diff button[data-diff="hard"]')) === "Hard");
+  ck("Hard Learn: no live nim-sum, and it says so (R4)", !/Nim-sum \d/.test(await p.textContent("#learn")) && /Hard shows no live nim-sum \(Easy and Medium do\)/.test(await p.textContent("#learn")) && await p.locator(".heap .bin").count() > 0);
+  // F9: a focused tile and the selected tile look different
+  await forge(p, { heaps: [3, 4, 5] });
+  await p.locator('.heap[data-i="0"]').click();
+  await p.keyboard.press("Tab");
+  const rings = await p.evaluate(() => { const a = document.querySelector(".heap.sel"), f = document.activeElement; const g = (e) => { const c = getComputedStyle(e); return c.outlineStyle + c.outlineColor + c.boxShadow; }; return { sel: g(a), foc: f && f.classList.contains("heap") && !f.classList.contains("sel") ? g(f) : null }; });
+  ck("focus ring and selection ring differ (F9)", rings.foc && rings.foc !== rings.sel, JSON.stringify(rings));
+  await p.keyboard.press("Escape");
   const moves = (await S(p)).ply;
   await p.reload();
   ck("state survives reload", (await S(p)).ply === moves && (await S(p)).diff === "hard");

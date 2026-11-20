@@ -34,15 +34,24 @@
   }
 
   var PW = { undo: "Undo", split: "Split", shield: "Shield", nudge: "Nudge" };
-  var DEFS = N.POWERS.map(function (p) {
-    return { id: p, label: PW[p], title: { undo: "take back your turn and the reply", split: "move one point to your other tile",
-      shield: "a tile cannot be hit next turn", nudge: "+1 on their tile or -1 on yours" }[p] };
-  });
+  var DESC = { undo: "Take back your turn and the computer's reply.", split: "Move one point from your tile onto your other tile.",
+    shield: "Your tile cannot be hit on the computer's next turn. You still move.", nudge: "Add 1 to a computer tile or take 1 off yours." };
+  var DEFS = N.POWERS.map(function (p) { return { id: p, label: PW[p], desc: DESC[p] }; });
+  var EARN = "Burst a computer tile to earn one. Only you have power-ups.";
   var PW_HINT = { split: "Tap your tile to move one point onto your other tile.",
     shield: "Tap your tile to shield it from the next hit, then move.",
     nudge: "Tap a tile: theirs goes up 1, yours goes down 1." };
 
   function myTurn() { return state.turn === "p" && !state.roundOver && !busy; }
+  // why a tray button cannot act right now (a reason string), or false when it can (R5: a tap explains it)
+  function whyNot(id) {
+    if (!state.power.p[id]) return false; // the tray says how to earn one
+    if (state.roundOver) return id === "undo" ? "Not once a round is decided." : "Wait for the next round.";
+    if (busy || state.turn !== "p") return "Wait for your turn.";
+    if (id === "undo") return N.canUse(state, "undo") ? false : "Nothing to take back yet this round.";
+    if (id === "shield" && state.midTurn) return "Shield is already up. Now make your move.";
+    return false;
+  }
 
   function tileEl(v) {
     var t = document.createElement("div");
@@ -75,14 +84,13 @@
     pips.setAttribute("aria-label", "Rounds: you " + state.wins.p + ", computer " + state.wins.c + ", first to 3");
     Array.prototype.forEach.call($("levels").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-level") === level)); });
     P.tray($("tray"), DEFS, state.power.p, {
-      armed: armed,
-      disabled: function (id) { return id === "undo" ? (busy || !N.canUse(state, "undo")) : !myTurn() || (id === "shield" && state.midTurn); },
-      onUse: activate,
+      armed: armed, earn: EARN, onUse: activate, disabled: whyNot,
+      onInfo: function (id, text) { $("hint").textContent = text; },
     });
     boardEl.classList.toggle("targeting", !!armed);
     var hint = "";
     if (armed) hint = PW_HINT[armed] + " (Esc cancels)";
-    else if (state.roundOver) hint = "";
+    else if (state.roundOver) hint = state.roundOver === "draw" ? "Drawn: the same position came up 3 times, or 40 turns passed without a burst." : "";
     else if (state.turn === "c" || busy) hint = "The computer is thinking...";
     else if (N.mustPass(state)) hint = "Nothing to hit this turn. Tap your tile to pass, or use a power-up.";
     else if (sel >= 0) hint = "Add " + state.tiles[sel] + " onto which tile? Your own other tile counts.";
@@ -91,13 +99,14 @@
     var over = $("over"), ttl = $("over-title");
     over.hidden = !state.roundOver || busy;
     if (state.roundOver && !busy) {
+      // R8: a white one-line headline, one summary line "<Result> · <tally>", the gold primary button
       var m = state.matchOver, rw = state.roundOver;
-      ttl.textContent = m ? (m === "p" ? "You take the match" : "The computer takes the match")
+      ttl.textContent = m ? (m === "p" ? "Match to you" : "Match to the computer")
         : rw === "draw" ? "Round drawn" : rw === "p" ? "Round to you" : "Round to the computer";
-      ttl.className = (m || rw) === "p" ? "win" : "";
-      $("over-text").textContent = "Rounds " + state.wins.p + "-" + state.wins.c + (state.draws ? " (" + state.draws + " drawn)" : "") +
-        (m ? "" : " · first to 3") + (rw === "draw" && !m ? " · position repeated or 40 turns without a burst" : "");
-      $("again").textContent = m ? "New match" : "Next round";
+      var tally = state.wins.p + "-" + state.wins.c + (state.draws ? ", " + state.draws + " drawn" : "");
+      $("over-text").textContent = (m ? (m === "p" ? "Match won" : "Match lost") : rw === "draw" ? "Round drawn" : rw === "p" ? "Round won" : "Round lost") +
+        " · " + tally + (m ? "" : ", first to 3");
+      $("again").textContent = m ? "New game" : "Next round";
     }
   }
 
@@ -151,8 +160,9 @@
   function commit(res, who) {
     var before = state.tiles.slice();
     state = res.state; persist();
-    if (res.awarded) K.toast((who === "p" ? "Burst! +" : "Computer earned ") + PW[res.awarded]);
-    else if (res.burst && who === "p") K.toast("Burst!");
+    // R7: a reward is a toast; a round result is the overlay alone (no "Burst!" note on the round-ending burst)
+    if (res.awarded) K.toast("Burst! +" + PW[res.awarded]);
+    else if (res.burst && who === "p" && !state.roundOver) K.toast("Burst!");
     animate(before, state.last, afterTurn);
   }
   function afterTurn() {
@@ -162,23 +172,21 @@
   function scheduleComputer() {
     if (timer !== null || state.turn !== "c" || state.roundOver) return;
     busy = true; render();
-    var gen = state.moves;
+    var gen = state.moves, opening = !state.last; // a beat longer on a fresh round, so the start is seen first
     timer = setTimeout(function () {
       timer = null; if (state.moves !== gen || state.turn !== "c") { busy = false; return render(); }
       var r = N.aiPlan(state);
-      state.seed = r.seed;
+      state = r.state; // the engine's copy with the seed advanced; the plan applies to it
       runPlan(r.plan);
-    }, THINK);
+    }, opening ? THINK + 500 : THINK);
   }
   function runPlan(plan) {
     if (!plan.length) { busy = false; return render(); }
     var a = plan[0], res = N.apply(state, a);
     if (!res.ok) { busy = false; return render(); }
-    if (a.type === "power") K.toast("Computer used " + PW[a.name]);
     if (a.type === "pass") K.toast("Computer has nothing to hit: it passes");
     var before = state.tiles.slice();
     state = res.state; persist();
-    if (res.awarded) K.toast("Computer earned " + PW[res.awarded]);
     animate(before, state.last, function () {
       if (plan.length > 1 && !state.roundOver && state.turn === "c") {
         busy = true; var gen = state.moves;
@@ -193,7 +201,7 @@
     var v = state.tiles[i];
     if (armed) {
       var name = armed, res = N.use(state, name, i);
-      if (!res.ok) { K.toast("Pick a valid tile"); return; }
+      if (!res.ok) { K.toast("Pick a valid tile", "bad"); return; }
       armed = null; sel = -1;
       K.toast(PW[name] + "!");
       return commit(res, "p");
@@ -202,14 +210,13 @@
     if (sel < 0) { if (i < 2 && v) { sel = i; render(); } return; }
     if (i === sel) { sel = -1; return render(); }
     var r = N.play(state, sel, i);
-    if (!r.ok) { if (state.shield && state.shield.idx === i) K.toast("That tile is shielded this turn"); return; }
+    if (!r.ok) { if (state.shield && state.shield.idx === i) K.toast("That tile is shielded this turn", "bad"); return; }
     sel = -1; commit(r, "p");
   }
   function activate(name) {
     if (name === "undo") {
-      if (!N.canUse(state, "undo")) return;
+      if (!N.canUse(state, "undo")) return; // R1: never across a decided round, so a counted match stays counted
       flush(); armed = null; sel = -1;
-      if (state.matchOver && counted) { if (state.matchOver === "p") record.won--; else record.lost--; counted = false; }
       state = N.use(state, "undo").state; persist(); K.toast("Took back your turn"); return render();
     }
     if (!myTurn()) return;
@@ -253,7 +260,7 @@
         levelArm = lv; b.textContent = "Sure?";
         setTimeout(function () { if (levelArm === lv) levelArm = null; b.textContent = label; }, 3000); return;
       }
-      levelArm = null; b.textContent = label; startMatch(lv); K.toast(label + ": new match");
+      levelArm = null; b.textContent = label; startMatch(lv); K.toast(label + ": new game");
     });
   });
   $("again").addEventListener("click", function () {

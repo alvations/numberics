@@ -129,16 +129,32 @@ t("Undo rewinds your last turn and the reply, paid for with one charge, nothing 
   eq(JSON.stringify(s.owner), before); eq(s.turn, 1); eq(s.power.undo, 0); eq(s.power.peek, 0, "Peek is not refunded");
   ok(!F.use(s, "undo").ok, "no charge, no undo");
 });
-t("Undo cannot farm a round win: the award and the score rewind too", () => {
+t("R1: Undo never crosses a decided round (won, lost or drawn), so a round win cannot be farmed", () => {
   let s = at(B([2, 6], [1, 3]), 1, "medium"); s.power.undo = 2;
   s = must(F.claim(s, 4)); s = F.cpuTurn(s).state;      // a quiet move first so a snapshot exists
-  ok(!s.result, "fixture: the round goes on");
+  ok(!s.result, "fixture: the round goes on"); ok(F.canUse(s, "undo", 1), "fixture: undo is live mid-round");
   const w = F.threats(s.owner, 1); ok(w.length, "fixture: claiming 4 made threats the computer cannot all block");
-  const s1 = must(F.claim(s, w[0])); ok(s1.result.winner === 1 && s1.result.earned);
-  const s2 = must(F.use(s1, "undo"));
-  eq(s2.wins, s.wins); eq(F.held(s2.owner, 1), F.held(s.owner, 1));
-  const total = (p) => Object.values(p).reduce((a, b) => a + b, 0);
-  eq(total(s2.power), total(s.power) - 1, "only the Undo charge changed");
+  const s1 = must(F.claim(s, w[0])); ok(s1.result.winner === 1);
+  ok(!F.canUse(s1, "undo", 1) && !F.use(s1, "undo").ok, "a won round is final");
+  // a lost round is final too (it used to be undoable until the match was decided)
+  let l = at(B([5, 2], [8, 1]), 1, "medium"); l.power.undo = 1;
+  l = must(F.claim(l, 9)); l = F.cpuTurn(l).state; eq(l.result.winner, 2, "fixture: the computer completes 8+1+6");
+  ok(!l.match, "fixture: the match goes on"); ok(!!l.prev, "fixture: a snapshot exists");
+  ok(!F.canUse(l, "undo", 1) && !F.use(l, "undo").ok, "a lost round is final");
+  let d = at(B([1, 2, 4], [3, 5, 6, 9]), 1, "medium"); d.power.undo = 1; d.prev = F.newMatch(1, "medium");
+  d = must(F.claim(d, 7)); d = F.cpuTurn(d).state; eq(d.result.winner, 0, "fixture: a draw (the computer fills the board)");
+  ok(!F.use(d, "undo").ok, "a drawn round is final");
+});
+t("R3: a Peek spent before Undo stays spent (the critic's repro: seed 5 Medium, peek 1, undo 2)", () => {
+  let s = F.newMatch(5, "medium"); s.power.peek = 1; s.power.undo = 2;
+  s = must(F.claim(s, 5)); s = F.cpuTurn(s).state; ok(!s.result);
+  s = must(F.use(s, "peek")); eq(s.power.peek, 0);
+  s = must(F.use(s, "undo"));
+  eq(s.power.peek, 0, "Undo refunded the Peek"); eq(s.power.undo, 1);
+  // a Peek bought back by replaying is impossible; a Peek earned before the snapshot is kept
+  let k = F.newMatch(5, "medium"); k.power.peek = 2; k.power.undo = 1;
+  k = must(F.claim(k, 5)); k = F.cpuTurn(k).state; k = must(F.use(k, "peek")); k = must(F.claim(k, F.free(k.owner)[0]));
+  if (!k.result) { k = F.cpuTurn(k).state; if (!k.result) { k = must(F.use(k, "undo")); eq(k.power.peek, 1, "only the spent one stays spent"); } }
 });
 t("Undo never crosses into a new round", () => {
   let s = at(B([2, 6], [1, 3]), 1); s = must(F.claim(s, 7)); s = F.nextRound(s);
@@ -175,6 +191,28 @@ t("Double: a win on the first claim ends the round at once, and earns nothing", 
   s = must(F.use(s, "double")); s = must(F.claim(s, 6));
   eq(s.result.winner, 1); eq(s.result.earned, null, "a power-up never earns a power-up");
   ok(!F.claim(s, 2).ok, "no second claim after the round ends");
+});
+t("R2: a round won after Erase in an EARLIER turn of the same round earns nothing", () => {
+  // you 2, computer 8 and 1 (threatens 6): erase the 8 and claim 6, then win later with no power in that turn
+  let s = at(B([2], [8, 1]), 1, "medium"); s.power.erase = 1; s.power.undo = 0;
+  s = must(F.use(s, "erase", 8)); s = must(F.claim(s, 6));   // you 2 6, computer 1
+  s.owner = B([2, 6], [1, 3]); s.turn = 1;                      // forge the computer's reply: 3
+  ok(!s.usedPower, "fixture: this turn used no power-up");
+  s = must(F.claim(s, 7)); eq(s.result.winner, 1); eq(s.result.earned, null, "Erase earlier in the round pays nothing");
+  // control: the same win in a round with no power-up does earn
+  const c = must(F.claim(at(B([2, 6], [1, 3]), 1, "medium"), 7)); ok(c.result.earned, "a clean round earns");
+  // and the flag clears for the next round
+  const n = F.nextRound(s); eq(n.powered, [false, false, false]);
+});
+t("R2: the computer's earlier Double in a round stops its own reward too (Hard)", () => {
+  const s = at(B([5], [8]), 2, "hard"); s.cpuPower.double = 1;
+  let x = F.cpuTurn(s).state; ok(x.powered[2], "the computer is marked");
+  while (!x.result) x = x.turn === 2 ? F.cpuTurn(x).state : must(F.claim(x, F.free(x.owner)[0]));
+  if (x.result.winner === 2) eq(x.result.earned, null);
+});
+t("R2: the computer using a power-up does not cost YOU your reward", () => {
+  let s = at(B([2, 6], [1, 3]), 1, "medium"); s.powered = [false, false, true];
+  s = must(F.claim(s, 7)); ok(s.result.earned, "your clean win still earns");
 });
 t("Double needs two free numbers", () => {
   const s = at(B([1, 5, 6, 8], [2, 3, 4]), 1); s.power.double = 1; // free: 7, 9
@@ -230,6 +268,49 @@ t("the computer earns power-ups only on Hard", () => {
 t("stock caps at 9", () => {
   let s = at(B([2, 6], [1, 3]), 1); s.power = { undo: 9, erase: 9, peek: 9, double: 9 };
   s = must(F.claim(s, 7)); eq(s.result.earned, null); eq(s.power.undo, 9);
+});
+
+// ---- R4: a perfect player can always win a Hard match (the starting Erase), and only once (R2) ----
+// can you force a round win from s (your turn), whichever of its perfect moves the computer picks?
+function forcedWin(s, memo) {
+  const k = s.owner.join("") + s.power.erase;
+  if (memo.has(k)) return memo.get(k);
+  const opts = [];
+  F.free(s.owner).forEach(n => { const r = F.claim(s, n); if (r.ok) opts.push(r.state); });
+  if (F.canUse(s, "erase", 1)) F.held(s.owner, 2).forEach(e => {
+    const a = F.use(s, "erase", e).state; F.free(a.owner).forEach(n => { const r = F.claim(a, n); if (r.ok) opts.push(r.state); });
+  });
+  const v = opts.some(t => t.result ? t.result.winner === 1 : F.bestMoves(t.owner, 2).every(n => {
+    const u = F.claim(t, n).state; return u.result ? u.result.winner === 1 : forcedWin(u, memo);
+  }));
+  memo.set(k, v); return v;
+}
+t("R4: with the starting Erase a perfect player forces a round win on Hard, whoever starts; without it, no", () => {
+  const memo = new Map(), s = F.newMatch(1, "hard");
+  ok(forcedWin(s, memo), "you start");
+  const c = F.newMatch(1, "hard"); c.starter = 2; c.turn = 2;
+  F.bestMoves(c.owner, 2).forEach(n => ok(forcedWin(F.claim(c, n).state, memo), "computer opens " + n));
+  const bare = F.newMatch(1, "hard"); bare.power.erase = 0; ok(!forcedWin(bare, new Map()), "Hard is a draw without it");
+});
+t("R4 + R2: perfect play wins every Hard match 1-0, and the Erase win pays nothing (50 seeds)", () => {
+  const memo = new Map();
+  for (let seed = 1; seed <= 50; seed++) {
+    let s = F.newMatch(seed, "hard");
+    while (!s.match) {
+      if (s.result) { if (s.result.winner === 1) eq(s.result.earned, null, "the Erase round earned"); s = F.nextRound(s); continue; }
+      if (s.turn === 2) { s = F.cpuTurn(s).state; continue; }
+      let next = null;
+      const cands = F.free(s.owner).map(n => [0, n]);
+      if (F.canUse(s, "erase", 1)) F.held(s.owner, 2).forEach(e => F.free(s.owner).forEach(n => { if (n !== e) cands.push([e, n]); }));
+      for (const [e, n] of cands) {
+        const t = must(F.claim(e ? must(F.use(s, "erase", e)) : s, n));
+        const good = t.result ? t.result.winner === 1 : F.bestMoves(t.owner, 2).every(m => { const u = F.claim(t, m).state; return u.result ? u.result.winner === 1 : forcedWin(u, memo); });
+        if (good) { next = t; break; }
+      }
+      s = next || must(F.claim(s, F.bestMoves(s.owner, 1)[0]));
+    }
+    eq(s.match.winner, 1, "seed " + seed); eq(s.wins, [4, 1, 0], "seed " + seed);
+  }
 });
 
 // ---- best of five ----

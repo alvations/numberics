@@ -110,52 +110,54 @@
     UNITS_OF[i].forEach(function (uu) { UNIT[uu].push(i); });
   }
 
-  // ---- power-ups (docs/ROADMAP.md section 0a, Sudoku row) ----
+  // ---- power-ups (docs/ROADMAP.md section 0a, Sudoku row; rule from docs/reviews/TRIAGE1.md) ----
   // Undo is free and unlimited, so it has no stock. The three charged power-ups:
   //   reveal: the true digit for one cell (the old Hint), check: marks wrong digits once,
   //   cands: fills the pencil notes of one 3x3 box from the digits already on the board.
-  // Earned by completing a CORRECT row, column or box; each unit pays once per puzzle; a unit finished by
-  // Reveal does not pay. Spending is permanent: Undo rewinds the board and every reward the rewound moves
-  // earned, but never refunds a spent charge (a refund would leak a revealed digit for free).
-  var KINDS = ["reveal", "check", "cands"], CAP = 9;
+  // Earned by PROGRESS, never by correctness: `high` is the most cells the player has ever had filled at once
+  // in this puzzle (givens not counted). It never goes down (Erase and Undo leave it), and each time it reaches
+  // a new multiple of 9 one charge is paid. A wrong digit counts as much as a right one, so a reward says
+  // nothing about the answer, and rewinding cannot farm (about 4 easy, 5 medium, 6 hard per puzzle).
+  // A cell filled by Reveal raises `high` but never pays (a power-up never earns one), and the move that
+  // solves the board never pays (a charge would be useless). Spending is permanent: Undo never refunds.
+  var KINDS = ["reveal", "check", "cands"], CAP = 9, STEP = 9;
   var START = { reveal: 1, check: 0, cands: 0 };
-  // Reveal is the strongest (it hands over an answer), so it is the rarest reward (weights measured by a bot).
+  // Reveal is the strongest (it hands over an answer), so it is the rarest reward.
   var WEIGHT = { reveal: 1, check: 2, cands: 3 };
 
-  function unitMask(grid, solution) { // units already complete and correct
-    var m = 0;
-    for (var uu = 0; uu < 27; uu++) if (UNIT[uu].every(function (c) { return grid[c] && grid[c] === solution[c]; })) m |= (1 << uu);
-    return m;
+  function filled(s) { // cells the player has filled (givens excluded)
+    var n = 0; for (var c = 0; c < 81; c++) if (s.grid[c] && !s.puzzle[c]) n++; return n;
   }
-  // Which power-up a unit pays: a pure function of the puzzle seed and the unit, so a unit re-completed after
-  // an Undo pays the same kind. Full kinds (at CAP) are skipped.
-  function awardKind(seed, uu, stock) {
-    var open = KINDS.filter(function (k) { return stock[k] < CAP; });
+  // Which power-up the k-th progress step pays: a pure function of the puzzle seed and k. Full kinds are skipped.
+  function awardKind(seed, k, stock) {
+    var open = KINDS.filter(function (x) { return stock[x] < CAP; });
     if (!open.length) return null;
-    var w = open.reduce(function (a, k) { return a + WEIGHT[k]; }, 0);
-    var r = rng(((seed >>> 0) ^ Math.imul(uu + 1, 0x9e3779b1)) >>> 0)() * w;
+    var w = open.reduce(function (a, x) { return a + WEIGHT[x]; }, 0);
+    var r = rng(((seed >>> 0) ^ Math.imul(k + 1, 0x9e3779b1)) >>> 0)() * w;
     for (var x = 0; x < open.length; x++) { r -= WEIGHT[open[x]]; if (r < 0) return open[x]; }
     return open[open.length - 1];
   }
   function total(o) { return KINDS.reduce(function (a, k) { return a + (o[k] || 0); }, 0); }
 
-  // ---- game state: { puzzle, solution, grid, notes[81] (bitmask), moves, hints, stock, used, paid, history[] } ----
+  // ---- game state: { puzzle, solution, grid, notes[81] (bitmask), moves, hints, stock, used, high, history[] } ----
   function newState(gen) {
-    var s = { puzzle: gen.puzzle.slice(), solution: gen.solution.slice(), grid: gen.puzzle.slice(),
-              notes: new Array(81).fill(0), difficulty: gen.difficulty, seed: gen.seed,
-              moves: 0, hints: 0, history: [], solved: false,
-              stock: Object.assign({}, START), used: { reveal: 0, check: 0, cands: 0 }, paid: 0, gain: [] };
-    s.paid = unitMask(s.grid, s.solution); // a unit that is all givens never pays
-    return s;
+    return { puzzle: gen.puzzle.slice(), solution: gen.solution.slice(), grid: gen.puzzle.slice(),
+             notes: new Array(81).fill(0), difficulty: gen.difficulty, seed: gen.seed,
+             moves: 0, hints: 0, history: [], solved: false,
+             stock: Object.assign({}, START), used: { reveal: 0, check: 0, cands: 0 }, high: 0, gain: [] };
   }
-  // Brings a state saved before power-ups existed (or a damaged one) up to date. Old saves keep loading.
+  // Brings an older save (before power-ups, or from the unit-reward version) up to date. Old saves keep loading.
   function upgrade(s) {
     var n = cloneState(s), ok = function (o) { return o && KINDS.every(function (k) { return Number.isInteger(o[k]); }); };
     if (!ok(n.stock)) n.stock = Object.assign({}, START); else n.stock = Object.assign({}, n.stock);
     if (!ok(n.used)) n.used = { reveal: s.hints || 0, check: 0, cands: 0 }; else n.used = Object.assign({}, n.used);
-    KINDS.forEach(function (k) { n.stock[k] = Math.min(CAP, n.stock[k]); n.used[k] = Math.max(0, n.used[k]); });
-    if (!Number.isInteger(n.paid)) n.paid = unitMask(n.grid, n.solution); // already-finished units never pay
+    // a debt left by the old Undo rule (stock below zero) is forgiven: Undo no longer touches the stock
+    KINDS.forEach(function (k) { n.stock[k] = Math.max(0, Math.min(CAP, n.stock[k])); n.used[k] = Math.max(0, n.used[k]); });
+    if (!Number.isInteger(n.high) || n.high < 0) n.high = filled(n); // progress made before this rule pays nothing again
+    n.high = Math.min(81, Math.max(n.high, filled(n)));
+    delete n.paid; // the old per-unit mask
     if (!Number.isInteger(n.hints)) n.hints = n.used.reveal;
+    n.solved = isComplete(n.grid);
     n.gain = [];
     return n;
   }
@@ -168,32 +170,27 @@
     n.gain = [];
     return n;
   }
-  function remember(n, s) {
-    n.history.push({ grid: s.grid.slice(), notes: s.notes.slice(), stock: Object.assign({}, s.stock), used: Object.assign({}, s.used), paid: s.paid });
+  function remember(n, s) { // Undo restores the board only: the stock and `high` never move backwards
+    n.history.push({ grid: s.grid.slice(), notes: s.notes.slice() });
     if (n.history.length > 500) n.history.shift();
   }
-  // After a digit lands on c: mark newly finished correct units paid, and pay them unless `pays` is false.
-  function settle(n, c, pays) {
-    var paidNow = false; // one move pays at most one charge, even when it finishes two or three units
-    UNITS_OF[c].forEach(function (uu) {
-      var bit = 1 << uu;
-      if (n.paid & bit) return;
-      if (!UNIT[uu].every(function (k) { return n.grid[k] && n.grid[k] === n.solution[k]; })) return;
-      n.paid |= bit;
-      if (!pays || paidNow) return;
-      var k = awardKind(n.seed, uu, n.stock);
-      if (k) { n.stock[k]++; n.gain.push(k); paidNow = true; }
-    });
+  // After a digit lands: raise the high-water mark and pay a new multiple of 9, unless `pays` is false.
+  function settle(n, pays) {
+    var f = filled(n);
+    if (f <= n.high) return;
+    var step = Math.floor(f / STEP) > Math.floor(n.high / STEP);
+    n.high = f;
+    if (!step || !pays || n.solved) return;
+    var k = awardKind(n.seed, f / STEP, n.stock);
+    if (k) { n.stock[k]++; n.gain.push(k); }
   }
 
   function put(s, c, d, pays) {
     var n = cloneState(s); remember(n, s);
     n.grid[c] = d; n.notes[c] = 0; n.moves++;
-    if (d) { // a placed digit removes that pencil mark from every peer
-      PEERS[c].forEach(function (p) { n.notes[p] &= ~(1 << d); });
-      settle(n, c, pays);
-    }
+    if (d) PEERS[c].forEach(function (p) { n.notes[p] &= ~(1 << d); }); // a placed digit removes that pencil mark from peers
     n.solved = isComplete(n.grid);
+    if (d) settle(n, pays);
     return n;
   }
   // Returns a NEW state; an illegal action returns the same object (callers can compare by identity).
@@ -205,16 +202,12 @@
     if (s.solved || isGiven(s, c) || s.grid[c] || d < 1 || d > 9) return s;
     var n = cloneState(s); remember(n, s); n.notes[c] ^= (1 << d); return n;
   }
+  // A solved board is a decided result: Undo is refused (family rule R1), so a solved puzzle stays solved.
+  function canUndo(s) { return !s.solved && s.history.length > 0; }
   function undo(s) {
-    if (!s.history.length) return s;
+    if (!canUndo(s)) return s;
     var n = cloneState(s), h = n.history.pop();
     n.grid = h.grid; n.notes = h.notes; n.solved = false;
-    if (h.stock && h.used && Number.isInteger(h.paid)) {
-      // rewind rewards (stock + paid units), keep spends: stock = then - (spent since then). It can dip
-      // below zero when a spent charge came from a rewound reward; that debt is repaid by the next reward.
-      n.paid = h.paid;
-      KINDS.forEach(function (k) { n.stock[k] = h.stock[k] - (s.used[k] - h.used[k]); });
-    }
     return n;
   }
   function has(s, k) { return !s.solved && s.stock && s.stock[k] > 0; }
@@ -253,6 +246,6 @@
   return { CLUES: CLUES, generate: generate, solve: solve, countSolutions: countSolutions, conflicts: conflicts,
            isComplete: isComplete, newState: newState, place: place, toggleNote: toggleNote, undo: undo,
            hint: hint, reveal: reveal, check: check, fillBox: fillBox, candidates: candidates, upgrade: upgrade,
-           unitMask: unitMask, total: total, KINDS: KINDS, START: START, CAP: CAP,
+           canUndo: canUndo, filled: filled, total: total, KINDS: KINDS, START: START, CAP: CAP, STEP: STEP,
            isGiven: isGiven, PEERS: PEERS, ROW: ROW, COL: COL, BOX: BOX, UNIT: UNIT, UNITS_OF: UNITS_OF };
 });

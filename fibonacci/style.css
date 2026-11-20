@@ -3,7 +3,6 @@
 .cells,.tiles{ position:absolute; inset:var(--gap); }
 .cells{ display:grid; grid-template-columns:repeat(4,1fr); gap:var(--gap); }
 .cells div{ background:var(--cell); border-radius:var(--tile-radius); }
-.cells div.sel{ outline:3px solid var(--accent); outline-offset:-3px; }
 .tiles .tile{ position:absolute; left:0; top:0;
   width:calc((100% - 3*var(--gap))/4); height:calc((100% - 3*var(--gap))/4);
   transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))));
@@ -11,3 +10,11 @@
 .tiles .tile[data-len="3"]{ font-size:7.6cqw; } .tiles .tile[data-len="4"]{ font-size:6.4cqw; }
 .tiles .tile[data-len="5"]{ font-size:5.2cqw; } .tiles .tile[data-len="6"]{ font-size:4.4cqw; }
 .tile sub{ font-size:.55em; margin-left:1px; position:relative; top:.35em; line-height:1; } /* a flex item: vertical-align does not apply */
+/* Round 1: targeting marks sit ABOVE the tiles (a cell outline under a tile was hidden), the keyboard cursor
+ * is dashed so it never reads as a pick; an empty stat value is a dimmed "none" (R11). */
+.marks{ pointer-events:none; z-index:2; }
+.marks .mark{ background:transparent; transition:none; }
+.marks .mark.sel{ box-shadow:0 0 0 3px var(--accent) inset, 0 0 0 1px #15151d inset; }
+.marks .mark.cur{ outline:3px dashed var(--ink); outline-offset:-3px; }
+.marks .mark.sel.cur{ outline-color:#15151d; }
+.stat b.none{ color:var(--mute); font-weight:400; }

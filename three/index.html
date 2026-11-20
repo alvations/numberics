@@ -16,7 +16,7 @@
   <header>
     <div class="brand">
       <h1>Three</h1>
-      <p class="sub"><a href="../">Numberics</a> &middot; count in threes</p>
+      <p class="sub"><a href="../">Numberics</a> &middot; Count in threes.</p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
@@ -34,6 +34,7 @@
     <div id="over" class="over" hidden>
       <h2>No moves left</h2>
       <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
       <button id="again" class="btn primary" type="button">New game</button>
     </div>
   </div>
@@ -42,8 +43,28 @@
     <button id="new" class="btn" type="button">New game</button>
   </div>
   <p class="how">Swipe or use the arrow keys: every tile moves one step. 1 and 2 make 3; equal or neighbouring
-     multiples of 3 merge. Line up 3, 6, 9 to Flush it for points and a power-up.</p>
+     multiples of 3 merge (3 and 6 make 9). Line up 3, 6, 9 to flush it for points and a power-up.
+     <a href="#help" id="help-open">How it works</a></p>
   <nav id="games" class="games" data-root="../" data-current="three" aria-label="Numberics games"></nav>
+  <div id="help" class="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+    <div class="card">
+      <h2 id="help-title">How Three works</h2>
+      <p class="lead">Swipe or use the arrow keys: every tile moves one step.</p>
+      <ul>
+        <li><span class="ex"><b data-v="1"></b>+<b data-v="2"></b>=<b data-v="3"></b></span>
+          <span>1 and 2 (the small grey halves) make 3.</span></li>
+        <li><span class="ex"><b data-v="3"></b>+<b data-v="3"></b>=<b data-v="6"></b></span>
+          <span>Equal tiles merge.</span></li>
+        <li><span class="ex"><b data-v="3"></b>+<b data-v="6"></b>=<b data-v="9"></b></span>
+          <span>Next-door multiples of 3 merge too: 6 and 9 make 15.</span></li>
+        <li><span class="ex"><b data-v="3"></b><b data-v="6"></b><b data-v="9"></b>&rarr;<b data-v="18"></b></span>
+          <span><strong>Flush:</strong> 3 or more in a line, counting by 3, collapse in a rainbow for big points and a power-up.</span></li>
+        <li><span class="ex"><b data-v="21"></b><b data-v="24"></b><b data-v="45"></b></span>
+          <span>Past 21 the colours start again with a ring, one more each lap. Every tile is 3 times something, so 123 is normal.</span></li>
+      </ul>
+      <button id="help-play" class="btn primary" type="button">Play</button>
+    </div>
+  </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

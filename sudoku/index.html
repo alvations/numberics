@@ -15,17 +15,25 @@
   <header>
     <div class="brand">
       <h1>Sudoku</h1>
-      <p class="sub"><a href="../">Numberics</a> &middot; <span id="diff-label"></span></p>
+      <p class="sub"><a href="../">Numberics</a> &middot; One answer only.</p>
     </div>
     <div class="stats">
       <div class="stat"><span>Time</span><b id="time">0:00</b></div>
-      <div class="stat"><span>Best</span><b id="best">-</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
     </div>
   </header>
 
   <div class="levels" id="levels" role="group" aria-label="Difficulty"></div>
 
-  <div id="board" class="board" role="grid" aria-label="Sudoku board"></div>
+  <div class="wrap">
+    <div id="board" class="board" role="grid" tabindex="0" aria-label="Sudoku board"></div>
+    <div id="win" class="over" hidden role="dialog" aria-label="Solved">
+      <h2>Solved</h2>
+      <p id="win-text"></p>
+      <p id="win-best" class="best" hidden></p>
+      <button id="again" class="btn primary" type="button">New puzzle</button>
+    </div>
+  </div>
 
   <section id="tray" class="tray" aria-label="Power-ups"></section>
   <div class="tools">
@@ -35,14 +43,9 @@
   <div id="pad" class="pad" role="group" aria-label="Number pad"></div>
 
   <div class="row"><button id="new" class="btn" type="button">New puzzle</button></div>
-  <p class="how">Fill every row, column and 3x3 box with 1 to 9. Keys: 1-9 place, Backspace erase, N notes,
-     U undo, H reveal, C check, F candidates, arrows move. Finish a correct row, column or box to earn a power-up.</p>
+  <p class="how">Fill every row, column and 3x3 box with 1 to 9. Keys: 1-9, arrows, Backspace, N notes, U undo,
+     H reveal, C check, F candidates. Every 9 cells you fill earns a power-up.</p>
 
-  <div id="win" class="win" hidden role="dialog" aria-label="Solved">
-    <h2>Solved</h2>
-    <p id="win-text"></p>
-    <button id="again" class="btn primary" type="button">New puzzle</button>
-  </div>
   <nav id="games" class="games" data-root="../" data-current="sudoku" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

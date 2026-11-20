@@ -2,14 +2,15 @@
  * Numberics Four: pure rules (browser global NumbericsFour, and require()). No DOM, storage or clock.
  * Connect Four on 7 columns x 6 rows where every disc carries a number 1-4 dealt from a seeded bag.
  * A drop wins for the side that dropped it when it completes four of its colour in a row, or a
- * ten-line: any four in a row, any colours, whose numbers sum to exactly 10. A full board is a draw.
+ * ten-line: any four in a row, any colours, whose numbers sum to exactly 10 and that hold at least TWO discs
+ * of the side completing it (the new disc counts). A full board is a draw.
  * Cells are r*7+c with r = 0 the BOTTOM row. own: 0 empty, 1 player, 2 computer. num: 1-4 (0 empty). */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.NumbericsFour = factory();
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
-  var COLS = 7, ROWS = 6, N = COLS * ROWS, TEN = 10, CAP = 9;
+  var COLS = 7, ROWS = 6, N = COLS * ROWS, TEN = 10, CAP = 9, MINE = 2; // MINE: own discs a ten-line needs
   var POWERS = ["undo", "pop", "hold", "tune"];
   var CPU_POWERS = ["pop", "hold", "tune"]; // the computer never rewinds, so Undo is not in its pool
   // The bag every side deals from (reshuffled when empty). Ones-heavy by measurement: with 1-4 evenly, ten-lines
@@ -94,7 +95,7 @@
         if (own[x]) { full++; sum += num[x]; }
       }
       if (same === 4) out.push({ type: "colour", cells: w.slice() });
-      else if (full === 4 && sum === TEN) out.push({ type: "ten", cells: w.slice() });
+      else if (full === 4 && sum === TEN && same >= MINE) out.push({ type: "ten", cells: w.slice() });
     });
     return out;
   }
@@ -113,16 +114,16 @@
   function earnReason(s, cell, side) {
     var p = side + 1, o = 3 - p, block = false, threat = false;
     BY_CELL[cell].forEach(function (wi) {
-      var w = WIN[wi], opp = 0, filled = 0, sum = 0, empty = -1;
+      var w = WIN[wi], opp = 0, filled = 0, sum = 0;
       for (var k = 0; k < 4; k++) {
         var x = w[k];
         if (x !== cell && s.own[x] === o) opp++;
-        if (s.own[x]) { filled++; sum += s.num[x]; } else empty = x;
+        if (s.own[x]) { filled++; sum += s.num[x]; }
       }
       if (opp === 3) block = true;
-      if (filled === 3) {
-        var need = TEN - sum;
-        if (need === s.next[side] && need !== s.next[1 - side]) threat = true;
+      if (filled === 3) { // the new disc is the mover's, so the mover always has the two discs a ten-line needs
+        var need = TEN - sum, oppCan = need === s.next[1 - side] && opp + 1 >= MINE;
+        if (need === s.next[side] && !oppCan) threat = true;
       }
     });
     return block ? "block" : threat ? "threat" : null;
@@ -151,7 +152,7 @@
     if (win) { s.over = { winner: s.turn, type: win.type, line: win.line, cells: win.cells }; return res; }
     if (s.own.every(Boolean)) { s.over = { winner: 0, type: "draw", line: [], cells: [] }; return res; }
     var why = earnReason(s, cell, side);
-    if (why) { res.earned = why; res.award = award(s, side); }
+    if (why && (side === 0 || s.level === "hard")) { res.earned = why; res.award = award(s, side); } // only Hard's computer spends
     s.turn = 3 - s.turn;
     return res;
   }
@@ -179,7 +180,7 @@
   function use(state, name, arg) {
     var fail = { ok: false, state: state }, side = state.turn - 1;
     if (name === "undo") {
-      if (!state.prev || !state.power[0].undo || (!state.over && state.turn !== 1)) return fail;
+      if (state.over || !state.prev || !state.power[0].undo || state.turn !== 1) return fail; // R1: never crosses a result
       var u = clone(state.prev); u.prev = null;
       u.power[0].undo = Math.max(0, u.power[0].undo - 1); u.used[0]++; // the rewind is paid for
       return { ok: true, state: u };
@@ -215,7 +216,11 @@
   var WINF = 1000000, PBAG = [0, 0, 0, 0, 0];
   function setBag(b) { BAG = b.slice(); PBAG = [0, 0, 0, 0, 0]; BAG.forEach(function (n) { PBAG[n] += 1 / BAG.length; }); }
   setBag(BAG);
-  var LV = { easy: { depth: 2, nodes: 3000 }, medium: { depth: 6, nodes: 20000 }, hard: { depth: 14, nodes: 40000 } };
+  // Strength per level. loose: chance a turn picks at random among the columns the search does not see losing;
+  // blunder: chance a loose turn ignores even that (any legal column). A win in one is always taken.
+  // Tuned against a safe-move player (never leaves the computer an immediate line for its shown disc), see tests.
+  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.35 }, medium: { depth: 6, nodes: 20000, loose: 0.3, blunder: 0 },
+             hard: { depth: 14, nodes: 40000, loose: 0, blunder: 0 } };
 
   function Search(own, num, toMove, masks, budget) {
     this.own = Int8Array.from(own); this.num = Int8Array.from(num);
@@ -236,7 +241,7 @@
         if (!own[x] || !num[x]) known = 0; else sum += num[x];
       }
       if (same === 4) return true;
-      if (known && m) { var need = TEN - sum; if (need >= 1 && need <= 4 && (m & (1 << need))) return true; }
+      if (known && m && same >= MINE) { var need = TEN - sum; if (need >= 1 && need <= 4 && (m & (1 << need))) return true; }
     }
     return false;
   };
@@ -271,9 +276,9 @@
       if (this.h[c] >= ROWS) continue;
       var cell = this.h[c] * COLS + c, ws = BY_CELL[cell];
       for (var a = 0; a < ws.length; a++) {
-        var w = WIN[ws[a]], sum = 0, ok = 1;
-        for (var k = 0; k < 4; k++) { var x = w[k]; if (x === cell) continue; if (!own[x] || !num[x]) { ok = 0; break; } sum += num[x]; }
-        if (ok && sum >= 6 && sum <= 9) need |= 1 << (TEN - sum);
+        var w = WIN[ws[a]], sum = 0, ok = 1, mine = 1;
+        for (var k = 0; k < 4; k++) { var x = w[k]; if (x === cell) continue; if (!own[x] || !num[x]) { ok = 0; break; } sum += num[x]; if (own[x] === p) mine++; }
+        if (ok && mine >= MINE && sum >= 6 && sum <= 9) need |= 1 << (TEN - sum);
       }
     }
     if (!need) return 0;
@@ -384,12 +389,15 @@
     if (col === undefined || col === null) {
       var r = analyse(s, {});
       col = r ? r.best : legal(s)[0];
-      if (lvName === "easy" && r) {
-        // Easy: always takes a win in one, otherwise often plays loose
+      var lp = LV[lvName] || LV.medium;
+      if (lp.loose && r && r.score < WINF - 64) {
+        // a loose turn: always takes a win in one (handled above), otherwise picks at random
         var rr = rand(s.aiSeed); s.aiSeed = rr[1];
-        if (r.score < WINF - 64 && rr[0] < 0.5) {
-          var ok = Object.keys(r.scores).map(Number).filter(function (c) { return r.scores[c] > -WINF + 64; });
-          if (!ok.length) ok = Object.keys(r.scores).map(Number);
+        if (rr[0] < lp.loose) {
+          var all = Object.keys(r.scores).map(Number);
+          var ok = all.filter(function (c) { return r.scores[c] > -WINF + 64; });
+          var r3 = rand(s.aiSeed); s.aiSeed = r3[1];
+          if (!ok.length || r3[0] < lp.blunder) ok = all;
           var r2 = rand(s.aiSeed); s.aiSeed = r2[1];
           col = ok[Math.floor(r2[0] * ok.length)];
         }
@@ -441,8 +449,8 @@
     return again ? again.best : legal(s)[0];
   }
 
-  return { COLS: COLS, ROWS: ROWS, TEN: TEN, CAP: CAP, BAG: BAG, POWERS: POWERS, LEVELS: LEVELS, WINDOWS: WIN,
+  return { COLS: COLS, ROWS: ROWS, TEN: TEN, CAP: CAP, MINE: MINE, BAG: BAG, POWERS: POWERS, LEVELS: LEVELS, WINDOWS: WIN,
            newGame: newGame, drop: drop, use: use, legal: legal, height: height, canPop: canPop,
            linesAt: linesAt, computerTurn: computerTurn, bestMove: bestMove, analyse: analyse, rand: rand,
-           _setBag: setBag };
+           _setBag: setBag, _LV: LV };
 });

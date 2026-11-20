@@ -15,12 +15,12 @@
   <header>
     <div class="brand">
       <h1>Numberics</h1>
-      <p class="sub">Endless. There is no top tile.</p>
+      <p class="sub">Endless. There is no top tile. <a href="#games">Nine more games below.</a></p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
       <div class="stat"><span>Best</span><b id="best">0</b></div>
-      <div class="stat"><span>Top tile</span><b id="top">-</b></div>
+      <div class="stat"><span>Top tile</span><b id="top" class="none">none</b></div>
     </div>
   </header>
 
@@ -33,6 +33,7 @@
     <div id="over" class="over" hidden>
       <h2>No moves left</h2>
       <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
       <button id="again" class="btn primary" type="button">New game</button>
     </div>
   </div>
@@ -45,6 +46,8 @@
   <nav id="games" class="games" data-root="" data-current="endless" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
+<script src="shared/kit.js"></script>
+<script src="shared/power.js"></script>
 <script src="engine.js"></script>
 <script src="game.js"></script>
 <script src="shared/nav.js"></script>

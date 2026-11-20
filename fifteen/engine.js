@@ -16,10 +16,14 @@
  *   the round at once.
  * - Only the side that just claimed can complete a 15, and the round ends the instant it does, so both
  *   sides can never hold a 15 at the same time (Erase only ever removes an opponent number).
- * - A round won on a turn that used Erase or Double earns nothing (a power-up never earns a power-up).
+ * - A round won by a side that used Erase or Double at any point in that round earns nothing (a power-up
+ *   never earns a power-up, not even a turn later: family rule R2). Peek only shows information, so it
+ *   does not stop a round from earning.
  * - Undo (you only) rewinds to the start of your last turn, the computer's reply included, restoring the
- *   whole snapshot (stock, score, round) minus the Undo charge spent. It never crosses into a new round.
- * - On Hard you start each match with one Undo AND one Erase (perfect play is a draw; this breaks it).
+ *   whole snapshot (stock, score, round) minus the Undo charge spent, and a Peek spent since then stays
+ *   spent (R3). It never crosses a decided round or match (R1), nor into a new round.
+ * - On Hard you start each match with one Undo AND one Erase (perfect play is a draw; this breaks it,
+ *   so a perfect player can always win a Hard match: tests/test-fifteen.js measures it).
  * - The computer earns power-ups only on Hard, by the same rule, only Erase or Double (the two it
  *   uses), starts with none, and uses Erase and Double only when they
  *   turn its solved result strictly better (a draw into a win, or a loss into a draw or win).
@@ -131,6 +135,7 @@
       seed: seed >>> 0, diff: DIFFS.indexOf(diff) >= 0 ? diff : "medium",
       round: 1, starter: 1, turn: 1, owner: [0, 0, 0, 0, 0, 0, 0, 0, 0],
       claimsLeft: 1, usedPower: false, blocked: 0, acted: false,
+      powered: [false, false, false], // [unused, you, computer]: used Erase or Double this round (R2)
       wins: [0, 0, 0],           // [draws, your rounds, computer rounds]
       rounds: [],                // winner of each finished round (0 draw)
       result: null,              // {winner: 0|1|2, line: [a,b,c] | null, earned: name|null}
@@ -158,7 +163,7 @@
   }
   function endRound(s, winner, line) {
     var earned = null;
-    if (winner && earns(s, winner) && !s.usedPower) earned = award(s, winner);
+    if (winner && earns(s, winner) && !s.usedPower && !(s.powered && s.powered[winner])) earned = award(s, winner);
     s.result = { winner: winner, line: line, earned: earned };
     s.wins[winner]++; s.rounds.push(winner);
     decided(s);
@@ -191,7 +196,7 @@
     side = side || s.turn;
     var st = stockOf(s, side);
     if (!st[name]) return false;
-    if (name === "undo") return side === 1 && !!s.prev && !s.match;
+    if (name === "undo") return side === 1 && !!s.prev && !s.result && !s.match;   // R1
     if (!playing(s) || s.turn !== side) return false;
     if (name === "peek") return true;
     if (s.usedPower || s.claimsLeft !== 1) return false;
@@ -209,7 +214,9 @@
     if (name === "undo") {
       if (!canUse(state, "undo", 1)) return fail;
       var r = clone(state.prev);
-      r.power.undo = Math.max(0, r.power.undo - 1);   // the rewind is paid for, nothing else comes back
+      r.power.undo = Math.max(0, r.power.undo - 1);   // the rewind is paid for
+      // an information power-up spent since the snapshot stays spent (R3): what was seen cannot be unseen
+      r.power.peek = Math.min(r.power.peek, state.power.peek);
       r.prev = null; r.last = [];
       return { ok: true, state: r };
     }
@@ -221,6 +228,8 @@
     stockOf(s, side)[name]--;
     if (name === "peek") return { ok: true, state: s, info: peekInfo(s.owner, side) };
     s.usedPower = true;
+    if (!s.powered) s.powered = [false, false, false];
+    s.powered[side] = true;
     if (name === "erase") { s.owner[arg - 1] = 0; s.blocked = arg; s.last.push({ side: side, type: "erase", n: arg }); }
     if (name === "double") { s.claimsLeft = 2; s.last.push({ side: side, type: "double" }); }
     return { ok: true, state: s };
@@ -286,7 +295,7 @@
     var s = clone(state);
     s.round++; s.starter = 3 - s.starter; s.turn = s.starter;
     s.owner = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-    s.claimsLeft = 1; s.usedPower = false; s.blocked = 0; s.acted = false;
+    s.claimsLeft = 1; s.usedPower = false; s.blocked = 0; s.acted = false; s.powered = [false, false, false];
     s.result = null; s.prev = null; s.last = [];
     return s;
   }

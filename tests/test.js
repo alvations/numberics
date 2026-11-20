@@ -109,6 +109,14 @@ t("swap exchanges two cells (tile<->empty allowed, empty<->empty refused)", () =
   eq(N.use(s, "swap", 0, 1).state.grid[1], 1);
   eq(N.use(s, "swap", 1, 2).ok, false); eq(N.use(s, "swap", 0, 0).ok, false);
 });
+t("power-ups change only their target: no spawn, no move counted (Boost does not spend a turn)", () => {
+  const s = board([[4,0,0,0],[0,0,1,0],[0,0,0,0],[0,0,0,0]], { power: { undo: 0, smash: 1, swap: 1, boost: 1 } });
+  [["boost", 0], ["smash", 6], ["swap", 0, 15]].forEach(([n, a, b]) => {
+    const r = N.use(s, n, a, b); ok(r.ok, n);
+    eq(r.state.grid.filter(Boolean).length, s.grid.filter(Boolean).length - (n === "smash" ? 1 : 0), n + " tile count");
+    eq(r.state.moves, s.moves, n + " moves"); eq(r.state.seed, s.seed, n + " seed");
+  });
+});
 t("a power-up with no charges does nothing", () => {
   eq(N.use(board([[1,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]), "smash", 0).ok, false);
 });
@@ -133,6 +141,38 @@ t("every localStorage use sits inside a try block (storage may throw)", () => {
 });
 t("every source file carries the SPDX header", () => files.forEach(([f, s]) => ok(/SPDX-License-Identifier: Apache-2\.0/.test(s), f)));
 t("the content does not depend on a CDN", () => files.forEach(([f, s]) => ok(!/https?:\/\/(cdn|unpkg|cdnjs)/.test(s), f)));
+
+// ---- round 1 fixes (docs/reviews/TRIAGE1.md): static guards for the page shell ----
+const src = Object.fromEntries(files);
+t("R6: H1 stays Numberics and the subtitle links to the games row", () => {
+  ok(/<h1>Numberics<\/h1>/.test(src["index.html"]), "H1");
+  ok(/<p class="sub">Endless\. There is no top tile\. <a href="#games">Nine more games below\.<\/a><\/p>/.test(src["index.html"]), "subtitle");
+  ok(/<nav id="games"/.test(src["index.html"]), "#games target");
+});
+t("R5: the tray is the shared one (descriptions, aria-disabled, tap explains) and loads before game.js", () => {
+  const h = src["index.html"];
+  ok(h.indexOf("shared/kit.js") >= 0 && h.indexOf("shared/power.js") >= 0 && h.indexOf("shared/power.js") < h.indexOf('src="game.js"'), "script order");
+  ok(/P\.tray\(/.test(src["game.js"]) && /onInfo/.test(src["game.js"]), "uses NumbericsPower.tray with onInfo");
+  ok(!/\.disabled\s*=/.test(src["game.js"]), "never sets button.disabled");
+  ok(/\.pw\.empty\{/.test(src["style.css"]), ".pw.empty styled");
+});
+t("R7/F2/F3: toast at the top with a neutral bad variant; warnings use it", () => {
+  ok(/\.toast\{[^}]*top:max\(/.test(src["style.css"]) && !/\.toast\{[^}]*bottom:/.test(src["style.css"]), "toast at top");
+  ok(/\.toast\.bad\{/.test(src["style.css"]), "bad variant");
+  ok(/toast\([^;]*"bad"\)/.test(src["game.js"]), "a warning passes bad");
+});
+t("R8/F7: darker scrim, New best line, gold best", () => {
+  ok(/\.over\{[^}]*rgba\(20,21,28,\.95\)/.test(src["style.css"]), "scrim .95");
+  ok(/id="over-best" class="best" hidden>New best\.</.test(src["index.html"]), "New best line");
+  ok(/\.over \.best\{/.test(src["style.css"]), "best style");
+});
+t("F5/F9: hover, press and gold link focus ring are mirrored from shared/theme.css", () => {
+  ok(/\.btn:hover:not\(:disabled\)/.test(src["style.css"]) && /\.pw:active:not\(:disabled\)/.test(src["style.css"]), "hover/press");
+  ok(/a:focus-visible\{ outline:2px solid var\(--accent\)/.test(src["style.css"]), "link focus ring");
+});
+t("R9: Enter or Space on a focused button is left to the button", () => {
+  ok(/\(e\.key === "Enter" \|\| e\.key === " "\) && \(tag === "BUTTON" \|\| tag === "A"\)\) return;/.test(src["game.js"]));
+});
 
 t("history carries only the owner's authorship (no AI author, co-author or trailer)", () => {
   let log;

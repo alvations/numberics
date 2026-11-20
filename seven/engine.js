@@ -158,16 +158,19 @@
     if (!s.over && !hasRoom(s.grid) && !canUseAny(s)) s.over = true;
   }
   function canUseAny(s) {
-    return (s.power.undo > 0 && !!s.prev) || s.power.smash > 0 || (s.power.crack > 0 && crackable(s.grid));
+    return (s.power.undo > 0 && !!s.prev) || (s.power.smash > 0 && s.grid.some(Boolean)) || (s.power.crack > 0 && crackable(s.grid));
   }
-  function crackable(g) {
+  // the eggs a Crack would crack: every egg touching a numbered disc (the client marks them before Crack fires)
+  function crackTargets(g) {
+    var out = [];
     for (var i = 0; i < W * H; i++) {
       if (!isEgg(g[i])) continue;
       var r = Math.floor(i / W), c = i % W;
-      if ((r > 0 && isNum(g[i - W])) || (r < H - 1 && isNum(g[i + W])) || (c > 0 && isNum(g[i - 1])) || (c < W - 1 && isNum(g[i + 1]))) return true;
+      if ((r > 0 && isNum(g[i - W])) || (r < H - 1 && isNum(g[i + W])) || (c > 0 && isNum(g[i - 1])) || (c < W - 1 && isNum(g[i + 1]))) out.push(i);
     }
-    return false;
+    return out;
   }
+  function crackable(g) { return crackTargets(g).length > 0; }
   function snapshot(s) { var c = clone(s); c.prev = null; return c; }
 
   function newGame(seed, mode) {
@@ -175,7 +178,7 @@
     var s = {
       v: 1, mode: mode, seed: seed >>> 0, grid: new Array(W * H).fill(0), next: 0, held: 0,
       score: 0, drops: 0, level: 1, left: dropsFor(mode, 1), over: false,
-      bestChain: 0, luckies: 0, used: 0,
+      bestChain: 0, luckies: 0, used: 0, out: [],
       power: Power.stock(POWERS, { undo: 1 }), prev: null,
     };
     // a random start: drop discs silently, settle every chain, score nothing
@@ -190,17 +193,22 @@
     return s;
   }
 
-  // Rising row: everything moves up one; a disc in the top row is pushed out and the run ends.
+  // Rising row: everything moves up one. If a disc sits in the top row the rise would push it out: the run ends
+  // and the well is left exactly as the player last saw it, with s.out naming the discs that would go (honest end).
   function rise(s, trace) {
-    var g = s.grid, out = false;
-    for (var c = 0; c < W; c++) if (g[c]) out = true;
+    var g = s.grid, lost = [];
+    for (var c = 0; c < W; c++) if (g[c]) lost.push(c);
+    if (lost.length) {
+      s.over = true; s.out = lost;
+      trace.push({ type: "rise", level: s.level, overflow: true, out: lost.slice(), points: 0, grid: g.slice() });
+      return true;
+    }
     for (var i = 0; i < W * (H - 1); i++) g[i] = g[i + W];
     for (var k = 0; k < W; k++) g[(H - 1) * W + k] = EGG;
     s.level++; s.left = dropsFor(s.mode, s.level);
-    var pts = out ? 0 : RULES.levelBonus * s.level; s.score += pts;
-    trace.push({ type: "rise", level: s.level, overflow: out, points: pts, grid: g.slice() });
-    if (out) s.over = true;
-    return out;
+    var pts = RULES.levelBonus * s.level; s.score += pts;
+    trace.push({ type: "rise", level: s.level, overflow: false, points: pts, grid: g.slice() });
+    return false;
   }
 
   // drop(state, col) -> {ok, state, trace, waves, popped, lucky, awarded, rose}
@@ -224,15 +232,18 @@
   }
 
   // use(state, name, cell) -> {ok, state, trace}. Undo restores the whole snapshot, stock included.
+  // Undo never crosses a decided result (family rule R1): once the run is over, nothing is used.
   function use(state, name, cell) {
     var fail = { ok: false, state: state, trace: [] };
-    if (POWERS.indexOf(name) < 0 || !state.power[name]) return fail;
+    if (POWERS.indexOf(name) < 0 || !state.power[name] || state.over) return fail;
     if (name === "undo") {
       if (!state.prev) return fail;
-      var p = clone(state.prev); p.power.undo = Math.max(0, p.power.undo - 1); // the rewind is paid for p.prev = null; p.used = state.used + 1;
+      var p = clone(state.prev);
+      p.power.undo = Math.max(0, p.power.undo - 1); // the rewind is paid for
+      p.prev = null;
+      p.used = state.used + 1;                      // and counted as a power-up used
       return { ok: true, state: p, trace: [] };
     }
-    if (state.over) return fail;
     var s = clone(state), trace = [], res = { waves: 0, popped: 0, awarded: [] };
     s.prev = snapshot(state);
     if (name === "smash") {
@@ -257,5 +268,5 @@
 
   return { W: W, H: H, EGG: EGG, CRACKED: CRACKED, POWERS: POWERS, MODES: MODES, RULES: RULES,
            newGame: newGame, drop: drop, use: use, findPops: findPops, landing: landing, hasRoom: hasRoom,
-           dropsFor: dropsFor, wavePoints: wavePoints, crackable: crackable, canUseAny: canUseAny };
+           dropsFor: dropsFor, wavePoints: wavePoints, crackable: crackable, crackTargets: crackTargets, canUseAny: canUseAny };
 });

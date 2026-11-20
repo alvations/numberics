@@ -16,7 +16,7 @@
   <header>
     <div class="brand">
       <h1>Fifteen</h1>
-      <p class="sub">Three numbers, fifteen exactly.</p>
+      <p class="sub"><a href="../">Numberics</a> &middot; Three numbers, fifteen exactly.</p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>You</span><b id="you">0</b></div>
@@ -34,9 +34,12 @@
     <div id="hash" class="hash" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div id="tiles" class="tiles"></div>
     <div id="over" class="over" hidden>
-      <h2 id="over-title">Match over</h2>
+      <h2 id="over-title">Round over</h2>
+      <div id="trio" class="trio" role="img"></div>
       <p id="over-text"></p>
-      <button id="again" class="btn primary" type="button">New match</button>
+      <p id="over-best" class="best" hidden></p>
+      <button id="next" class="btn primary" type="button">Next round</button>
+      <button id="again" class="btn primary" type="button" hidden>New game</button>
     </div>
   </div>
 
@@ -45,11 +48,11 @@
       <button id="v-numbers" class="btn" type="button" aria-pressed="true">Numbers</button>
       <button id="v-grid" class="btn" type="button" aria-pressed="false">Grid</button>
     </div>
-    <button id="next" class="btn primary" type="button" hidden>Next round</button>
-    <button id="new" class="btn" type="button">New match</button>
+    <button id="new" class="btn" type="button">New game</button>
   </div>
   <p class="how">Take turns claiming numbers. Hold any three that add up to 15 to win the round; best of five.
-     Each round you win earns a power-up. Keys: arrows and Enter, V switches view, 1-4 power-ups.</p>
+     A round you win earns a power-up, unless you used Erase or Double in it. Hard never slips, so you start
+     with an Erase there: use it well and you can always win. Keys: arrows and Enter, V switches view, 1-4 power-ups.</p>
   <nav id="games" class="games" data-root="../" data-current="fifteen" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

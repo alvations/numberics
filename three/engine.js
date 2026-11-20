@@ -11,6 +11,10 @@
  *   multiples of 3 (3-6-9, 12-9-6, either direction) collapses into one tile worth the sum, on the
  *   cell of its highest tile. It scores sum x run length and earns one random power-up. A collapse
  *   that lines up a new run flushes again (a cascade); every flush pays.
+ * - A power-up never earns one, not even indirectly (family rule R2). A run that Swap or Third lines up
+ *   collapses at once inside use(), scoring its points but paying no power-up; and the swipe right after
+ *   Smash, Swap or Third (state.free) pays no power-up for its flushes either, so a power-up cannot
+ *   open the way for a paid Flush. Undo restores the snapshot, flag included.
  * - The next tile is previewed and enters from the edge swiped away from, in a line that moved.
  * - Endless: the run ends only when no swipe moves anything and no power-up can act.
  * - Power-ups: Undo, Smash (remove a tile), Swap (two neighbouring tiles), Third (a 1 or 2 becomes a 3).
@@ -81,7 +85,7 @@
     function clone(s) {
       return { grid: s.grid.slice(), next: s.next, bag: s.bag.slice(), score: s.score, top: s.top,
                moves: s.moves, flushes: s.flushes, best: s.best, used: s.used, seed: s.seed, over: s.over,
-               power: Object.assign({}, s.power), prev: s.prev };
+               free: !!s.free, power: Object.assign({}, s.power), prev: s.prev };
     }
     function snapshot(s) { var c = clone(s); c.prev = null; return c; }
 
@@ -102,7 +106,7 @@
 
     function newGame(seed) {
       var s = { grid: new Array(SIZE * SIZE).fill(0), next: 0, bag: [], score: 0, top: 0, moves: 0, flushes: 0,
-                best: 0, used: 0, seed: seed >>> 0, over: false, power: { undo: 1, smash: 0, swap: 0, third: 0 }, prev: null };
+                best: 0, used: 0, seed: seed >>> 0, over: false, free: false, power: { undo: 1, smash: 0, swap: 0, third: 0 }, prev: null };
       var cells = []; for (var i = 0; i < SIZE * SIZE; i++) cells.push(i);
       for (var k = 0; k < R.start; k++) {
         var pick = Math.floor(roll(s) * cells.length), c = cells.splice(pick, 1)[0];
@@ -163,8 +167,9 @@
       return runs;
     }
 
-    // resolve flushes one at a time (longest, then biggest sum, then first found) until none remain
-    function resolveFlushes(s, out) {
+    // resolve flushes one at a time (longest, then biggest sum, then first found) until none remain.
+    // pay=false: a power-up made this run possible, so it scores but earns no power-up (R2).
+    function resolveFlushes(s, out, pay) {
       for (var guard = 0; guard < 16; guard++) {
         var runs = findRuns(s.grid);
         if (!runs.length) return;
@@ -179,8 +184,8 @@
         s.score += pts; s.flushes++;
         if (pts > s.best) s.best = pts;
         if (total > s.top) s.top = total;
-        var got = award(s);
-        out.push({ cells: run, values: values, at: at, value: total, points: pts, power: got, before: before });
+        var got = pay ? award(s) : null;
+        out.push({ cells: run, values: values, at: at, value: total, points: pts, power: got, paid: !!pay, before: before });
       }
     }
 
@@ -231,7 +236,8 @@
       s.prev = snapshot(state);
       s.score += res.gained; s.moves++;
       s.grid.forEach(function (v) { if (v > s.top) s.top = v; });
-      resolveFlushes(s, res.flushes);
+      var pay = !state.free; s.free = false; // the swipe right after a board-changing power-up pays no power-up
+      resolveFlushes(s, res.flushes, pay);
       // the next tile enters at the far edge of one moved line (the edge swiped away from)
       var entries = movedLines.map(function (idx) { return idx[SIZE - 1]; }).filter(function (c) { return !s.grid[c]; });
       if (entries.length) {
@@ -239,20 +245,22 @@
         s.grid[cell] = s.next; res.spawned = cell;
         if (s.next > s.top) s.top = s.next;
         s.next = draw(s);
-        resolveFlushes(s, res.flushes); // a dealt tile can complete a run too
+        resolveFlushes(s, res.flushes, pay); // a dealt tile can complete a run too
       }
       refreshOver(s);
       res.state = s; res.moved = true;
       return res;
     }
 
-    // power-ups: return {state, ok}; a bad target changes nothing. A power-up never earns one.
+    // power-ups: return {state, ok, flushes}; a bad target changes nothing. A power-up never earns one:
+    // a run it lines up collapses here unpaid, and it marks the next swipe as unpaid (s.free).
     function adjacent(a, b) {
       return (Math.abs(a - b) === SIZE) || (Math.abs(a - b) === 1 && Math.floor(a / SIZE) === Math.floor(b / SIZE));
     }
     function use(state, name, a, b) {
-      var fail = { state: state, ok: false };
-      if (POWERS.indexOf(name) < 0 || !state.power[name] || state.over && name !== "undo") return fail;
+      var fail = { state: state, ok: false, flushes: [] };
+      // R1: nothing, Undo included, crosses a finished run
+      if (POWERS.indexOf(name) < 0 || !state.power[name] || state.over) return fail;
       var s, n = SIZE * SIZE;
       if (name === "undo") {
         if (!state.prev) return fail;
@@ -267,9 +275,12 @@
           var t = g[a]; g[a] = g[b]; g[b] = t;
         }
         s.power[name]--; s.used++; s.prev = snapshot(state);
+        s.free = true;
+        var flushes = [];
+        resolveFlushes(s, flushes, false);
       }
       refreshOver(s);
-      return { state: s, ok: true };
+      return { state: s, ok: true, flushes: flushes || [] };
     }
 
     return { DIRS: DIRS, POWERS: POWERS, CAP: CAP, SIZE: SIZE, RULES: R, newGame: newGame, move: move, use: use,

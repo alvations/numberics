@@ -16,24 +16,26 @@
   <header>
     <div class="brand">
       <h1>Fibonacci</h1>
-      <p class="sub">2584, and then some. There is no top tile.</p>
+      <p class="sub"><a href="../">Numberics</a> &middot; 2584 with no top tile.</p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
       <div class="stat"><span>Best</span><b id="best">0</b></div>
-      <div class="stat"><span>Top tile</span><b id="top">-</b></div>
+      <div class="stat"><span>Top tile</span><b id="top" class="none">none</b></div>
     </div>
   </header>
 
   <section id="tray" class="tray" aria-label="Power-ups"></section>
   <p id="hint" class="hint" role="status"></p>
 
-  <div id="board" class="board" tabindex="0" aria-label="Game board. Arrow keys or swipe to slide tiles.">
+  <div id="board" class="board" tabindex="0" aria-label="Game board. Arrow keys or swipe to slide tiles. While a power-up is armed, arrows move the cursor and Enter picks.">
     <div id="cells" class="cells"></div>
     <div id="tiles" class="tiles"></div>
+    <div id="marks" class="tiles marks" aria-hidden="true"></div>
     <div id="over" class="over" hidden>
       <h2>No moves left</h2>
       <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
       <button id="again" class="btn primary" type="button">New game</button>
     </div>
   </div>

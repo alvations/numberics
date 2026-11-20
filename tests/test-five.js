@@ -14,6 +14,17 @@ function playRound(s, levels) { // levels: {p, c}; returns the finished state
   return s;
 }
 
+function playMatch(seed, level, bot) { // the computer at `level` against a player bot; returns the finished state
+  let s = F.newMatch(seed, level), g = 0;
+  while (!s.matchOver && g++ < 3000) s = s.roundOver ? F.nextRound(s) : F.aiTurn(s, s.turn === "c" ? level : bot).state;
+  return s;
+}
+const ALL = []; // every live position, as [a, b, c, d] in board order
+for (let k = 0; k < 625; k++) {
+  const t4 = [Math.floor(k / 125), Math.floor(k / 25) % 5, Math.floor(k / 5) % 5, k % 5];
+  if ((t4[0] || t4[1]) && (t4[2] || t4[3])) ALL.push(t4);
+}
+
 // ---- rules ----
 t("a new match: four tiles at 1, the computer opens, one Undo, best of five", () => {
   const s = F.newMatch(1, "easy");
@@ -106,19 +117,6 @@ t("Hard as the second seat wins every round from the start (power-up free)", () 
     eq(playRound(s, { c: "random", p: "hard" }).roundOver, "p", "seed " + seed);
   }
 });
-t("Easy never hands over an immediate win when a safe move exists", () => {
-  for (let seed = 1; seed <= 300; seed++) {
-    let s = Object.assign(F.newMatch(seed, "easy"), { turn: "c" }), g = 0;
-    while (!s.roundOver && g++ < 40) {
-      if (s.turn === "c") {
-        const safe = F.legalMoves(s).filter(m => { const r = F.play(s, m.from, m.to).state; return r.roundOver || !F.legalMoves(r).some(x => F.play(r, x.from, x.to).state.roundOver === "p"); });
-        const r = F.aiTurn(s, "easy"); const next = r.state;
-        if (safe.length && !next.roundOver) ok(!F.legalMoves(next).some(x => F.play(next, x.from, x.to).state.roundOver === "p"), "easy blundered at " + s.tiles);
-        s = next;
-      } else s = F.aiTurn(s, "random").state;
-    }
-  }
-});
 t("Medium takes a win in one when it has one", () => {
   const s = at([0, 2, 1, 4], "c"); // 4 onto 2 bursts the last player tile? 2+4 = 6 bursts it
   eq(F.aiTurn(s, "medium").state.roundOver, "c");
@@ -127,6 +125,59 @@ t("measured: stronger levels beat a random player more often", () => {
   const rate = (lv) => { let w = 0; for (let i = 0; i < 400; i++) { const s = F.newMatch(i * 7919 + 1, lv === "hard" ? "hard" : "easy"); if (playRound(s, { c: lv, p: "random" }).roundOver === "c") w++; } return w / 400; };
   const r = { easy: rate("easy"), medium: rate("medium"), hard: rate("hard") };
   ok(r.easy > 0.5 && r.medium > r.easy && r.hard > r.medium && r.hard > 0.9, JSON.stringify(r));
+});
+t("R4: perfect play by the player wins every match on every level, 3-0, with no power-ups", () => {
+  for (const lv of F.LEVELS) for (let seed = 1; seed <= 150; seed++) {
+    const s = playMatch(seed * 31 + 7, lv, "hard");
+    eq(s.matchOver, "p", lv + " seed " + seed); eq(s.wins, { p: 3, c: 0 }, lv + " seed " + seed); eq(s.draws, 0);
+  }
+});
+t("R4: the computer never plays a power-up on any level, even holding a full stock (an old save)", () => {
+  const full = () => ({ undo: 9, split: 9, shield: 9, nudge: 9 });
+  for (const lv of F.LEVELS) for (const t4 of ALL) {
+    const s = Object.assign(F.newMatch(t4.join("") * 1, lv), { tiles: t4.slice(), turn: "c" }); s.power.c = full();
+    const r = F.aiPlan(s);
+    ok(r.plan.length === 1 && (r.plan[0].type === "move" || r.plan[0].type === "pass"), lv + " " + t4 + " " + JSON.stringify(r.plan));
+    for (const name of ["split", "shield", "nudge"]) for (let i = 0; i < 4; i++) ok(!F.canUse(s, name, i, 1) && !F.use(s, name, i, 1).ok, "computer " + name);
+  }
+});
+t("R4: the computer never earns a power-up, on any level", () => {
+  for (const lv of F.LEVELS) for (let seed = 0; seed < 30; seed++) {
+    const r = F.play(Object.assign(at([1, 2, 4, 1], "c", lv), { seed }), 2, 1);
+    ok(r.burst && !r.awarded, lv); eq(r.state.power.c, { undo: 0, split: 0, shield: 0, nudge: 0 });
+    let m = playMatch(seed + 99, lv, "random"); eq(m.power.c, { undo: 0, split: 0, shield: 0, nudge: 0 }, lv + " match");
+  }
+});
+t("aiPlan never touches the given state; the advanced seed comes back in a copy", () => {
+  const s = F.newMatch(5, "easy"), before = JSON.stringify(s), r = F.aiPlan(s);
+  eq(JSON.stringify(s), before); ok(r.state && r.state !== s && r.state.seed === r.seed && r.seed !== s.seed);
+  eq(F.apply(r.state, r.plan[0]).ok, true);
+});
+t("Easy takes a win in one when it has one, but does not always look for the player's reply", () => {
+  for (let seed = 0; seed < 40; seed++) eq(F.aiTurn(Object.assign(at([0, 2, 1, 4], "c", "easy"), { seed }), "easy").state.roundOver, "c");
+  let blunders = 0, chances = 0;
+  for (const t4 of ALL) {
+    const s = Object.assign(F.newMatch(t4.join("") * 3, "easy"), { tiles: t4.slice(), turn: "c" });
+    const ms = F.legalMoves(s), handsWin = (m) => { const r = F.play(s, m.from, m.to).state; return !r.roundOver && F.legalMoves(r).some(x => F.play(r, x.from, x.to).state.roundOver === "p"); };
+    if (!ms.some(handsWin) || ms.every(handsWin) || ms.some(m => F.play(s, m.from, m.to).state.roundOver === "c")) continue;
+    chances++; const m = F.aiPlan(s).plan[0]; if (handsWin(m)) blunders++;
+  }
+  ok(chances > 50 && blunders / chances > 0.15 && blunders / chances < 0.8, blunders + "/" + chances);
+});
+t("Hard from a lost position sets a trap: it beats a greedy player every time and a random one almost always", () => {
+  let gw = 0, rw = 0, rr = 0;
+  for (let i = 0; i < 200; i++) {
+    if (playMatch(i * 7919 + 13, "hard", "greedy").matchOver === "p") gw++;
+    const m = playMatch(i * 7919 + 13, "hard", "random"); rw += m.wins.p; rr += m.wins.p + m.wins.c;
+  }
+  ok(gw <= 4, "greedy won " + gw + "/200"); ok(rw / rr < 0.08, "random rounds " + rw + "/" + rr);
+});
+t("measured: a greedy player wins most Easy matches; each level is harder than the one below", () => {
+  const N = 400, rate = (lv, bot) => { let w = 0, r = 0, all = 0; for (let i = 0; i < N; i++) { const s = playMatch(i * 7919 + 13, lv, bot); if (s.matchOver === "p") w++; r += s.wins.p; all += s.wins.p + s.wins.c; } return { match: w / N, round: r / all }; };
+  const g = { easy: rate("easy", "greedy"), medium: rate("medium", "greedy"), hard: rate("hard", "greedy") };
+  ok(g.easy.match >= 0.75, "greedy vs easy " + JSON.stringify(g)); ok(g.medium.match < g.easy.match && g.hard.match <= g.medium.match, JSON.stringify(g));
+  const m = { easy: rate("easy", "medium"), medium: rate("medium", "medium"), hard: rate("hard", "medium") };
+  ok(m.easy.round > m.medium.round && m.medium.round > m.hard.round && m.hard.round > 0.05, "medium bot " + JSON.stringify(m));
 });
 t("deterministic: same seed, same match", () => {
   const run = () => { let s = F.newMatch(42, "hard"); for (let i = 0; i < 3; i++) { s = playRound(s, { c: "hard", p: "random" }); s = F.nextRound(s); } return JSON.stringify(s); };
@@ -139,13 +190,6 @@ t("bursting a computer tile earns the player one power-up; bursting your own doe
   const total = (p) => p.undo + p.split + p.shield + p.nudge;
   eq(total(r.state.power.p), 2);
   const q = F.play(at([4, 1, 2, 1], "p"), 0, 1); ok(q.burst && !q.awarded); eq(total(q.state.power.p), 1);
-});
-t("the computer earns only on Hard, and never an Undo", () => {
-  const e = F.play(at([1, 2, 4, 1], "c", "medium"), 2, 1); ok(e.burst && !e.awarded);
-  for (let seed = 0; seed < 50; seed++) {
-    const h = F.play(Object.assign(at([1, 2, 4, 1], "c", "hard"), { seed }), 2, 1);
-    ok(h.awarded && h.awarded !== "undo", "hard award " + h.awarded);
-  }
 });
 t("stock caps at 9", () => {
   const s = at([4, 1, 2, 1], "p", "medium", { power: { p: { undo: 9, split: 9, shield: 9, nudge: 9 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
@@ -205,29 +249,32 @@ t("Nudge: +1 on their tile (a 4 bursts and does not earn), -1 on yours, never be
   ok(!F.use(at([1, 1, 0, 1], "p", "medium", { power: pw() }), "nudge", 2).ok, "not a burst tile");
   eq(F.use(at([1, 1, 0, 4], "p", "medium", { power: pw() }), "nudge", 3).state.roundOver, "p");
 });
-t("Hard spends a power-up when it turns a lost position into a win", () => {
-  // computer to move on [3, 1, 1, 1]: table says lose; a Nudge +1 on... check Hard finds a winning power play if one exists
-  let found = 0;
-  for (let k = 0; k < 625; k++) {
-    const t4 = [Math.floor(k / 125), Math.floor(k / 25) % 5, Math.floor(k / 5) % 5, k % 5];
-    if ((!t4[0] && !t4[1]) || (!t4[2] && !t4[3]) || F.lookup(t4, "c").result !== "lose") continue;
-    const s = Object.assign(F.newMatch(k, "hard"), { tiles: t4.slice(), turn: "c" });
-    s.power.c = { undo: 0, split: 1, shield: 1, nudge: 1 };
-    const plan = F.aiPlan(s).plan;
-    if (plan[0].type === "power") found++;
-    const free = Object.assign(F.newMatch(k, "hard"), { tiles: t4.slice(), turn: "c" });
-    ok(F.aiPlan(free).plan[0].type !== "power");
-  }
-  ok(found > 20, "power plays " + found);
-  // and never wastes one when a free move already wins
-  const w = Object.assign(F.newMatch(3, "hard"), { tiles: [0, 1, 4, 0], turn: "c" }); w.power.c = { undo: 0, split: 2, shield: 2, nudge: 2 };
-  eq(F.aiPlan(w).plan[0].type, "move");
+t("R4: the burst that ends the match earns nothing (the stock would be thrown away)", () => {
+  const r = F.play(at([4, 0, 0, 1], "p", "medium", { wins: { p: 2, c: 0 } }), 0, 3);
+  ok(r.burst && r.state.matchOver === "p" && !r.awarded); eq(r.state.power.p, { undo: 1, split: 0, shield: 0, nudge: 0 });
+  const k = F.play(at([4, 0, 0, 1], "p"), 0, 3); ok(k.state.roundOver === "p" && !k.state.matchOver && k.awarded, "a round win still pays");
 });
-t("draw rule: a position repeated 3 times draws the round (only power-up play can cycle)", () => {
-  const pw = { p: { undo: 0, split: 9, shield: 0, nudge: 0 }, c: { undo: 0, split: 9, shield: 0, nudge: 0 } };
-  let s = at([3, 1, 3, 1], "p", "medium", { power: JSON.parse(JSON.stringify(pw)) }); s.seen = {}; s.seen[F.key(s)] = 1;
-  const seq = [["p", 0], ["c", 2], ["p", 1], ["c", 3]]; // 31 31 -> 22 31 -> 22 22 -> 31 22 -> 31 31
-  for (let i = 0; i < 8 && !s.roundOver; i++) { const [, a] = seq[i % 4]; s = F.use(s, "split", a).state; }
+t("R1: Undo is refused once a round is decided (won, lost, drawn), and after the next round starts", () => {
+  const pw = { p: { undo: 5, split: 0, shield: 0, nudge: 0 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } };
+  const won = F.play(at([1, 0, 0, 4], "p", "medium", { power: pw }), 0, 3).state; eq(won.roundOver, "p"); ok(won.prev, "a snapshot exists");
+  ok(!F.canUse(won, "undo") && !F.use(won, "undo").ok, "won round");
+  let lost = F.play(at([4, 0, 1, 2], "p", "medium", { power: pw }), 0, 2).state; // your 4 bursts their 1; their 2 bursts your 4
+  lost = F.aiTurn(lost, "hard").state; eq(lost.roundOver, "c"); ok(lost.prev);
+  ok(!F.canUse(lost, "undo") && !F.use(lost, "undo").ok, "lost round");
+  let match = F.play(at([4, 0, 1, 2], "p", "medium", { power: pw, wins: { p: 0, c: 2 } }), 0, 2).state;
+  match = F.aiTurn(match, "hard").state; eq(match.matchOver, "c"); ok(!F.canUse(match, "undo"), "lost match");
+  const drawn = F.play(at([2, 1, 2, 1], "p", "medium", { power: pw, quiet: 39 }), 1, 0).state; eq(drawn.roundOver, "draw");
+  ok(!F.canUse(drawn, "undo"), "drawn round");
+  ok(!F.canUse(F.nextRound(lost), "undo"), "new round");
+});
+t("draw rule: a position repeated 3 times draws the round (only the player's power-ups can cycle)", () => {
+  // your last tile is shielded and the computer has one tile, so it must pass; Shield + Nudge up and down repeats
+  const pw = { p: { undo: 0, split: 0, shield: 9, nudge: 9 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } };
+  let s = at([2, 0, 0, 1], "p", "medium", { power: pw }); s.seen = {}; s.seen[F.key(s)] = 1;
+  for (let i = 0; i < 8 && !s.roundOver; i++) {
+    if (s.turn === "p") { s = F.use(s, "shield", 0).state; s = F.use(s, "nudge", 0, i % 4 === 0 ? 1 : -1).state; }
+    else { ok(F.mustPass(s)); s = F.pass(s).state; }
+  }
   eq(s.roundOver, "draw"); eq(s.draws, 1); eq(s.wins, { p: 0, c: 0 });
 });
 t("draw rule: 40 turns without a burst", () => {

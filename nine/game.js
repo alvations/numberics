@@ -7,11 +7,12 @@
   var store = K.store("numberics_nine_v1");
   var CPU_MS = 650;               // the computer's think time: a pause, not motion, so reduced motion keeps it
   var DEFS = [
-    { id: "undo", label: "Undo", title: "Take back your last turn" },
-    { id: "add", label: "Add", title: "+1 to any tile, never past 9, then take as usual" },
-    { id: "pass", label: "Pass", title: "Skip your turn once" },
-    { id: "peek", label: "Peek", title: "Show one winning move, if there is one" },
+    { id: "undo", label: "Undo", desc: "Take back your last turn." },
+    { id: "add", label: "Add", desc: "Add 1 to any tile (never past 9), then take as usual." },
+    { id: "pass", label: "Pass", desc: "Skip your turn once." },
+    { id: "peek", label: "Peek", desc: "Show one winning move, if there is one." },
   ];
+  var EARN = "Win a round to earn one.";
   var NAME = { undo: "Undo", add: "Add", pass: "Pass", peek: "Peek" };
 
   // ---- load and validate ----
@@ -30,7 +31,7 @@
   var best = saved.best && typeof saved.best === "object" ? saved.best : {};
   var state = validState(saved.state) ? saved.state : N.newGame(K.freshSeed(), prefs);
 
-  var sel = null, amount = 1, peekMark = null, targeting = null, timer = null, cpuMark = null, note = "";
+  var sel = null, amount = 1, peekMark = null, targeting = null, timer = null, cpuMark = null, note = "", info = "", newBest = false;
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), heapsEl = $("heaps");
 
@@ -81,32 +82,37 @@
     return last.added ? (who === "you" ? "You" : "Computer") + " added 1, then " + s.charAt(0).toLowerCase() + s.slice(1) : s;
   }
   function hintText() {
+    if (info) return info;  // a tap on a tray button that cannot act explains it (R5)
     if (targeting) return "Tap a tile to add 1 (Esc cancels).";
     if (!live()) return "";
     if (state.turn === "cpu") return "Computer is thinking...";
     if (note) return note;
     if (state.last && state.last.who === "cpu") return moveText(state.last, "cpu") + " Your turn.";
-    return "Your turn: lower one tile.";
+    return state.misere ? "Your turn. Misere: the last take loses." : "Your turn: lower one tile.";
+  }
+  // Why a tray button cannot act now (shown on tap); false when it can, or when it is just empty (then the
+  // tray says how to earn one).
+  function why(id) {
+    if (!state.power.you[id]) return false;
+    if (!live()) return "Not after a round ends.";
+    if (id === "undo") return N.canUndo(state) ? false : "Nothing to take back yet this round.";
+    if (state.turn !== "you") return "Wait for your turn.";
+    if (id === "pass" && !N.canPass(state)) return "Not right after the computer passes.";
+    if (id === "add" && state.added) return "Once per turn.";
+    return false;
   }
   function render() {
     drawHeaps();
     $("match").textContent = state.score.you + "-" + state.score.cpu;
     $("tiles").textContent = state.level;
-    $("best").textContent = best[bestKey(state)] || "-";
-    $("mode").textContent = state.misere ? "Misere: the last take loses." : "Take the last tile.";
+    var bv = best[bestKey(state)], be = $("best");
+    be.textContent = bv || "none"; be.classList.toggle("none", !bv);
     Array.prototype.forEach.call(document.querySelectorAll("#diff button"), function (b) {
       b.setAttribute("aria-pressed", String(b.getAttribute("data-diff") === state.diff));
     });
     P.tray($("tray"), DEFS, state.power.you, {
-      armed: targeting,
-      disabled: function (id) {
-        if (id === "undo") return !N.canUndo(state);
-        if (!myTurn()) return true;
-        if (id === "pass") return !N.canPass(state);
-        if (id === "add") return !!state.added;
-        return false;
-      },
-      onUse: activate,
+      armed: targeting, earn: EARN, disabled: why, onUse: activate,
+      onInfo: function (id, t) { info = t; $("hint").textContent = info; },
     });
     $("hint").textContent = hintText();
     boardEl.classList.toggle("targeting", !!targeting);
@@ -120,36 +126,50 @@
       am.appendChild(document.createTextNode(" from the " + state.heaps[sel]));
     } else am.textContent = myTurn() ? "Pick a tile" : "Wait";
     // learn line
+    // Learn: the goal in plain words, then the live nim-sum, which Easy and Medium show and Hard does not
     var ln = $("learn"); ln.hidden = !prefs.learn; ln.textContent = "";
     if (prefs.learn) {
-      var x = N.nimSum(state.heaps);
-      ln.appendChild(document.createTextNode(state.heaps.filter(Boolean).map(bin).join(" ^ ") + " = "));
-      var xb = document.createElement("b"); xb.textContent = bin(x) + " (" + x + ")"; ln.appendChild(xb);
-      ln.insertBefore(document.createTextNode("Nim-sum "), ln.firstChild);
+      var goal = document.createElement("span"); goal.className = "goal";
+      goal.textContent = "To win, leave a nim-sum of 0 after your move. Nim-sum: add the binary columns, dropping every carry.";
+      ln.appendChild(goal);
+      var sum = document.createElement("span"); sum.className = "sum";
+      if (state.diff === "hard") {
+        sum.className += " off"; sum.textContent = "Hard shows no live nim-sum (Easy and Medium do). Work it out from the binary.";
+      } else {
+        var x = N.nimSum(state.heaps);
+        sum.appendChild(document.createTextNode("Nim-sum " + state.heaps.filter(Boolean).map(bin).join(" ^ ") + " = "));
+        var xb = document.createElement("b"); xb.textContent = bin(x) + " (" + x + ")"; sum.appendChild(xb);
+      }
+      ln.appendChild(sum);
     }
     $("learn-btn").setAttribute("aria-pressed", String(prefs.learn));
     var mb = $("misere"); mb.hidden = !prefs.unlocked;
     mb.setAttribute("aria-pressed", String(state.misere));
     drawOver();
   }
+  // End screens (R8): one-line headline, one summary line "<result> · <tally>", a note, a gold button.
+  // A decided round or match is final: Undo never crosses it (R1), so no screen offers it.
   function drawOver() {
     var over = $("over"); over.hidden = live();
     if (live()) return;
-    var sc = state.score.you + " : " + state.score.cpu, aw = state.award && state.award.who === "you" ? "  +" + NAME[state.award.name] : "";
-    var undoNote = N.canUndo(state) && (state.roundOver === "cpu") ? "Undo can take your last turn back." : "";
+    var sc = state.score.you + "-" + state.score.cpu;
+    var aw = state.award && state.award.who === "you" ? "+1 " + NAME[state.award.name] + "." : "";
+    var bv = best[bestKey(state)];
+    $("over-best").hidden = !(state.matchOver === "you" && newBest);
     if (state.matchOver === "you") {
       $("over-title").textContent = "Match won";
-      $("over-text").textContent = "You " + sc + " Computer on " + state.level + " tiles." + aw;
-      $("over-note").textContent = state.level < N.MAX_TILES ? "Next match: " + (state.level + 1) + " tiles." : "Nine tiles again: the top level.";
+      $("over-text").textContent = "Won " + sc + " · " + state.level + " tiles";
+      $("over-note").textContent = (aw ? aw + " " : "") + (state.level < N.MAX_TILES ? "Next match: " + (state.level + 1) + " tiles." : "Nine tiles again: the top level.");
       $("again").textContent = "Next match";
     } else if (state.matchOver === "cpu") {
       $("over-title").textContent = "Run over";
-      $("over-text").textContent = "Lost the match " + sc + " on " + state.level + " tiles. Best: " + (best[bestKey(state)] || "-") + ".";
-      $("over-note").textContent = undoNote; $("again").textContent = "New run";
+      $("over-text").textContent = "Lost " + sc + " · " + state.level + " tiles";
+      $("over-note").textContent = "Best: " + (bv ? bv + " tiles" : "none") + ".";
+      $("again").textContent = "New game";
     } else {
       $("over-title").textContent = state.roundOver === "you" ? "Round won" : "Round lost";
-      $("over-text").textContent = "You " + sc + " Computer." + aw;
-      $("over-note").textContent = undoNote || (state.roundOver === "cpu" ? moveText(state.last, "cpu") : "");
+      $("over-text").textContent = "You " + sc + " Computer · first to " + N.WIN_ROUNDS;
+      $("over-note").textContent = state.roundOver === "you" ? aw : moveText(state.last, "cpu");
       $("again").textContent = "Next round";
     }
   }
@@ -158,8 +178,10 @@
   function clearPick() { sel = null; amount = 1; peekMark = null; }
   function after(prevState) {
     // bookkeeping after any state change: rounds won, best level, unlocks, the computer's turn
+    info = "";
+    if (!state.matchOver) newBest = false;
     if (state.matchOver === "you" && prevState.matchOver !== "you") {
-      var k = bestKey(state); best[k] = Math.max(best[k] || 0, state.level);
+      var k = bestKey(state); newBest = state.level > (best[k] || 0); best[k] = Math.max(best[k] || 0, state.level);
       if (!prefs.unlocked) { prefs.unlocked = true; K.toast("Misere unlocked: the last take loses."); }
     }
     persist(); render(); schedule();
@@ -176,7 +198,7 @@
       cpuMark = null; note = "";
       for (var i = 0; i < beforeHeaps.length; i++) if (beforeHeaps[i] !== state.heaps[i]) cpuMark = i;
       var cpuPow = state.power.cpu, usedPow = N.POWERS.filter(function (p) { return cpuPow[p] < before.power.cpu[p]; });
-      if (usedPow.length) K.toast("Computer used " + usedPow.map(function (p) { return NAME[p]; }).join(" and "));
+      if (usedPow.length) K.toast("Computer used " + usedPow.map(function (p) { return NAME[p]; }).join(" and "), "bad");
       after(before);
     }, CPU_MS);
   }
@@ -190,6 +212,7 @@
   function select(i, amt) {
     if (!myTurn() || !state.heaps[i]) return;
     if (sel !== i) peekMark = null;
+    info = "";
     sel = i; amount = Math.max(1, Math.min(state.heaps[i], amt || 1));
     render();
   }
@@ -197,6 +220,7 @@
 
   // ---- power-ups ----
   function activate(name) {
+    info = "";
     if (targeting === name) { targeting = null; return render(); }
     targeting = null;
     var before = state, r;
@@ -204,12 +228,12 @@
       r = N.use(state, "undo"); if (!r.ok) return render();
       clearTimeout(timer); timer = null;
       state = r.state; clearPick(); cpuMark = null; note = "Rewound to the start of your turn.";
-      K.toast("Rewound your last turn"); return after(before);
+      return after(before); // one channel: the hint line says it (R7)
     }
     if (!myTurn() || !state.power.you[name]) return render();
     if (name === "add") { if (state.added) return render(); targeting = "add"; return render(); }
     if (name === "pass") {
-      r = N.use(state, "pass"); if (!r.ok) { K.toast("You cannot pass right after a pass"); return render(); }
+      r = N.use(state, "pass"); if (!r.ok) return render(); // the tray explains why (Not right after a pass)
       state = r.state; clearPick(); note = ""; K.toast("Passed"); return after(before);
     }
     if (name === "peek") {
@@ -224,7 +248,7 @@
   }
   function addTo(i) {
     var before = state, r = N.use(state, "add", i);
-    if (!r.ok) { K.toast(state.heaps[i] >= N.MAX ? "Nine is the cap" : "Pick a live tile"); return; }
+    if (!r.ok) { K.toast(state.heaps[i] >= N.MAX ? "Nine is the cap" : "Pick a live tile", "bad"); return; }
     state = r.state; targeting = null; clearPick(); cpuMark = i; note = "Added 1. Now take from any tile.";
     after(before);
   }
@@ -255,10 +279,10 @@
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = (e.target && e.target.tagName) || "";
-    if (e.key === "Escape") { targeting = null; clearPick(); return render(); }
+    if (e.key === "Escape") { targeting = null; info = ""; clearPick(); return render(); }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
-    if (pi >= 0) return activate(N.POWERS[pi]);
-    if (e.key === "u" || e.key === "U") return activate("undo");
+    if (e.key === "u" || e.key === "U") pi = 0;
+    if (pi >= 0) { var tb = $("tray").children[pi]; if (tb) tb.click(); return; } // same path as a tap (R5)
     if (e.key === "l" || e.key === "L") return toggleLearn();
     if (!live()) { if ((e.key === "Enter" || e.key === " ") && tag !== "BUTTON") { e.preventDefault(); proceed(); } return; }
     var ix = liveIdx(); if (!ix.length) return;
@@ -279,15 +303,17 @@
   });
 
   // ---- settings: difficulty, misere, learn, new game ----
+  // Destructive switches ask first with the same two-step "Sure?" as New game (R10): the button itself says it.
   var armed = null;
-  function confirmNew(key, msg, go) {
-    var risky = state.ply > 0 || state.level > N.MIN_TILES || state.round > 1;
-    if (risky && !(armed && armed.key === key && !state.matchOver)) {
-      if (state.matchOver) return go();
-      clearTimeout(armed && armed.t); armed = { key: key, t: setTimeout(function () { armed = null; }, 3000) };
-      return K.toast(msg);
+  function disarm() { if (armed) { clearTimeout(armed.t); armed.btn.textContent = armed.label; armed = null; } }
+  function confirmNew(btn, go) {
+    var risky = !state.matchOver && (state.ply > 0 || state.level > N.MIN_TILES || state.round > 1);
+    if (risky && !(armed && armed.btn === btn)) {
+      disarm();
+      armed = { btn: btn, label: btn.textContent, t: setTimeout(disarm, 3000) };
+      btn.textContent = "Sure?"; return;
     }
-    clearTimeout(armed && armed.t); armed = null; go();
+    disarm(); go();
   }
   function restart() {
     clearTimeout(timer); timer = null; clearPick(); cpuMark = null; note = ""; targeting = null;
@@ -296,13 +322,13 @@
   Array.prototype.forEach.call(document.querySelectorAll("#diff button"), function (b) {
     b.addEventListener("click", function () {
       var d = b.getAttribute("data-diff"); if (d === state.diff) return;
-      confirmNew("diff-" + d, "Tap again: new run on " + b.textContent, function () { prefs.diff = d; restart(); });
+      confirmNew(b, function () { prefs.diff = d; restart(); });
     });
   });
   $("misere").addEventListener("click", function () {
     if (!prefs.unlocked) return;
     var want = !state.misere;
-    confirmNew("misere-" + want, "Tap again: new run, Misere " + (want ? "on" : "off"), function () { prefs.misere = want; restart(); });
+    confirmNew($("misere"), function () { prefs.misere = want; restart(); });
   });
   function toggleLearn() { prefs.learn = !prefs.learn; persist(); render(); }
   $("learn-btn").addEventListener("click", toggleLearn);
@@ -313,7 +339,7 @@
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
-    clearTimeout(timer); timer = null; targeting = null; note = "";
+    clearTimeout(timer); timer = null; targeting = null; note = ""; info = "";
     var s = N.newGame(2026, { diff: "medium", level: 7 });
     s.heaps = [7, 0, 5, 9, 3, 6, 2]; s.round = 3; s.score = { you: 1, cpu: 1 }; s.ply = 14;
     s.power.you = { undo: 1, add: 1, pass: 0, peek: 2 };
@@ -323,7 +349,7 @@
   };
   window.__nine = {
     get state() { return state; },
-    set state(s) { clearTimeout(timer); timer = null; state = s; clearPick(); cpuMark = null; note = ""; targeting = null; render(); schedule(); },
+    set state(s) { clearTimeout(timer); timer = null; state = s; clearPick(); cpuMark = null; note = ""; info = ""; targeting = null; render(); schedule(); },
     get prefs() { return prefs; },
     render: render,
   };

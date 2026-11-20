@@ -13,6 +13,9 @@
  * Without power-ups every move makes a tile bigger or bursts it, so play cannot cycle and there are no draws.
  * Split and Nudge can undo progress, so a safety draw rule exists (same position 3 times, or 40 turns without
  * a burst); it can only ever trigger in power-up play.
+ * Family rule R4: the computer never earns or uses a power-up, so perfect play by the player wins every match on
+ * every level; the levels differ only in how often the computer punishes a mistake. Undo never crosses a decided
+ * round (R1).
  *
  * All randomness comes from state.seed (mulberry32), so a match is a pure function of its seed and inputs.
  */
@@ -24,7 +27,6 @@
 
   var BURST = 5, ROUNDS_TO_WIN = 3, REPEAT_DRAW = 3, QUIET_DRAW = 40;
   var POWERS = ["undo", "split", "shield", "nudge"];
-  var CPU_POWERS = ["split", "shield", "nudge"]; // the computer never rewinds, so it is never handed an Undo
   var LEVELS = ["easy", "medium", "hard"];
   var OWN = { p: [0, 1], c: [2, 3] };
   var OTHER = { p: "c", c: "p" };
@@ -171,10 +173,11 @@
     if (winner === "draw") s.draws++; else s.wins[winner]++;
     if (s.wins.p >= ROUNDS_TO_WIN) s.matchOver = "p"; else if (s.wins.c >= ROUNDS_TO_WIN) s.matchOver = "c";
   }
-  function earns(s, who) { return who === "p" || s.level === "hard"; }
-  function award(s, who) {
+  // only the player earns (R4), and never on the burst that ends the match (the stock would be thrown away)
+  function earns(s, who) { return who === "p" && !s.matchOver; }
+  function award(s) {
     var r = rand(s.seed); s.seed = r[1];
-    return Power.award(s.power[who], who === "p" ? POWERS : CPU_POWERS, r[0]);
+    return Power.award(s.power.p, POWERS, r[0]);
   }
   function fail(state, why) { return { ok: false, state: state, why: why }; }
 
@@ -187,9 +190,9 @@
     if (who === "p" && !s.midTurn) s.prev = snap(state);
     var v = s.tiles[to] + s.tiles[from], burst = v >= BURST, awarded = null;
     s.tiles[to] = burst ? 0 : v;
-    if (burst && side(to) !== who && earns(s, who)) awarded = award(s, who);
     s.last = { kind: "add", side: who, from: from, to: to, burst: burst, value: v };
     endTurn(s, who, burst);
+    if (burst && side(to) !== who && earns(s, who)) awarded = award(s);
     return { ok: true, state: s, burst: burst, awarded: awarded };
   }
   // no legal move (every target is shielded): the turn passes
@@ -204,10 +207,11 @@
 
   // ---- power-ups (section 0a). Split and Nudge ARE the turn; Shield goes with the turn (then you still move);
   // Undo (yours only) takes back your last turn and the computer's reply. A power-up never earns one.
+  // Power-ups are the player's alone (R4): the computer's turn can never use one.
   function canUse(s, name, arg, dir) {
     var who = s.turn;
-    if (name === "undo") return !!s.prev && s.power.p.undo > 0 && s.roundOver !== "p";
-    if (s.roundOver || !s.power[who][name]) return false;
+    if (name === "undo") return !!s.prev && s.power.p.undo > 0 && !s.roundOver; // R1: never across a decided round
+    if (who !== "p" || s.roundOver || !s.power.p[name]) return false;
     var mine = OWN[who];
     if (name === "split") {
       if (mine.indexOf(arg) < 0 || !s.tiles[arg]) return false;
@@ -265,11 +269,32 @@
     var s = { tiles: t, shield: null };
     return movesFor(s, who).some(function (m) { return deadSide(after(s, m), OTHER[who]); });
   }
-  // Easy: a random legal move that does not let the other side win straight away (if one exists)
+  // Easy: takes a win in one when it sees it; otherwise a random legal move, and only EASY_CARE of the time does it
+  // check that the move does not hand the other side a win straight away. Tuned so a greedy player wins most
+  // Easy matches (measured in tests/test-five.js: about 86% of matches).
+  var EASY_CARE = 0.25;
   function easyMove(s, who) {
     var ms = movesFor(s, who), opp = OTHER[who];
-    var safe = ms.filter(function (m) { var t = after(s, m); return deadSide(t, opp) || !winsNow(t, opp); });
+    var win = ms.filter(function (m) { return deadSide(after(s, m), opp); });
+    if (win.length) return { list: win };
+    var r = rand(s.seed); s.seed = r[1];
+    if (r[0] >= EASY_CARE) return { list: ms };
+    var safe = ms.filter(function (m) { return !winsNow(after(s, m), opp); });
     return { list: safe.length ? safe : ms };
+  }
+  // Greedy (a bot for measuring the levels, never the computer): burst one of the other side's tiles if you can,
+  // otherwise add your biggest tile onto their biggest. This is the "sensible greedy" player the levels are tuned
+  // against (the cold reviewer's own words: "burst theirs if I can, otherwise hit the big one").
+  function greedyMove(s, who) {
+    var ms = movesFor(s, who), opp = OTHER[who];
+    var win = ms.filter(function (m) { return deadSide(after(s, m), opp); });
+    if (win.length) return { list: win };
+    var theirs = ms.filter(function (m) { return side(m.to) === opp; });
+    var burst = theirs.filter(function (m) { return !after(s, m)[m.to]; });
+    if (burst.length) return { list: burst };
+    if (!theirs.length) return { list: ms };
+    var big = Math.max.apply(null, theirs.map(function (m) { return s.tiles[m.to] * 8 + s.tiles[m.from]; }));
+    return { list: theirs.filter(function (m) { return s.tiles[m.to] * 8 + s.tiles[m.from] === big; }) };
   }
   // Medium: 3 turns ahead (negamax), a simple count of live points at the horizon
   function heur(t, who) {
@@ -305,58 +330,43 @@
     var l = lookup(t, toMove), v = l.result === "win" ? 1000 - l.dist : l.result === "lose" ? -1000 + l.dist : 0;
     return toMove === me ? v : -v;
   }
-  // value after `me` finishes a turn on tiles t, with an optional shield of mine guarding against the reply
-  function afterTurn(t, me, sh) {
-    if (deadSide(t, OTHER[me])) return 1000;
-    if (!sh) return tval(t, OTHER[me], me);
-    var opp = OTHER[me], s = { tiles: t, shield: sh }, ms = movesFor(s, opp);
-    if (!ms.length) return tval(t, me, me) - 1; // the reply must pass
-    var worst = Infinity;
-    ms.forEach(function (m) { worst = Math.min(worst, tval(after(s, m), me, me)); });
-    return worst;
+  // Hard: perfect play from the solved table, never a power-up (R4). From a won position it takes the fastest win.
+  // From a lost one (the start of every round, when the player defends well) it sets the best trap: the move that
+  // leaves the player the largest share of replies that throw the round away, then the longest defence.
+  function trapShare(t, me) { // share of the other side's replies on tiles t that hand `me` a won position
+    var opp = OTHER[me], s = { tiles: t, shield: null }, ms = movesFor(s, opp), bad = 0;
+    if (!ms.length) return 0;
+    ms.forEach(function (m) { var n = after(s, m); if (!deadSide(n, me) && tval(n, me, me) > 0) bad++; });
+    return bad / ms.length;
   }
-  // Hard: perfect play from the solved table; spends a power-up only when it turns the result around
   function hardPlan(s, who) {
-    var opts = [], st = s.power[who];
-    movesFor(s, who).forEach(function (m) { opts.push({ v: afterTurn(after(s, m), who, null), plan: [{ type: "move", from: m.from, to: m.to }], cost: 0 }); });
-    if (earns(s, who)) {
-      OWN[who].forEach(function (i) {
-        if (st.split && canUse(s, "split", i)) {
-          var t = s.tiles.slice(), o = OWN[who][0] === i ? OWN[who][1] : OWN[who][0]; t[i]--; t[o]++;
-          opts.push({ v: afterTurn(t, who, null), plan: [{ type: "power", name: "split", arg: i }], cost: 1 });
-        }
-        if (st.shield && canUse(s, "shield", i)) {
-          var sh = { side: who, idx: i };
-          movesFor(s, who).forEach(function (m) {
-            opts.push({ v: afterTurn(after(s, m), who, sh), plan: [{ type: "power", name: "shield", arg: i }, { type: "move", from: m.from, to: m.to }], cost: 1 });
-          });
-        }
-      });
-      if (st.nudge) for (var j = 0; j < 4; j++) [1, -1].forEach(function (d) {
-        if (!canUse(s, "nudge", j, d)) return;
-        var t = s.tiles.slice(), v = t[j] + d; t[j] = v >= BURST ? 0 : v;
-        opts.push({ v: afterTurn(t, who, null), plan: [{ type: "power", name: "nudge", arg: j, dir: d }], cost: 1 });
-      });
-    }
-    if (!movesFor(s, who).length) opts.push({ v: tval(s.tiles, OTHER[who], who), plan: [{ type: "pass" }], cost: 0 });
-    var cat = function (v) { return v > 0 ? 1 : v < 0 ? -1 : 0; };
-    var bestFree = -Infinity; opts.forEach(function (o) { if (!o.cost) bestFree = Math.max(bestFree, o.v); });
-    var pool = opts.filter(function (o) { return !o.cost || cat(o.v) > cat(bestFree); });
-    var top = -Infinity; pool.forEach(function (o) { top = Math.max(top, o.v); });
-    pool = pool.filter(function (o) { return o.v === top; });
-    var free = pool.filter(function (o) { return !o.cost; });
-    return randomPick(s, free.length ? free : pool).plan;
+    var ms = movesFor(s, who);
+    if (!ms.length) return [{ type: "pass" }];
+    var top = -Infinity, pool = [];
+    ms.forEach(function (m) {
+      var t = after(s, m), v = deadSide(t, OTHER[who]) ? 1e6 : tval(t, OTHER[who], who);
+      if (v < 0) v = -1e6 + trapShare(t, who) * 1e4 + (v + 1000);
+      else v *= 1000;
+      if (v > top) { top = v; pool = [m]; } else if (v === top) pool.push(m);
+    });
+    var m = randomPick(s, pool);
+    return [{ type: "move", from: m.from, to: m.to }];
   }
-  // aiPlan(s): the actions the side to move takes this turn, as [{type:"move",from,to} | {type:"power",...} | {type:"pass"}].
-  // It reads the seed but returns plans only; apply them with apply(). `level` overrides s.level (for bots).
+  // aiPlan(s): the actions the side to move takes this turn, as [{type:"move",from,to} | {type:"pass"}]
+  // (the computer never plays a power-up, R4). It never touches the given state: `state` in the result is a copy
+  // with the seed advanced, to apply the plan to with apply(). `level` overrides s.level (bots: random, greedy).
   function aiPlan(state, level) {
-    var s = clone(state), who = s.turn; level = level || s.level;
-    if (s.roundOver) return { plan: [], seed: s.seed };
-    if (level === "hard") { var p = hardPlan(s, who); return { plan: p, seed: s.seed }; }
-    if (!movesFor(s, who).length) return { plan: [{ type: "pass" }], seed: s.seed };
-    var pick = level === "random" ? { list: movesFor(s, who) } : level === "easy" ? easyMove(s, who) : mediumMove(s, who);
-    var m = randomPick(s, pick.list);
-    return { plan: [{ type: "move", from: m.from, to: m.to }], seed: s.seed };
+    var s = clone(state), who = s.turn, plan; level = level || s.level;
+    if (s.roundOver) plan = [];
+    else if (level === "hard") plan = hardPlan(s, who);
+    else if (!movesFor(s, who).length) plan = [{ type: "pass" }];
+    else {
+      var pick = level === "random" ? { list: movesFor(s, who) } : level === "greedy" ? greedyMove(s, who)
+        : level === "easy" ? easyMove(s, who) : mediumMove(s, who);
+      var m = randomPick(s, pick.list);
+      plan = [{ type: "move", from: m.from, to: m.to }];
+    }
+    return { plan: plan, seed: s.seed, state: s };
   }
   function apply(state, a) {
     if (a.type === "move") return play(state, a.from, a.to);
@@ -365,7 +375,7 @@
   }
   // one whole computer (or bot) turn
   function aiTurn(state, level) {
-    var r = aiPlan(state, level), s = clone(state); s.seed = r.seed;
+    var r = aiPlan(state, level), s = r.state;
     var steps = [];
     for (var i = 0; i < r.plan.length; i++) {
       var res = apply(s, r.plan[i]); if (!res.ok) break;
@@ -375,8 +385,8 @@
   }
 
   return {
-    BURST: BURST, POWERS: POWERS, CPU_POWERS: CPU_POWERS, LEVELS: LEVELS, ROUNDS_TO_WIN: ROUNDS_TO_WIN,
-    REPEAT_DRAW: REPEAT_DRAW, QUIET_DRAW: QUIET_DRAW,
+    BURST: BURST, POWERS: POWERS, LEVELS: LEVELS, ROUNDS_TO_WIN: ROUNDS_TO_WIN,
+    REPEAT_DRAW: REPEAT_DRAW, QUIET_DRAW: QUIET_DRAW, EASY_CARE: EASY_CARE,
     solve: solve, lookup: lookup, reachable: reachable,
     newMatch: newMatch, nextRound: nextRound, legalMoves: legalMoves, mustPass: mustPass, play: play, pass: pass,
     canUse: canUse, use: use, nudgeDir: nudgeDir, aiPlan: aiPlan, aiTurn: aiTurn, apply: apply, key: key, side: side,

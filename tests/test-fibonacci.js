@@ -162,5 +162,32 @@ t("random play never corrupts the board, and every run ends locked (300 games)",
     ok(!F.canMove(s), "game " + g + " ended while moves remained");
   }
 });
+t("boost on a 1 makes a 2, as the hint says (1 becomes 2)", () => {
+  const r = F.use(board([[1, 0, 0, 0], Z, Z, Z], { power: { undo: 0, smash: 0, swap: 0, boost: 1 } }), "boost", 0);
+  ok(r.ok); eq(F.label(r.state.grid[0]), "2");
+});
+t("an over game cannot be undone (R1): over means no usable Undo", () => {
+  const m = F.move(board([[1, 3, 1, 3], [3, 1, 3, 1], [1, 3, 1, 3], [0, 4, 6, 8]], { power: { undo: 1, smash: 0, swap: 0, boost: 0 } }), "left");
+  ok(m.moved); ok(!m.state.over, "holding Undo with a snapshot is not over");
+  const s = board([[1, 3, 1, 3], [3, 1, 3, 1], [1, 3, 1, 3], [3, 1, 3, 1]], { over: true });
+  eq(F.use(s, "undo").ok, false);
+});
+{
+  const fs = require("fs"), path = require("path"), rd = f => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+  const html = rd("fibonacci/index.html"), js = rd("fibonacci/game.js");
+  t("R6 header: H1 Fibonacci, subtitle opens with a Numberics link home and one short sentence", () => {
+    ok(/<h1>Fibonacci<\/h1>/.test(html));
+    const m = html.match(/<p class="sub"><a href="\.\.\/">Numberics<\/a> &middot; ([^<]+)<\/p>/); ok(m, "sub pattern");
+    ok(/^[A-Z0-9][^.]*\.$/.test(m[1]) && m[1].length <= 30, "tagline " + m[1]);
+  });
+  t("R11: no bare hyphen as an empty stat value", () => ok(!/<b id="\w+"[^>]*>-<\/b>/.test(html) && !/: "-"/.test(js)));
+  t("R5: tray defs, Undo first, each with a sentence description and how to earn it", () => {
+    const ids = [...js.matchAll(/\{ id: "(\w+)", label: "\w+", desc: "([^"]+)", earn: EARN \}/g)];
+    eq(ids.map(m => m[1]), ["undo", "smash", "swap", "boost"]); ids.forEach(m => ok(/^[A-Z].*\.$/.test(m[2]), m[2]));
+    ok(/onInfo:/.test(js), "tray onInfo wired");
+  });
+  t("R8: the end card has a 'New best.' line", () => ok(/id="over-best" class="best" hidden>New best\.</.test(html)));
+  t("R9: Enter or Space on a focused button is left to the button", () => ok(/\(e\.key === "Enter" \|\| e\.key === " "\) && \(tag === "BUTTON" \|\| tag === "A"\)\) return/.test(js)));
+}
 require("./conventions")(t, ok, ["fibonacci/engine.js", "fibonacci/game.js", "fibonacci/index.html", "fibonacci/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

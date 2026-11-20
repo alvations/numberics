@@ -4,37 +4,34 @@
  * this file only draws, listens, and remembers. */
 (function () {
   "use strict";
-  var N = window.Numberics;
-  var KEY = "numberics_endless_v1";
-  var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var ANIM = reduce ? 0 : 110;
+  var N = window.Numberics, K = window.NumbericsKit, P = window.NumbericsPower;
+  // storage goes through NumbericsKit.store: every localStorage call is in try/catch, memory fallback
+  var store = K.store("numberics_endless_v1");
+  var ANIM = K.reducedMotion() ? 0 : 110;
+  var freshSeed = K.freshSeed;
+  // a fine pointer with hover means a keyboard is likely: only then mention Esc and the arrow keys
+  var desk = false;
+  try { desk = window.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (e) { desk = false; }
 
-  // ---- storage: always try/catch, degrade to memory (sandboxes throw) ----
-  var mem = {};
-  function load() {
-    try { var v = window.localStorage.getItem(KEY); if (v) return JSON.parse(v); } catch (e) { /* fall through */ }
-    return mem[KEY] ? JSON.parse(mem[KEY]) : null;
+  // One validator for a saved state and its undo snapshot: a malformed save starts a fresh game.
+  function int(v) { return Number.isInteger(v) && v >= 0; }
+  function core(s) {
+    return !!s && typeof s === "object" && Array.isArray(s.grid) && s.grid.length === 16 && s.grid.every(int) &&
+      !!s.power && N.POWERS.every(function (p) { return int(s.power[p]); }) &&
+      typeof s.score === "number" && isFinite(s.score) && int(s.top) && int(s.moves) && typeof s.seed === "number";
   }
-  function save(obj) {
-    var json = JSON.stringify(obj);
-    mem[KEY] = json;
-    try { window.localStorage.setItem(KEY, json); } catch (e) { /* in-memory only */ }
-  }
+  function valid(s) { return core(s) && s.size === 4 && (s.prev == null || core(s.prev)); }
 
-  function valid(s) {
-    return s && s.size === 4 && Array.isArray(s.grid) && s.grid.length === 16 &&
-      s.grid.every(function (v) { return Number.isInteger(v) && v >= 0; }) &&
-      s.power && typeof s.score === "number";
-  }
-  function freshSeed() {
-    try { var a = new Uint32Array(1); window.crypto.getRandomValues(a); return a[0]; } catch (e) { return (Date.now() >>> 0); }
-  }
-
-  var saved = load();
-  var best = { score: (saved && saved.bestScore) || 0, top: (saved && saved.bestTop) || 0 };
+  var saved = store.load();
+  var best = { score: (saved && +saved.bestScore) || 0, top: (saved && +saved.bestTop) || 0 };
   var state = saved && valid(saved.state) ? saved.state : N.newGame(freshSeed());
+  // the best score before this run began, so the end screen can say "New best."
+  var bestBefore = saved && typeof saved.bestBefore === "number" ? saved.bestBefore
+    : (state.score > 0 && state.score >= best.score ? 0 : best.score);
   var targeting = null;           // {name, picks:[]} while a power-up waits for a target
-  var timer = null, pendingFx = null, newArmed = null;
+  var cur = -1, kbd = false;      // keyboard aiming cursor (cell), shown once a key aims
+  var note = "";                  // a tray explanation in the hint line, until the next action
+  var timer = null, pendingFx = null, newArmed = null, wasOver = false;
   var els = [];                   // cell index -> tile element
 
   var $ = function (id) { return document.getElementById(id); };
@@ -43,9 +40,9 @@
 
   function persist() {
     best.score = Math.max(best.score, state.score); best.top = Math.max(best.top, state.top);
-    save({ state: state, bestScore: best.score, bestTop: best.top });
+    store.save({ state: state, bestScore: best.score, bestTop: best.top, bestBefore: bestBefore });
   }
-  function fmt(n) { return n.toLocaleString("en-US"); }
+  var fmt = K.fmt;
 
   function setLabel(el, level) {
     var l = N.label(level);
@@ -73,41 +70,59 @@
     });
     $("score").textContent = fmt(state.score);
     $("best").textContent = fmt(Math.max(best.score, state.score));
-    $("top").textContent = state.top ? N.label(state.top) : "-";
     renderTray();
+    var aim = targeting && kbd ? cur : -1;
     Array.prototype.forEach.call(cellsEl.children, function (c, i) {
-      c.classList.toggle("sel", !!(targeting && targeting.picks.indexOf(i) >= 0));
+      var sel = !!(targeting && targeting.picks.indexOf(i) >= 0);
+      c.classList.toggle("sel", sel); c.classList.toggle("cur", i === aim);
+      if (els[i]) { els[i].classList.toggle("sel", sel); els[i].classList.toggle("cur", i === aim); }
     });
     boardEl.classList.toggle("targeting", !!targeting);
+    var topEl = $("top");
+    topEl.textContent = state.top ? N.label(state.top) : "none"; topEl.classList.toggle("none", !state.top);
     var over = $("over");
     over.hidden = !state.over;
-    if (state.over) $("over-text").textContent = "Top tile " + N.label(state.top) + " · score " + fmt(state.score);
+    // one "New game" on screen at a time: the overlay's primary replaces the page button while over
+    $("new").style.visibility = state.over ? "hidden" : "";
+    if (state.over) {
+      $("over-text").textContent = "Top tile " + N.label(state.top) + " · score " + fmt(state.score);
+      $("over-best").hidden = !(state.score > 0 && state.score > bestBefore);
+      if (!wasOver) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
+    }
+    wasOver = !!state.over;
   }
 
   var PW = { undo: "Undo", smash: "Smash", swap: "Swap", boost: "Boost" };
+  var DEFS = [
+    { id: "undo", label: "Undo", desc: "Take back the last move." },
+    { id: "smash", label: "Smash", desc: "Remove one tile." },
+    { id: "swap", label: "Swap", desc: "Swap any two cells." },
+    { id: "boost", label: "Boost", desc: "Double one tile. A boost earns no reward." }
+  ];
+  var EARN = "Each new highest tile from 32 up earns a random power-up.";
   var PW_HINT = { smash: "Tap a tile to smash it.", boost: "Tap a tile to double it.",
                   swap: "Tap two cells to swap them." };
+  function targetHint() {
+    var t = targeting.name === "swap" && targeting.picks.length ? "Now tap the cell to swap it with." : PW_HINT[targeting.name];
+    return t + (desk ? " Arrows + Enter aim, Esc cancels." : " Tap " + PW[targeting.name] + " to cancel.");
+  }
   function renderTray() {
-    var tray = $("tray"); tray.textContent = "";
-    N.POWERS.forEach(function (p, i) {
-      var b = document.createElement("button");
-      b.type = "button"; b.className = "pw" + (targeting && targeting.name === p ? " armed" : "");
-      b.disabled = !state.power[p] || (p === "undo" && !state.prev);
-      b.appendChild(document.createTextNode(PW[p]));
-      var n = document.createElement("i"); n.textContent = state.power[p]; b.appendChild(n);
-      b.title = (i + 1) + ": " + PW[p];
-      b.addEventListener("click", function () { activate(p); });
-      tray.appendChild(b);
+    P.tray($("tray"), DEFS, state.power, {
+      armed: targeting && targeting.name,
+      earn: EARN,
+      disabled: function (id) {
+        if (state.over) return "The run is over.";
+        if (id === "undo" && state.power.undo && !state.prev) return "Undo goes back one move at a time. Make a move first.";
+        return false;
+      },
+      onUse: activate,
+      onInfo: function (id, text) { flush(); targeting = null; note = text; render(); }
     });
-    $("hint").textContent = targeting ? PW_HINT[targeting.name] + " (Esc cancels)"
-      : (!N.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
+    $("hint").textContent = targeting ? targetHint()
+      : note || (!N.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
   }
 
-  var toastT = null;
-  function toast(msg) {
-    var t = $("toast"); t.textContent = msg; t.classList.add("on");
-    clearTimeout(toastT); toastT = setTimeout(function () { t.classList.remove("on"); }, 2200);
-  }
+  function toast(msg, kind) { K.toast(msg, kind); }
 
   // ---- animation: slide the old tiles, then redraw authoritatively ----
   function flush() { if (timer !== null) { clearTimeout(timer); timer = null; finalize(); } }
@@ -118,6 +133,7 @@
     if (targeting) return;
     var r = N.move(state, dir);
     if (!r.moved) return;
+    note = "";
     var merged = {};
     r.trace.forEach(function (t) {
       var el = els[t.from]; if (el) place(el, t.to);
@@ -135,7 +151,7 @@
 
   // ---- power-ups ----
   function activate(name) {
-    flush();
+    flush(); note = "";
     if (targeting && targeting.name === name) { targeting = null; return render(); }
     targeting = null;
     if (name === "undo") {
@@ -143,38 +159,65 @@
       if (u.ok) { state = u.state; persist(); toast("Rewound one move"); }
       return render();
     }
-    if (!state.power[name]) return render();
-    targeting = { name: name, picks: [] }; render();
+    if (!state.power[name] || state.over) return render();
+    targeting = { name: name, picks: [] };
+    if (cur < 0 || cur > 15) cur = Math.max(0, state.grid.indexOf(state.top));
+    render();
+    // aim from the board, so Enter picks a cell instead of re-pressing the tray button
+    try { boardEl.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ }
   }
   function cellAt(ev) {
     var rect = boardEl.getBoundingClientRect(), x = ev.clientX - rect.left, y = ev.clientY - rect.top;
     var c = Math.floor(x / rect.width * 4), r = Math.floor(y / rect.height * 4);
     return (c < 0 || c > 3 || r < 0 || r > 3) ? -1 : r * 4 + c;
   }
-  function pick(ev) {
-    if (!targeting) return;
-    var cell = cellAt(ev); if (cell < 0) return;
+  function pickCell(cell) {
+    if (!targeting || cell < 0 || cell > 15) return;
+    flush();
+    var at = targeting.picks.indexOf(cell);
+    if (at >= 0) { targeting.picks.splice(at, 1); return render(); } // picking a picked cell un-picks it
     targeting.picks.push(cell);
     var need = targeting.name === "swap" ? 2 : 1;
     if (targeting.picks.length < need) return render();
-    var res = N.use(state, targeting.name, targeting.picks[0], targeting.picks[1]);
-    var name = targeting.name;
-    if (res.ok) { state = res.state; targeting = null; persist(); toast(PW[name] + "!"); }
-    else { targeting.picks = []; toast("Pick a valid target"); }
+    var name = targeting.name, top0 = state.top;
+    var res = N.use(state, name, targeting.picks[0], targeting.picks[1]);
+    if (res.ok) {
+      state = res.state; targeting = null; persist();
+      toast(name === "boost" && state.top > top0 ? "Boosted to " + N.label(state.top) + ". Boosts earn no reward." : PW[name] + "!");
+    } else {
+      targeting.picks = [];
+      toast(name === "swap" ? "Pick two cells, at least one with a tile." : "Pick a tile, not an empty cell.", "bad");
+    }
     render();
+  }
+  function pick(ev) { if (!targeting) return; kbd = false; pickCell(cellAt(ev)); }
+  var STEP = { left: -1, right: 1, up: -4, down: 4 };
+  function aim(dir) {
+    if (!kbd) { kbd = true; return render(); } // the first key shows the cursor where it is
+    var r = Math.floor(cur / 4), c = cur % 4;
+    if (dir === "left") c = Math.max(0, c - 1); else if (dir === "right") c = Math.min(3, c + 1);
+    else if (dir === "up") r = Math.max(0, r - 1); else r = Math.min(3, r + 1);
+    cur = r * 4 + c; render();
   }
 
   // ---- input ----
   var KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", a: "left", d: "right", w: "up", s: "down" };
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === "Escape") { targeting = null; return render(); }
+    var tag = e.target && e.target.tagName;
+    // Enter or Space on a focused button or link activates that control, never a game action
+    if ((e.key === "Enter" || e.key === " ") && (tag === "BUTTON" || tag === "A")) return;
+    if (e.key === "Escape") { if (targeting) { targeting = null; render(); } return; }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
-    if (pi >= 0) return activate(N.POWERS[pi]);
-    if (e.key === "u") return activate("undo");
+    if (pi >= 0) { kbd = true; return pressTray(N.POWERS[pi]); }
+    if (e.key === "u") { kbd = true; return pressTray("undo"); }
+    if (targeting && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); kbd = true; return pickCell(cur); }
     var d = KEYS[e.key] || KEYS[(e.key || "").toLowerCase()];
-    if (d) { e.preventDefault(); doMove(d); }
+    if (d) { e.preventDefault(); if (targeting) aim(d); else doMove(d); }
   });
+  // a number key behaves exactly like tapping that tray slot (an unusable slot explains itself)
+  function pressTray(name) { var b = $("tray").children[N.POWERS.indexOf(name)]; if (b) b.click(); }
+  window.addEventListener("pointerdown", function () { kbd = false; }, true);
   boardEl.addEventListener("click", pick);
   var sx = 0, sy = 0, touching = false;
   boardEl.addEventListener("touchstart", function (e) { var t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; touching = true; }, { passive: true });
@@ -187,7 +230,8 @@
 
   // ---- new game: two-step instead of a blocking confirm() dialog ----
   function startNew() {
-    flush(); targeting = null;
+    flush(); targeting = null; note = "";
+    bestBefore = best.score;
     state = N.newGame(freshSeed()); persist(); render();
   }
   $("new").addEventListener("click", function () {
@@ -202,11 +246,12 @@
   render();
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
-    flush(); targeting = null;
+    flush(); targeting = null; note = "";
     var s = N.newGame(2026), dirs = ["left", "down", "right", "down"];
     for (var k = 0; k < 120 && !s.over; k++) s = N.move(s, dirs[k % 4]).state;
     s.power = { undo: 1, smash: 2, swap: 1, boost: 1 };
     state = s; render();
   };
-  window.__numberics = { get state() { return state; }, set state(s) { state = s; render(); }, render: render };
+  window.__numberics = { get state() { return state; }, set state(s) { state = s; render(); }, render: render,
+    get targeting() { return targeting; }, get cursor() { return cur; }, get bestBefore() { return bestBefore; } };
 })();

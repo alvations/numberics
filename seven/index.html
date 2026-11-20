@@ -16,12 +16,13 @@
   <header>
     <div class="brand">
       <h1>Seven</h1>
-      <p class="sub"><a href="../">Numberics</a> &middot; <span id="level">Level 1</span></p>
+      <p class="sub"><a href="../">Numberics</a> &middot; Fit each number to its line.</p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
       <div class="stat"><span>Best</span><b id="best">0</b></div>
-      <div class="stat"><span>Next</span><b id="next" class="next"></b></div>
+      <div class="stat"><span>Level</span><b id="level">1</b></div>
+      <div class="stat" title="The next disc. A plain grey disc is an egg."><span>Next</span><b id="next" class="next"></b></div>
     </div>
   </header>
 
@@ -40,17 +41,18 @@
     <div id="over" class="over" hidden>
       <h2 id="over-title">The well overflowed</h2>
       <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
       <div class="row">
-        <button id="over-undo" class="btn" type="button">Undo</button>
+        <button id="over-view" class="btn" type="button">See the well</button>
         <button id="again" class="btn primary" type="button">New game</button>
       </div>
     </div>
   </div>
-  <div id="pips" class="pips" aria-hidden="true"></div>
+  <div id="pips" class="pips" role="img"></div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Tap a column, or use Left/Right and Enter, to drop the next disc. A disc pops when its number equals
-     the length of its line across or down. Grey eggs crack open beside a pop. Every few drops a row of eggs rises.</p>
+  <p class="how">Drop the Next disc: tap a column, or use Left/Right and Enter. A disc pops when its number equals the
+     length of its line across or down. A grey disc is an egg: two pops beside it open it into a number.</p>
   <nav id="games" class="games" data-root="../" data-current="seven" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

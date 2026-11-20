@@ -83,14 +83,29 @@ t("misere: the last take loses the round", () => {
   const s = N.take(forge({ heaps: [0, 1, 0], misere: true }), 1, 1).state; eq(s.roundOver, "cpu"); eq(s.score, { you: 0, cpu: 1 });
   const c = N.take(forge({ heaps: [1, 0, 0], misere: true, turn: "cpu" }), 0, 1).state; eq(c.roundOver, "you");
 });
-t("dealt starts are always a win for the player, who always moves first (normal and misere, 3..9 tiles)", () => {
-  for (const mis of [false, true]) for (let lv = 3; lv <= 9; lv++) for (const seed of SEEDS) {
-    const s = N.newGame(seed, { level: lv, misere: mis });
+t("Easy and Medium starts are always a win for the player, who always moves first (normal and misere, 3..9 tiles)", () => {
+  for (const diff of ["easy", "medium"]) for (const mis of [false, true]) for (let lv = 3; lv <= 9; lv++) for (const seed of SEEDS) {
+    const s = N.newGame(seed, { diff, level: lv, misere: mis });
     eq(s.heaps.length, lv); eq(s.turn, "you");
     ok(s.heaps.every(v => v >= 1 && v <= 9), "tile out of 1..9 " + s.heaps);
     ok(N.winning(s.heaps, mis), "losing deal " + s.heaps);
     if (!mis) ok(N.nimSum(s.heaps) !== 0, "zero nim-sum deal");
   }
+});
+t("Hard deals at random: about one start in five is a losing position, every tile 1..9, the player moves first", () => {
+  for (const mis of [false, true]) {
+    let lost = 0, n = 0;
+    for (let lv = 3; lv <= 9; lv++) for (let i = 0; i < 200; i++) {
+      let s = N.newGame(i * 7919 + lv, { diff: "hard", level: lv, misere: mis });
+      eq(s.turn, "you"); ok(s.heaps.length === lv && s.heaps.every(v => v >= 1 && v <= 9), "bad deal " + s.heaps);
+      n++; if (!N.winning(s.heaps, mis)) lost++;
+      // later rounds deal the same way
+      s.roundOver = "you"; s = N.nextRound(s); n++; if (!N.winning(s.heaps, mis)) lost++;
+    }
+    const rate = lost / n;
+    ok(rate > 0.15 && rate < 0.25, (mis ? "misere " : "") + "losing-start rate " + rate.toFixed(3));
+  }
+  eq(N.HARD_LOSING, 0.2);
 });
 t("deterministic: same seed same deal; different seeds differ", () => {
   eq(N.newGame(5, { level: 6 }).heaps, N.newGame(5, { level: 6 }).heaps);
@@ -128,7 +143,8 @@ t("Hard always wins from a winning position, against random play and both modes"
 });
 t("Hard never wins from a lost position without power-ups (against perfect play)", () => {
   for (const mis of [false, true]) for (const seed of SEEDS) {
-    const s = N.newGame(seed, { diff: "hard", misere: mis, level: 3 + (seed % 7) }); // player to move, winning
+    const s = N.newGame(seed, { diff: "hard", misere: mis, level: 3 + (seed % 7) }); // player to move
+    if (!N.winning(s.heaps, mis)) continue;
     eq(playRound(s, perfect, N.cpuTurn).roundOver, "you", "seed " + seed);
   }
 });
@@ -180,14 +196,20 @@ t("Undo restores the start of your last turn, stock included, and cannot farm", 
   let w = forge({ heaps: [0, 0, 2], you: { undo: 1, add: 1 } });
   w = N.use(w, "add", 2).state; w = N.take(w, 2, 3).state; eq(w.roundOver, "you");
   ok(!N.canUndo(w) && !N.use(w, "undo").ok, "no undo after a won round");
-  // add, take, the computer wins: undo puts back the tiles, the Add, the score, and spends the Undo
+  // R1: a lost round is final too: the computer's winning reply cannot be undone
   let s = forge({ heaps: [0, 1, 2], you: { undo: 1, add: 1 } });
   s = N.use(s, "add", 1).state; s = N.take(s, 2, 2).state; eq(s.heaps, [0, 2, 0]);
   s = N.cpuTurn(s); eq(s.roundOver, "cpu"); eq(s.score, { you: 0, cpu: 1 });
-  const u = N.use(s, "undo"); ok(u.ok);
-  eq(u.state.heaps, [0, 1, 2]); eq(u.state.roundOver, null); eq(u.state.score, { you: 0, cpu: 0 }); eq(u.state.turn, "you");
-  eq(u.state.power.you, { undo: 0, add: 1, pass: 0, peek: 0 }, "add back, undo spent");
-  eq(u.state.power.cpu, s.prev.power.cpu, "the computer's award is rewound too");
+  ok(!N.canUndo(s) && !N.use(s, "undo").ok, "no undo after a lost round");
+  // and a lost match (the run) is final
+  let m = forge({ heaps: [0, 0, 2], you: { undo: 1 } }); m.score = { you: 2, cpu: 2 };
+  m = N.take(m, 2, 1).state; m = N.cpuTurn(m); eq(m.matchOver, "cpu"); ok(m.runOver);
+  ok(!N.canUndo(m) && !N.use(m, "undo").ok, "no undo after a lost match");
+  // inside a live round: add, take, the computer replies; undo puts back the tiles and the Add, spends the Undo
+  let v = forge({ heaps: [3, 5, 6], diff: "easy", you: { undo: 1, add: 1 } });
+  v = N.use(v, "add", 0).state; v = N.take(v, 1, 1).state; v = N.cpuTurn(v); ok(!v.roundOver);
+  const u = N.use(v, "undo"); ok(u.ok);
+  eq(u.state.heaps, [3, 5, 6]); eq(u.state.turn, "you"); eq(u.state.power.you, { undo: 0, add: 1, pass: 0, peek: 0 }, "add back, undo spent");
   ok(!N.use(u.state, "undo").ok, "one level only");
   // undo after the computer's winning reply takes back both moves
   let c = forge({ heaps: [2, 2, 0], diff: "hard" }); c = N.take(c, 0, 1).state; c = N.cpuTurn(c);
@@ -198,6 +220,11 @@ t("a Peek spent after your last move stays spent through Undo", () => {
   s = N.take(s, 3, 1).state; s = N.cpuTurn(s);
   s = N.use(s, "peek").state; eq(s.power.you.peek, 0);
   const u = N.use(s, "undo").state; eq(u.power.you.peek, 0); eq(u.heaps, [1, 2, 3, 5]); eq(u.used, 2);
+});
+t("the computer earns only what it plays (Add, Pass), never Undo or Peek", () => {
+  const got = {};
+  for (const seed of SEEDS) { const c = N.take(forge({ seed, heaps: [0, 3, 0], turn: "cpu" }), 1, 3).state; got[c.award.name] = 1; }
+  eq(Object.keys(got).sort(), ["add", "pass"]); eq(N.CPU_POWERS, ["add", "pass"]);
 });
 t("a power-up never earns a power-up, and the computer earns only on Hard", () => {
   const s = forge({ heaps: [1, 2, 3], you: { undo: 0, add: 1, pass: 1, peek: 1 } });
@@ -224,12 +251,44 @@ t("best of five: first to three rounds takes the match; a won match adds a tile;
   l = N.take(l, 3, 4).state; eq(l.matchOver, "cpu"); ok(l.runOver); eq(N.nextMatch(l), l, "no next match after a loss");
   let top = N.newGame(1, { level: 9 }); top.matchOver = "you"; eq(N.nextMatch(top).level, 9, "nine tiles is the top level");
 });
-t("perfect play wins every match on every level and difficulty", () => {
-  for (const diff of N.DIFFS) for (const mis of [false, true]) for (let lv = 3; lv <= 9; lv++) {
+t("perfect play wins every match on every level on Easy and Medium", () => {
+  for (const diff of ["easy", "medium"]) for (const mis of [false, true]) for (let lv = 3; lv <= 9; lv++) {
     let s = N.newGame(lv * 31 + mis, { diff, misere: mis, level: lv });
     while (!s.matchOver) { s = playRound(s, perfect, N.cpuTurn); if (!s.matchOver) s = N.nextRound(s); }
     eq(s.matchOver, "you", diff + " " + lv + (mis ? " misere" : ""));
   }
+});
+// The R4 measurement for Hard: a perfect player who uses Pass and Add when dealt a losing start.
+function perfectPow(s) {
+  if (N.winning(s.heaps, s.misere)) { const m = N.peek(s.heaps, s.misere); return N.take(s, m.tile, s.heaps[m.tile] - m.to).state; }
+  if (N.canPass(s)) return N.use(s, "pass").state;
+  if (!s.added) for (let i = 0; i < s.heaps.length; i++) if (N.canAdd(s, i)) {
+    const h = s.heaps.slice(); h[i]++;
+    if (N.winning(h, s.misere)) { const a = N.use(s, "add", i).state, m = N.peek(a.heaps, a.misere); return N.take(a, m.tile, a.heaps[m.tile] - m.to).state; }
+  }
+  const i = s.heaps.findIndex(Boolean); return N.take(s, i, 1).state;
+}
+function hardMatches(player, count, mis) {
+  let won = 0;
+  for (let i = 0; i < count; i++) {
+    let s = N.newGame(i * 7919 + 1, { diff: "hard", misere: mis, level: 3 + (i % 4) });
+    while (!s.matchOver) {
+      for (let k = 0; k < 500 && !s.roundOver; k++) s = s.turn === "you" ? player(s) : N.cpuTurn(s);
+      ok(s.roundOver, "round did not end"); if (!s.matchOver) s = N.nextRound(s);
+    }
+    if (s.matchOver === "you") won++;
+  }
+  return won / count;
+}
+t("Hard is winnable, not guaranteed: perfect play with Pass and Add wins about two matches in three", () => {
+  for (const mis of [false, true]) {
+    const r = hardMatches((s) => perfectPow(s), 400, mis);
+    if (process.env.NINE_REPORT) console.log("Hard perfect+power-ups", mis ? "misere" : "normal", r.toFixed(3));
+    ok(r >= 0.55 && r <= 0.85, (mis ? "misere " : "") + "perfect+power-ups Hard match win rate " + r.toFixed(3));
+  }
+  const plain = hardMatches((s) => { const m = N.peek(s.heaps, s.misere); if (m) return N.take(s, m.tile, s.heaps[m.tile] - m.to).state; const i = s.heaps.findIndex(Boolean); return N.take(s, i, 1).state; }, 400, false);
+  if (process.env.NINE_REPORT) console.log("Hard perfect, no power-ups", plain.toFixed(3));
+  ok(plain > 0.3 && plain < hardMatches((s) => perfectPow(s), 400, false), "power-ups must matter on Hard: " + plain.toFixed(3));
 });
 t("state is plain JSON (saveable)", () => {
   let s = N.newGame(4, { level: 5 }); s = N.take(s, 0, 1).state; s = N.cpuTurn(s);

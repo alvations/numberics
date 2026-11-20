@@ -149,6 +149,58 @@ t("a power-up never earns a power-up, even when it lines up a run", () => {
   const g2 = E16(); g2[0] = 3; g2[1] = 9; g2[5] = 6; const s2 = at(g2, { power: { undo: 0, smash: 0, swap: 1, third: 0 } });
   const w = T.use(s2, "swap", 1, 5); ok(w.ok); eq(w.state.score, 0); eq(w.state.power, { undo: 0, smash: 0, swap: 0, third: 0 });
 });
+const tot = (s) => T.POWERS.reduce((a, p) => a + s.power[p], 0);
+t("R2 blocker repro: Swap lines up 3-6-9, it collapses at once, scores, and pays no power-up", () => {
+  const g = E16(); g[0] = 3; g[1] = 9; g[2] = 6; const s = at(g, { power: { undo: 0, smash: 0, swap: 1, third: 0 } });
+  const u = T.use(s, "swap", 1, 2); ok(u.ok);
+  eq(u.flushes.length, 1, "the run flushes inside use()"); eq(u.flushes[0].values, [3, 6, 9]); eq(u.flushes[0].power, null); eq(u.flushes[0].paid, false);
+  eq(u.state.grid[2], 18); eq(u.state.score, 54, "points still score"); eq(u.state.flushes, 1);
+  eq(u.state.power, { undo: 0, smash: 0, swap: 0, third: 0 }, "no power-up"); eq(T.findRuns(u.state.grid), [], "no run left standing");
+  const m = T.move(u.state, "down"); ok(m.moved); eq(tot(m.state), 0, "the next swipe pays nothing either");
+});
+t("R2: Third that completes a run collapses it unpaid", () => {
+  const g = E16(); g[4] = 2; g[5] = 6; g[6] = 9; const u = T.use(at(g, { power: { undo: 0, smash: 0, swap: 0, third: 1 } }), "third", 4);
+  ok(u.ok); eq(u.state.grid[6], 18); eq(tot(u.state), 0);
+});
+t("R2 indirect: the swipe right after Smash opens a run, the flush scores but pays no power-up", () => {
+  // column 0 reads 3, 6, 15 and row 2 is a packed 15 9; smash the 15 and the 9 steps left into 3-6-9
+  const g = E16(); g[0] = 3; g[4] = 6; g[8] = 15; g[9] = 9; const s = at(g, { power: { undo: 0, smash: 1, swap: 0, third: 0 } });
+  ok(!T.move(s, "left").flushes.length, "no flush without the power-up");
+  const u = T.use(s, "smash", 8); ok(u.ok); ok(u.state.free, "the next swipe is marked unpaid"); eq(u.flushes.length, 0);
+  const m = T.move(u.state, "left"); eq(m.flushes.length, 1); eq(m.flushes[0].power, null); eq(m.state.score, 54); eq(tot(m.state), 0);
+  ok(!m.state.free, "the mark lasts one swipe");
+  // the same board reached without the power-up pays
+  const g2 = E16(); g2[0] = 3; g2[4] = 6; g2[9] = 9; const p = T.move(at(g2, { power: { undo: 0, smash: 0, swap: 0, third: 0 } }), "left");
+  eq(p.flushes.length, 1); eq(tot(p.state), 1, "an honest flush pays");
+});
+t("R2 property: a power-up followed by any swipe never raises the total stock (random games)", () => {
+  let checked = 0;
+  for (let seed = 1; seed <= 80; seed++) {
+    let s = T.newGame(seed), x = seed;
+    s.power = { undo: 2, smash: 3, swap: 3, third: 3 };
+    for (let i = 0; i < 300 && !s.over; i++) {
+      x = (x * 1103515245 + 12345) >>> 0;
+      if (x % 5 === 0) {
+        const name = T.POWERS[1 + (x >>> 3) % 3], a = (x >>> 5) % 16, b = a % 4 < 3 ? a + 1 : a + 4;
+        const before = tot(s), u = T.use(s, name, a, b);
+        if (u.ok) {
+          ok(tot(u.state) === before - 1, "use pays nothing, seed " + seed);
+          T.DIRS.forEach(d => { const r = T.move(u.state, d); if (r.moved) { ok(tot(r.state) < before, "swipe after " + name + ", seed " + seed); checked++; } });
+          s = u.state; continue;
+        }
+      }
+      const r = T.move(s, T.DIRS[(x >>> 7) % 4]); if (r.moved) s = r.state;
+      else if (!T.canMove(s)) break;
+    }
+  }
+  ok(checked > 200, "exercised " + checked);
+});
+t("R1: Undo never crosses a finished run", () => {
+  const s = at([0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { power: { undo: 0, smash: 0, swap: 0, third: 0 }, next: 12 });
+  const m = T.move(s, "left"); ok(m.state.over);
+  const forced = Object.assign({}, m.state, { power: { undo: 1, smash: 0, swap: 0, third: 0 } });
+  ok(!T.use(forced, "undo").ok, "an over state refuses Undo even with stock and history");
+});
 t("stock caps at 9: a full stock is skipped, a fully stocked tray earns nothing", () => {
   const g = E16(); g[0] = 3; g[4] = 6; g[9] = 9;
   const r = T.move(at(g, { power: { undo: 9, smash: 9, swap: 9, third: 8 } }), "left"); eq(r.state.power.third, 9); eq(r.flushes[0].power, "third");

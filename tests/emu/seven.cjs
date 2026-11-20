@@ -15,6 +15,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(page);
   ck("49 well cells", await p.locator(".cells div").count() === 49);
+  ck("header: game name, Numberics link, tagline with a full stop (R6)", (await p.textContent("h1")) === "Seven" && /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 1);
+  ck("level is a stat pill", (await p.textContent("#level")) === "1");
   ck("discs drawn", await p.locator(".disc:not(.ghost)").count() > 0);
   ck("next disc preview", await p.locator("#next .mini").count() === 1);
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -47,7 +49,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 2. Lucky Seven toast + award
   await setup(p, ["e......", "e......", "777777."], { next: 7, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
   await p.mouse.click(box.x + box.width * (6.5 / 7), box.y + box.height * 0.3);
-  ck("Lucky Seven toast", /Lucky Seven/.test(await p.textContent("#toast")));
+  ck("Lucky Seven toast", /Lucky Seven/.test(await p.textContent("#toast")) && await p.locator("#toast.bad").count() === 0);
+  ck("BEST never trails SCORE mid-animation", await p.evaluate(() => +document.getElementById("best").textContent.replace(/,/g, "") >= +document.getElementById("score").textContent.replace(/,/g, "")));
   await idle(p); s = await st(p);
   ck("Lucky Seven counted and a power-up earned", s.luckies === 1 && s.power.smash + s.power.hold + s.power.crack + s.power.undo >= 2);
   await shot(p, "lucky");
@@ -64,21 +67,65 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.mouse.click(box.x + box.width * (0.5 / 7), box.y + box.height * (6.5 / 7)); await idle(p);
   s = await st(p);
   ck("Smash removed the egg and the fall set off a chain", s.power.smash === 1 && !s.grid.some(Boolean));
+  // R9: Smash aimed from the keyboard, with a visible aim ring
+  await setup(p, ["4......", "3......", "e......"], { next: 6, held: 0, power: { undo: 1, smash: 1, hold: 2, crack: 0 } });
+  await p.focus("#board");
+  for (let k = 0; k < 6; k++) await p.keyboard.press("ArrowLeft");
+  await p.keyboard.press("2");
+  ck("Smash aims at the top disc of the cursor column", await p.evaluate(() => window.__seven.aim) === at(4, 0) && await p.locator(".disc.aim").count() === 1);
+  await p.keyboard.press("ArrowDown"); await p.keyboard.press("ArrowDown");
+  ck("arrows move the aim, not drop", await p.evaluate(() => window.__seven.aim) === at(6, 0) && (await st(p)).power.smash === 1);
+  await p.keyboard.press("Enter"); await idle(p); s = await st(p);
+  ck("Enter smashes the aimed disc", s.power.smash === 0 && s.grid[at(6, 0)] === 3 && s.grid[at(5, 0)] === 4);
   await p.keyboard.press("3"); s = await st(p);
   ck("Hold keeps the next disc", s.held === 6 && s.power.hold === 1);
+  ck("held disc sits before the label, apart from the count badge", await p.locator("#tray .pw").nth(2).evaluate(b => b.firstChild.classList.contains("mini")));
   ck("held disc shown on the Hold button", (await p.locator("#tray .pw").nth(2).locator(".mini").count()) === 1);
   await setup(p, ["e3....e", "eee...e"], { power: { undo: 1, smash: 0, hold: 0, crack: 1 } });
-  await p.keyboard.press("4"); await idle(p); s = await st(p);
+  await p.keyboard.press("4"); s = await st(p);
+  ck("Crack first marks the eggs it would crack, spending nothing (cold #16)", s.power.crack === 1 && s.grid[at(5, 0)] === 8 && await p.locator(".disc.aim").count() === 2 && /marked eggs/.test(await p.textContent("#hint")));
+  await p.keyboard.press("Escape");
+  ck("Esc cancels Crack", (await st(p)).power.crack === 1 && await p.locator(".disc.aim").count() === 0);
+  await p.keyboard.press("4"); await p.keyboard.press("Enter"); await idle(p); s = await st(p);
   ck("Crack cracks eggs touching a disc", s.power.crack === 0 && s.grid[at(5, 0)] === 9 && s.grid[at(6, 1)] === 9 && s.grid[at(6, 6)] === 8);
+  // R5: a power-up that cannot act explains itself on tap and on its key
+  await setup(p, ["e......"], { prev: null, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  ck("unusable tray buttons are aria-disabled, never disabled", await p.locator("#tray .pw[aria-disabled=true]").count() === 4 && await p.locator("#tray .pw:disabled").count() === 0);
+  await p.locator("#tray .pw").nth(1).click({ force: true });
+  ck("tapping an empty power-up explains it", /^Smash: Remove one disc\. Earn charges/.test(await p.textContent("#hint")));
+  await p.keyboard.press("1");
+  ck("its key explains why it cannot act", /^Undo: Take back the last drop\. Nothing to take back yet\./.test(await p.textContent("#hint")));
+  ck("tray tooltip voice", await p.locator("#tray .pw").nth(0).getAttribute("title") === "1: Undo. Take back the last drop.");
+  // R7: a full column is a neutral warning, not the gold reward toast
+  await setup(p, ["e......", "e......", "e......", "e......", "e......", "e......", "e......"], { next: 3 });
+  await p.mouse.click(box.x + box.width * (0.5 / 7), box.y + box.height * 0.3);
+  ck("full column uses the neutral toast", /column is full/.test(await p.textContent("#toast")) && await p.locator("#toast.bad").count() === 1);
+  // the idle hint labels the gold dots (craft V1)
+  await setup(p, ["e......"], { left: 7 });
+  ck("hint says how many drops until the eggs rise", (await p.textContent("#hint")) === "7 drops until the eggs rise.");
 
-  // 4. rising row and the end screen with Undo
-  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  // 4. rising row and the end screen: no Undo (R1), an honest final board (cold #10), a new best (R8)
+  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 1e8, used: 2, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  const before = (await st(p)).grid;
   await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
-  ck("overflow ends the run", (await st(p)).over && await p.isVisible("#over"));
-  ck("end screen offers Undo", await p.isVisible("#over-undo"));
+  s = await st(p);
+  ck("overflow ends the run", s.over && await p.isVisible("#over"));
+  ck("the end screen offers no Undo (R1)", await p.locator("#over button").count() === 2 && !(await p.locator("#over").textContent()).includes("Undo"));
+  ck("Undo key after the end does nothing but explain", await (async () => { await p.keyboard.press("1"); const x = await st(p); return x.over && x.power.undo === 1 && /run is over/.test(await p.textContent("#hint")); })());
+  ck("summary is one line: score, level, power-ups", (await p.textContent("#over-text")) === "Score 100,000,004 · level 1 · power-ups 2");
+  ck("a new best says so", await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
+  ck("final well is the well the player saw (no shift up)", s.grid.every((v, i) => i === at(6, 3) ? v === 4 : v === before[i]));
+  ck("the pushed-out disc is ringed", await p.locator(".disc.out").count() === 1);
   await shot(p, "over");
-  await p.click("#over-undo");
-  ck("Undo from the end screen resumes", !(await st(p)).over && !(await p.isVisible("#over")));
+  await p.click("#over-view");
+  ck("See the well hides the summary and explains the loss", !(await p.isVisible("#over")) && /pushed the ringed discs/.test(await p.textContent("#hint")));
+  await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  ck("tapping the well brings the summary back", await p.isVisible("#over") && (await st(p)).over);
+  // headline and summary each fit on one line at 375px
+  await setup(p, ["5......"], { over: true, out: [0], score: 123456, level: 12, used: 3 });
+  ck("end text fits on one line at 375px", await p.evaluate(() => ["over-title", "over-text"].every(id => { const e = document.getElementById(id); const r = document.createRange(); r.selectNodeContents(e); return r.getClientRects().length === 1; })));
+  await setup(p, ["5......"], { over: true, out: [0], score: 0 });
+  ck("no new best for a run below the best", !(await p.isVisible("#over-best")));
   await setup(p, ["e......"], { left: 1, next: 5 });
   await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
   s = await st(p);
@@ -96,6 +143,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click('#modes [data-mode="classic"]');
   ck("back to the Classic run", (await st(p)).mode === "classic");
   ck("no page errors", errs.length === 0, errs.join("|"));
+  await ctx.close();
+  // page height: the main phone size does not scroll (craft F15)
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); p = await ctx.newPage(); await p.goto(page);
+  ck("fits 390x844 without scrolling", await p.evaluate(() => document.documentElement.scrollHeight <= 844), String(await p.evaluate(() => document.documentElement.scrollHeight)));
+  // a saved run with a broken field is not loaded (critic #4)
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__seven.state)); delete s.left; localStorage.setItem("numberics_seven_v1", JSON.stringify({ mode: "classic", runs: { classic: s }, best: {}, day: 0 })); });
+  await p.reload();
+  ck("a save missing left is replaced by a fresh run", Number.isInteger((await st(p)).left) && (await st(p)).drops === 0);
+  // the Daily best is per day (critic #2)
+  await p.evaluate(() => localStorage.setItem("numberics_seven_v1", JSON.stringify({ mode: "daily", runs: {}, best: { classic: 50, blitz: 0, daily: 999 }, day: 1 })));
+  await p.reload();
+  ck("yesterday's Daily best does not carry over", (await p.textContent("#best")) === "0" && (await st(p)).mode === "daily");
   await ctx.close();
   ctx = await browser.newContext(); p = await ctx.newPage(); await p.goto(page);
   await p.click('#modes [data-mode="daily"]');

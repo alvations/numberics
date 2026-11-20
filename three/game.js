@@ -6,19 +6,25 @@
   var E = window.NumbericsThree, K = window.NumbericsKit, P = window.NumbericsPower;
   var store = K.store("numberics_three_v1");
   var reduce = K.reducedMotion();
-  var SLIDE = reduce ? 0 : 110, SWEEP = reduce ? 450 : 520; // reduced motion: a still outline, then the collapse
+  var SLIDE = reduce ? 0 : 110, SWEEP = reduce ? 250 : 520; // reduced motion: a still outline, then the collapse
 
   function valid(s) {
     return s && Array.isArray(s.grid) && s.grid.length === 16 &&
       s.grid.every(function (v) { return Number.isInteger(v) && v >= 0; }) &&
       Number.isInteger(s.next) && s.next > 0 && Array.isArray(s.bag) && typeof s.score === "number" &&
-      s.power && E.POWERS.every(function (p) { return Number.isInteger(s.power[p]) && s.power[p] >= 0; });
+      s.power && E.POWERS.every(function (p) { return Number.isInteger(s.power[p]) && s.power[p] >= 0; }) &&
+      (s.free === undefined || typeof s.free === "boolean");
   }
 
   var saved = store.load();
   var best = { score: (saved && saved.bestScore) || 0, used: (saved && saved.bestUsed) || 0 };
   var state = saved && valid(saved.state) ? saved.state : E.newGame(K.freshSeed());
-  var targeting = null;            // {name, picks:[]} while a power-up waits for a target
+  // the record when this run began, so the end screen can say "New best." (an old save has none: count it as 0
+  // only if this run already holds the record)
+  var base = saved && Number.isFinite(saved.base) ? saved.base : (best.score > state.score ? best.score : 0);
+  var seen = !!(saved && saved.seen);  // the first-run explainer was dismissed once
+  var targeting = null;            // {name, picks:[], cur, kbd} while a power-up waits for a target
+  var note = "";                   // a tray explanation in the hint line, until the next action
   var timers = [], gen = 0, finalFx = null;
   var els = [];
 
@@ -28,7 +34,7 @@
 
   function persist() {
     if (state.score > best.score) { best.score = state.score; best.used = state.used; }
-    store.save({ state: state, bestScore: best.score, bestUsed: best.used });
+    store.save({ state: state, bestScore: best.score, bestUsed: best.used, base: base, seen: seen });
   }
 
   function paint(el, v) {
@@ -52,6 +58,10 @@
       el.className = "tile"; paint(el, v); place(el, cell);
       if (fx.merged && fx.merged[cell]) el.classList.add("pop");
       if (fx.spawned === cell) el.classList.add("new");
+      if (targeting && !fx.run) {
+        if (targeting.picks.indexOf(cell) >= 0) el.classList.add("sel");
+        if (targeting.kbd && targeting.cur === cell) el.classList.add("cur");
+      }
       if (fx.flushed === cell) el.classList.add("flushed");
       if (fx.run && fx.run.indexOf(cell) >= 0) {
         el.classList.add("run"); if (reduce) el.classList.add("still");
@@ -61,15 +71,29 @@
     });
   }
 
+  var EARN = "Earn one with every Flush.";
   var DEFS = [
-    { id: "undo", label: "Undo", title: "Undo: take back the last move" },
-    { id: "smash", label: "Smash", title: "Smash: remove a tile" },
-    { id: "swap", label: "Swap", title: "Swap: trade two neighbouring tiles" },
-    { id: "third", label: "Third", title: "Third: turn a 1 or 2 into a 3" },
+    { id: "undo", label: "Undo", desc: "Take back the last move.", earn: "You start with one. " + EARN },
+    { id: "smash", label: "Smash", desc: "Remove one tile.", earn: EARN },
+    { id: "swap", label: "Swap", desc: "Trade two neighbouring tiles.", earn: EARN },
+    { id: "third", label: "Third", desc: "Turn a 1 or a 2 into a 3.", earn: EARN },
   ];
   var NAME = { undo: "Undo", smash: "Smash", swap: "Swap", third: "Third" };
   var HINT = { smash: "Tap a tile to smash it.", swap: "Tap two neighbouring tiles to swap them.",
                third: "Tap a 1 or a 2 to make it a 3." };
+  var KHINT = { smash: "Arrows pick a tile, Enter smashes it.", swap: "Arrows and Enter pick two neighbouring tiles.",
+                third: "Arrows pick a 1 or a 2, Enter makes it a 3." };
+  // why a charged power-up cannot act right now (false: it can, or it has no charge, so the tray says how to earn)
+  function why(id) {
+    if (state.over) return "The run is over.";
+    if (!state.power[id] || E.usable(state, id)) return false;
+    return { undo: "Nothing to take back yet.", smash: "The board is empty.",
+             swap: "No two different tiles sit side by side.", third: "There is no 1 or 2 on the board." }[id];
+  }
+  function explain(id) {
+    var d = DEFS[E.POWERS.indexOf(id)];
+    note = P.info(d, state.power, why(id), {}); chrome();
+  }
 
   function chrome() {
     $("score").textContent = K.fmt(state.score);
@@ -77,19 +101,25 @@
     var nx = $("next"); nx.className = "mini"; paint(nx, state.next); nx.setAttribute("aria-label", "next tile " + state.next);
     P.tray($("tray"), DEFS, state.power, {
       armed: targeting && targeting.name,
-      disabled: function (id) { return !E.usable(state, id); },
+      disabled: why,
       onUse: activate,
+      onInfo: function (id, text) { note = text; chrome(); },
     });
-    $("hint").textContent = targeting ? HINT[targeting.name] + " (Esc cancels)"
-      : (!E.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
+    $("hint").textContent = targeting ? (targeting.kbd ? KHINT : HINT)[targeting.name] + " (Esc cancels)"
+      : note ? note
+      : state.over ? ""
+      : !E.canMove(state) ? "Stuck. Use a power-up to keep going."
+      : !state.moves ? "Swipe to start: every tile moves one step." : "";
     Array.prototype.forEach.call(cellsEl.children, function (c, k) {
       c.classList.toggle("sel", !!(targeting && targeting.picks.indexOf(k) >= 0));
+      c.classList.toggle("cur", !!(targeting && targeting.kbd && targeting.cur === k));
     });
     boardEl.classList.toggle("targeting", !!targeting);
     $("over").hidden = !state.over;
     if (state.over) {
       $("over-text").textContent = "Score " + K.fmt(state.score) + " · " + state.flushes + (state.flushes === 1 ? " flush" : " flushes") +
-        " · " + (state.used ? state.used + " power-up" + (state.used === 1 ? "" : "s") + " used" : "pure run");
+        " · " + (state.used ? state.used + " power-up" + (state.used === 1 ? "" : "s") : "pure run");
+      $("over-best").hidden = !(state.score > base && state.score > 0);
     }
   }
   function render(fx) { draw(state.grid, fx); chrome(); }
@@ -109,11 +139,24 @@
     later(function () { runFlushes(list, k + 1); }, SWEEP);
   }
 
+  // one toast per flush event (a reward); a flush a power-up set up scores but pays no power-up (R2)
+  function announce(list) {
+    if (!list.length) return;
+    var f = list[0], tail = list.length > 1 ? "  (x" + list.length + " cascade)" : "";
+    var pays = f.power ? "  +" + NAME[f.power] : f.paid ? "" : ". A power-up set it up, so no new one";
+    K.toast("Flush " + f.values.join("-") + " = " + f.value + ", +" + K.fmt(f.points) + pays + tail);
+  }
+  function play(list) {
+    if (list.length) runFlushes(list, 0); else { var fx = finalFx; finalFx = null; timers = []; render(fx); }
+  }
+
   function doMove(dir) {
     settle();
+    if (helpOpen()) return;
     if (targeting) return;
     var r = E.move(state, dir);
     if (!r.moved) return;
+    note = "";
     var merged = {};
     r.trace.forEach(function (t) {
       var el = els[t.from]; if (el) place(el, t.to);
@@ -122,28 +165,42 @@
     state = r.state; gen++;
     var lastFlush = r.flushes.length ? r.flushes[r.flushes.length - 1].at : -1;
     finalFx = { merged: merged, spawned: r.spawned, flushed: lastFlush };
-    if (r.flushes.length) {
-      var f = r.flushes[0], tail = r.flushes.length > 1 ? "  (x" + r.flushes.length + " cascade)" : "";
-      K.toast("Flush " + f.values.join("-") + " = " + f.value + ", +" + K.fmt(f.points) + (f.power ? "  +" + NAME[f.power] : "") + tail);
-    }
+    announce(r.flushes);
     persist();
     chrome();
-    var go = function () { if (r.flushes.length) runFlushes(r.flushes, 0); else { var fx = finalFx; finalFx = null; timers = []; render(fx); } };
+    var go = function () { play(r.flushes); };
     if (SLIDE) later(go, SLIDE); else go();
   }
 
   // ---- power-ups ----
-  function activate(name) {
+  function activate(name, kbd) {
     settle();
+    if (helpOpen()) return;
+    note = "";
     if (targeting && targeting.name === name) { targeting = null; return render(); }
     targeting = null;
-    if (!E.usable(state, name)) return render();
+    if (state.over || !E.usable(state, name)) { render(); return explain(name); }
     if (name === "undo") {
       var u = E.use(state, "undo");
       if (u.ok) { state = u.state; persist(); K.toast("Rewound one move"); }
       return render();
     }
-    targeting = { name: name, picks: [] }; render();
+    targeting = { name: name, picks: [], cur: -1, kbd: !!kbd };
+    if (kbd) targeting.cur = firstTarget(name);
+    render();
+  }
+  function firstTarget(name) {
+    var g = state.grid;
+    for (var c = 0; c < 16; c++) if (name === "third" ? (g[c] === 1 || g[c] === 2) : g[c]) return c;
+    return 0;
+  }
+  // keyboard cursor: arrows move it one cell (clamped), Enter or Space picks
+  function steer(dir) {
+    if (!targeting.kbd) { targeting.kbd = true; if (targeting.cur < 0) { targeting.cur = targeting.picks.length ? targeting.picks[0] : firstTarget(targeting.name); return render(); } }
+    var r = Math.floor(targeting.cur / 4), c = targeting.cur % 4;
+    if (dir === "left") c = Math.max(0, c - 1); else if (dir === "right") c = Math.min(3, c + 1);
+    else if (dir === "up") r = Math.max(0, r - 1); else r = Math.min(3, r + 1);
+    targeting.cur = r * 4 + c; render();
   }
   function cellAt(ev) {
     var rect = boardEl.getBoundingClientRect(), x = ev.clientX - rect.left, y = ev.clientY - rect.top;
@@ -153,40 +210,77 @@
   function pick(ev) {
     if (!targeting) return;
     var cell = cellAt(ev); if (cell < 0) return;
+    targeting.kbd = false; targeting.cur = cell;
+    pickCell(cell);
+  }
+  function pickCell(cell) {
     if (targeting.picks[0] === cell) { targeting.picks = []; return render(); }
     targeting.picks.push(cell);
     var need = targeting.name === "swap" ? 2 : 1;
     if (targeting.picks.length < need) return render();
     var name = targeting.name, res = E.use(state, name, targeting.picks[0], targeting.picks[1]);
-    if (res.ok) { state = res.state; targeting = null; persist(); K.toast(NAME[name] + "!"); }
-    else { targeting.picks = []; K.toast(name === "swap" ? "Pick two different neighbouring tiles" : name === "third" ? "Pick a 1 or a 2" : "Pick a tile"); }
-    render();
+    if (!res.ok) {
+      targeting.picks = [];
+      K.toast(name === "swap" ? "Pick two different neighbouring tiles" : name === "third" ? "Pick a 1 or a 2" : "Pick a tile", "bad");
+      return render();
+    }
+    state = res.state; targeting = null; persist();
+    if (res.flushes.length) { announce(res.flushes); gen++; finalFx = { flushed: res.flushes[res.flushes.length - 1].at }; chrome(); play(res.flushes); }
+    else { K.toast(NAME[name] + "!"); render(); }
   }
 
   // ---- input ----
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (helpOpen()) { if (e.key === "Escape") { e.preventDefault(); closeHelp(); } return; }
     if (e.key === "Escape") { targeting = null; return render(); }
+    var onButton = e.target && (e.target.tagName === "BUTTON" || e.target.tagName === "A");
+    if (targeting && (e.key === "Enter" || e.key === " ") && !onButton) {
+      e.preventDefault(); if (targeting.cur < 0) { targeting.kbd = true; targeting.cur = firstTarget(targeting.name); return render(); }
+      return pickCell(targeting.cur);
+    }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
-    if (pi >= 0) return activate(E.POWERS[pi]);
-    if (e.key === "u" || e.key === "U") return activate("undo");
+    if (pi >= 0) return activate(E.POWERS[pi], true);
+    if (e.key === "u" || e.key === "U") return activate("undo", true);
     var d = K.arrowKey(e);
-    if (d) { e.preventDefault(); doMove(d); }
+    if (d) { e.preventDefault(); if (targeting) steer(d); else doMove(d); }
   });
   boardEl.addEventListener("click", pick);
   K.swipe(boardEl, doMove);
 
   function startNew() {
-    settle(); targeting = null;
+    settle(); targeting = null; note = "";
+    base = Math.max(best.score, state.score);
     state = E.newGame(K.freshSeed()); persist(); render();
   }
+
+  // ---- first-run explainer: shown once (remembered), re-opened from "How it works" ----
+  var helpEl = $("help"), helpBack = null;
+  (function () {
+    var tiles = helpEl.querySelectorAll("[data-v]");
+    Array.prototype.forEach.call(tiles, function (el) { el.classList.add("tile"); paint(el, +el.getAttribute("data-v")); el.setAttribute("aria-hidden", "true"); });
+  })();
+  function helpOpen() { return !helpEl.hidden; }
+  function openHelp() {
+    settle(); targeting = null; render();
+    helpBack = document.activeElement; helpEl.hidden = false; $("help-play").focus();
+  }
+  function closeHelp() {
+    helpEl.hidden = true;
+    if (!seen) { seen = true; persist(); }
+    (helpBack && helpBack !== document.body && helpBack.focus ? helpBack : boardEl).focus();
+  }
+  $("help-play").addEventListener("click", closeHelp);
+  helpEl.addEventListener("click", function (e) { if (e.target === helpEl) closeHelp(); });
+  $("help-open").addEventListener("click", function (e) { e.preventDefault(); openHelp(); });
   K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, startNew);
   $("again").addEventListener("click", startNew);
 
   render();
+  if (!seen) { helpBack = boardEl; helpEl.hidden = false; $("help-play").focus(); }
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
-    settle(); targeting = null;
+    settle(); targeting = null; note = ""; helpEl.hidden = true;
     var s = E.newGame(2026);
     s.grid = [3, 6, 1, 2,
               9, 12, 3, 0,
@@ -196,5 +290,6 @@
     s.power = { undo: 1, smash: 2, swap: 1, third: 1 }; s.prev = null; s.over = false;
     state = s; render();
   };
-  window.__three = { get state() { return state; }, set state(s) { settle(); state = s; render(); }, render: render, settle: settle };
+  window.__three = { get state() { return state; }, set state(s) { settle(); state = s; render(); }, render: render, settle: settle,
+    get base() { return base; }, set base(v) { base = v; }, openHelp: openHelp, closeHelp: closeHelp };
 })();

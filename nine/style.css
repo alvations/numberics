@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Nine: only what shared/theme.css does not cover. */
 .board{ display:flex; flex-direction:column; gap:var(--gap); }
-.heaps{ flex:1; min-height:0; container-type:size; display:flex; flex-direction:column; justify-content:center; gap:var(--gap); }
+.heaps{ flex:1; min-height:0; container-type:size; padding:0 var(--gap); display:flex; flex-direction:column; justify-content:center; gap:var(--gap); }
 .hrow{ display:flex; justify-content:center; gap:var(--gap); }
 /* a heap is an Endless tile: the number plus up to nine pips; sizes come from the 3x3 slot it sits in */
 .heap{ position:relative; width:calc((100cqw - 2*var(--gap))/3); height:calc((100cqh - 2*var(--gap))/3);
@@ -18,13 +18,20 @@
 .heap.peek::after{ content:""; position:absolute; inset:5px; border:2px dashed #15151d; border-radius:calc(var(--tile-radius) - 3px); opacity:.6; pointer-events:none; }
 .heap.cpu::before{ content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:0 0 0 2px var(--cool) inset; pointer-events:none; }
 .board.targeting .heap:not(.gone){ cursor:crosshair; }
-.heap:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
-.learn{ margin:0; text-align:center; color:var(--mute); font:600 .82rem/1.2 ui-monospace,Menlo,Consolas,monospace; }
+/* focus is a white ring outside the gold selection ring, so focused and selected never look the same (F9) */
+.heap:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; }
+.learn{ margin:0; text-align:center; color:var(--mute); font-size:.8rem; line-height:1.25; }
+.learn span{ display:block; }
+.learn .sum{ font:600 .82rem/1.3 ui-monospace,Menlo,Consolas,monospace; }
+.learn .sum.off{ font:inherit; font-style:italic; }
 .learn b{ color:var(--accent); }
 .bar{ display:flex; align-items:center; gap:8px; }
 .bar .btn{ padding:8px 0; }
 .bar .step{ width:44px; font-size:1.1rem; font-weight:700; }
 .bar #take{ width:88px; }
+/* a disabled Take is calm (the tray's empty look), not a muddy gold */
+.bar #take:disabled{ background:var(--panel); color:var(--mute); border-color:var(--line); opacity:.6; }
+#best.none{ color:var(--mute); font-weight:600; }
 .amount{ flex:1; text-align:center; color:var(--mute); font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .amount b{ color:var(--ink); }
 .over .note{ font-size:.85rem; color:var(--accent); }

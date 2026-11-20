@@ -106,6 +106,22 @@ t("overflow: a rise that pushes a disc out of the top ends the run", () => {
   ok(r.state.over); ok(r.trace.find(x => x.type === "rise").overflow);
   ok(!S.drop(r.state, 2).ok, "no drops after the end");
 });
+t("overflow leaves the well as the player saw it and names the discs pushed out (cold #10)", () => {
+  const rows = ["5.....2", "e.....e", "e.....e", "e.....e", "e.....e", "e.....e", "e.....e"];
+  const s = st(rows, 4, { left: 1 }); const level = s.level;
+  const r = S.drop(s, 3), rise = r.trace.find(x => x.type === "rise");
+  const want = s.grid.slice(); want[at(6, 3)] = 4;
+  eq(r.state.grid, want, "nothing shifted up, no egg row added");
+  eq(r.state.out, [0, 6], "the two top-row discs"); eq(rise.out, [0, 6]); eq(rise.points, 0);
+  eq(r.state.level, level, "the rise did not happen, so the level is unchanged");
+  eq(r.trace[r.trace.length - 1].grid, r.state.grid);
+  eq(S.newGame(1).out, [], "a fresh run has no pushed-out discs");
+});
+t("the drop that overflows is counted in drops (gameplay #1)", () => {
+  const rows = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
+  const s = st(rows, 4, { left: 1, drops: 10 }); const r = S.drop(s, 3);
+  ok(r.state.over); eq(r.state.drops, 11);
+});
 t("N shrinks with level in Classic and Daily, fixed at 5 in Blitz", () => {
   ok(S.dropsFor("classic", 1) > S.dropsFor("classic", 5)); eq(S.dropsFor("classic", 99), S.RULES.minN);
   eq(S.dropsFor("daily", 3), S.dropsFor("classic", 3));
@@ -149,11 +165,36 @@ t("Undo restores the whole snapshot (stock included) and is paid for", () => {
   // redoing the same drop replays the same random outcome: rewinding cannot reroll
   eq(S.drop(Object.assign({}, u.state, { power: s.power }), 6).state.grid, r.state.grid);
 });
-t("Undo works from the end screen", () => {
+t("Undo never crosses a decided result: refused once the run is over (R1)", () => {
   const rows = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
-  const s = st(rows, 4, { left: 1 }); const r = S.drop(s, 3); ok(r.state.over);
-  const u = S.use(r.state, "undo"); ok(u.ok); ok(!u.state.over); eq(u.state.grid, s.grid);
-  ok(!S.use(r.state, "smash", 0).ok, "other power-ups do not act after the end");
+  const s = st(rows, 4, { left: 1, power: { undo: 3, smash: 2, hold: 2, crack: 2 } }); const r = S.drop(s, 3); ok(r.state.over);
+  ok(r.state.prev, "the snapshot exists, and still Undo is refused");
+  ["undo", "smash", "hold", "crack"].forEach(n => { const u = S.use(r.state, n, at(6, 0)); ok(!u.ok, n + " refused after the end"); ok(u.state === r.state); });
+  // a full well that is not decided (Undo can still act) is not over, and Undo works there
+  const full = ["eeeeee.", "eeeeeee", "eeeeeee", "eeeeeee", "eeeeeee", "eeeeeee", "eeeeeee"];
+  const f = st(full, 5, { power: { undo: 1, smash: 0, hold: 0, crack: 0 }, prev: null });
+  const d = S.drop(f, 6); ok(!d.state.over, "Undo keeps a full well alive"); ok(S.use(d.state, "undo").ok);
+});
+t("Undo is counted as a power-up used (critic #4)", () => {
+  const s = S.newGame(5); eq(s.used, 0);
+  const r = S.drop(s, 3); const u = S.use(r.state, "undo"); ok(u.ok); eq(u.state.used, 1);
+  eq(u.state.prev, null, "one step only");
+});
+t("used goes up by exactly one per power-up, Undo included (property)", () => {
+  for (let seed = 1; seed <= 25; seed++) {
+    let s = S.newGame(seed); s.power = { undo: 9, smash: 9, hold: 9, crack: 9 };
+    for (let k = 0; k < 60 && !s.over; k++) {
+      const name = S.POWERS[(k * 5 + seed) % 4], filled = s.grid.map((v, i) => v ? i : -1).filter(i => i >= 0);
+      const u = S.use(s, name, filled[(k * 3) % Math.max(1, filled.length)]);
+      if (u.ok) { eq(u.state.used, s.used + 1, name); s = u.state; }
+      const c = [0, 1, 2, 3, 4, 5, 6].find(c => S.landing(s.grid, c) >= 0); if (c === undefined) break;
+      const d = S.drop(s, c); eq(d.state.used, s.used, "a drop uses nothing"); s = d.state;
+    }
+  }
+});
+t("Crack targets are exactly the eggs touching a numbered disc", () => {
+  const g = grid(["e......", "e3....e", "eee...e"]);
+  eq(S.crackTargets(g), [at(5, 0), at(6, 1)]); ok(S.crackable(g)); eq(S.crackTargets(grid(["e......"])), []);
 });
 t("a full well with no usable power-up ends the run; Smash keeps it alive", () => {
   const full = ["eeeeee.", "eeeeeee", "eeeeeee", "eeeeeee", "eeeeeee", "eeeeeee", "eeeeeee"];

@@ -9,6 +9,7 @@
 })(typeof self !== "undefined" ? self : this, function (Kit, Power) {
   "use strict";
   var POWERS = ["undo", "add", "pass", "peek"];
+  var CPU_POWERS = ["add", "pass"]; // the computer only earns what it plays (it never undoes or peeks)
   var MAX = 9, MIN_TILES = 3, MAX_TILES = 9, WIN_ROUNDS = 3; // best of five: first to three
   var DIFFS = ["easy", "medium", "hard"];
 
@@ -47,16 +48,27 @@
     return w[0];
   }
 
-  // ---- dealing: every start is a win for the player, who moves first ----
-  function deal(s, n) {
-    for (var k = 0; k < 1000; k++) {
+  // ---- dealing ----
+  // Easy and Medium: every start is a win for the player, who moves first, so perfect play always wins.
+  // Hard: the start is random. One round in five (HARD_LOSING) deals the player a losing position, so a perfect
+  // player must sometimes turn a bad start around with Pass or Add (docs/DESIGN.md, Nine).
+  var HARD_LOSING = 0.2; // measured: a perfect player using Add and Pass wins about two Hard matches in three
+  function dealWhere(s, n, want) {
+    for (var k = 0; k < 2000; k++) {
       var h = [];
       for (var i = 0; i < n; i++) h.push(1 + Math.floor(rnd(s) * MAX));
-      if (winning(h, s.misere)) return h;
+      if (winning(h, s.misere) === want) return h;
     }
-    var f = []; for (var j = 0; j < n; j++) f.push(j === 0 ? 2 : 1); // 2,1,1..: winning in both modes
-    if (!winning(f, s.misere)) f[0] = 3;
+    // never reached in practice (either kind is at least 1 deal in 20); a fixed search keeps it total
+    for (var a = 1; a <= MAX; a++) for (var b = 1; b <= MAX; b++) {
+      var f = []; for (var j = 0; j < n; j++) f.push(j === 0 ? a : j === 1 ? b : 1);
+      if (winning(f, s.misere) === want) return f;
+    }
     return f;
+  }
+  function deal(s, n) {
+    var want = s.diff === "hard" ? rnd(s) >= HARD_LOSING : true;
+    return dealWhere(s, n, want);
   }
 
   function opts(o) {
@@ -103,7 +115,7 @@
     // Winning a round earns one power-up. The computer earns too, on Hard only (it only plays them on Hard).
     s.award = null;
     if (winner === "you" || s.diff === "hard") {
-      var name = Power.award(s.power[winner], POWERS, rnd(s));
+      var name = Power.award(s.power[winner], winner === "you" ? POWERS : CPU_POWERS, rnd(s));
       if (name) s.award = { who: winner, name: name };
     }
     if (s.score[winner] >= WIN_ROUNDS) {
@@ -133,8 +145,9 @@
     var v = s.heaps[tile];
     return live(s) && !s.added && (s.power[s.turn].add || 0) > 0 && Number.isInteger(v) && v >= 1 && v < MAX;
   }
-  // Undo is for taking back a mistake: never after a round you won (nothing to fix, and no award to rewind).
-  function canUndo(s) { return !!s.prev && (s.power.you.undo || 0) > 0 && s.roundOver !== "you"; }
+  // Undo is for taking back a mistake inside a round: it never crosses a decided result (round or match, won
+  // or lost), so a loss stays a loss and a won round's award can never be rewound and re-earned.
+  function canUndo(s) { return !!s.prev && (s.power.you.undo || 0) > 0 && live(s); }
 
   // Power-ups for the side to move (the player calls this with s.turn === "you"; undo is the player's only).
   //   undo        restores the start of the player's last turn, stock included (no farming); spent Peeks stay spent
@@ -209,7 +222,7 @@
     return take(s, m.tile, s.heaps[m.tile] - m.to).state;
   }
 
-  return { POWERS: POWERS, MAX: MAX, MIN_TILES: MIN_TILES, MAX_TILES: MAX_TILES, WIN_ROUNDS: WIN_ROUNDS, DIFFS: DIFFS,
+  return { POWERS: POWERS, CPU_POWERS: CPU_POWERS, HARD_LOSING: HARD_LOSING, MAX: MAX, MIN_TILES: MIN_TILES, MAX_TILES: MAX_TILES, WIN_ROUNDS: WIN_ROUNDS, DIFFS: DIFFS,
            nimSum: nimSum, winning: winning, legalMoves: legalMoves, winningMoves: winningMoves, peek: peek,
            newGame: newGame, nextRound: nextRound, nextMatch: nextMatch, take: take, use: use,
            canPass: canPass, canAdd: canAdd, canUndo: canUndo, chooseMove: chooseMove, cpuTurn: cpuTurn };

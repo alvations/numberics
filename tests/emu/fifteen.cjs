@@ -19,6 +19,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("difficulty row under the header", await p.locator("#diff button").count() === 3);
   ck("tray has four power-ups", await p.locator("#tray .pw").count() === 4);
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  // R6 header, R11 naming
+  ck("subtitle starts with a Numberics link home", await p.evaluate(() => { const a = document.querySelector(".sub a"); return !!a && a.textContent === "Numberics" && a.getAttribute("href") === "../" && document.querySelector(".sub").firstElementChild === a; }));
+  ck("restart is New game", (await p.textContent("#new")).trim() === "New game");
+  ck("no CPU anywhere on the page", !/\bCPU\b/i.test(await p.evaluate(() => document.body.innerText)));
   await forge(p, { diff: "easy" });
   await tile(p, 5).click();
   ck("click claims 5 for you", (await S(p)).owner[4] === 1);
@@ -32,6 +36,69 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("Enter");
   ck("keyboard Enter claims the focused number", (await S(p)).owner[free - 1] === 1, "n=" + free);
   await p.waitForFunction(() => window.__fifteen.state.turn === 1 || !!window.__fifteen.state.result, null, { timeout: 3000 });
+
+  // ownership is the fill (craft N1): gold for you, cool for the computer, neutral when free; one focus ring (F9)
+  await forge(p, { owner: B([2, 8], [4, 5]), turn: 1 });
+  const look = await p.evaluate(() => {
+    const cs = (n) => getComputedStyle(document.querySelector('.ft[data-n="' + n + '"]'));
+    const root = getComputedStyle(document.documentElement), tmp = document.createElement("i"); document.body.appendChild(tmp);
+    const rgb = (v) => { tmp.style.color = v; return getComputedStyle(tmp).color; };
+    const r = { mine: cs(2).backgroundColor, mine2: cs(8).backgroundColor, theirs: cs(4).backgroundColor, theirs2: cs(5).backgroundColor, free: cs(1).backgroundColor,
+      accent: rgb(root.getPropertyValue("--accent")), cool: rgb(root.getPropertyValue("--cool")), cell: rgb(root.getPropertyValue("--cell")),
+      mineInk: cs(2).color, label: document.querySelector('.ft[data-n="4"] small').textContent, mineShadow: cs(2).boxShadow };
+    tmp.remove(); return r;
+  });
+  ck("your tiles are all the gold fill", look.mine === look.accent && look.mine2 === look.accent, JSON.stringify(look));
+  ck("the computer's tiles are all the cool fill", look.theirs === look.cool && look.theirs2 === look.cool, JSON.stringify(look));
+  ck("free tiles are neutral", look.free === look.cell, JSON.stringify(look));
+  ck("number on a claimed tile is dark ink (readable)", /^rgb\((2\d|1\d|\d),/.test(look.mineInk), look.mineInk);
+  ck("the computer's tile label says computer", look.label === "computer");
+  ck("ownership needs no ring", look.mineShadow === "none", look.mineShadow);
+  await p.keyboard.press("Tab"); await p.evaluate(() => document.querySelector('.ft[data-n="2"]').focus());
+  await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowLeft");
+  const fr = await p.evaluate(() => { const e = document.activeElement, c = getComputedStyle(e); return { n: e.dataset.n, outline: c.outlineStyle + " " + c.outlineColor, shadow: c.boxShadow }; });
+  ck("a focused claimed tile has exactly one ring (gold outline, no shadow rings)", /solid rgb\(242, 184, 75\)/.test(fr.outline) && fr.shadow === "none", JSON.stringify(fr));
+
+  // R5: a power-up with no charge explains itself on a tap; disabled is aria-disabled, never `disabled`
+  await forge(p, { owner: B([2], [4]), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 0 } });
+  ck("tray buttons are never disabled", await p.locator("#tray .pw[disabled]").count() === 0);
+  ck("empty ones are aria-disabled", await p.locator('#tray .pw[aria-disabled="true"]').count() === 4);
+  await p.locator("#tray .pw").nth(3).click({ force: true });
+  ck("tapping empty Double explains it and how to earn it", /^Double: Claim two numbers this turn\. Win a round/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("tray tooltip voice", (await p.locator("#tray .pw").nth(0).getAttribute("title")) === "1: Undo. Take back your last turn.");
+  await forge(p, { owner: B([2], [4]), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 0 } });
+  await p.keyboard.press("2");
+  ck("key 2 with no Erase explains too", /^Erase: /.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await forge(p, { owner: B([2], []), turn: 1, power: { undo: 0, erase: 1, peek: 0, double: 0 } });
+  await p.locator("#tray .pw").nth(1).click({ force: true });
+  ck("Erase with a charge but nothing to erase says why", /The computer holds no number yet/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+
+  // R9: keyboard targeting from anywhere: key 2 arms Erase, arrows move, Enter erases
+  await forge(p, { owner: B([5, 2], [8, 1]), turn: 1, power: { undo: 0, erase: 1, peek: 0, double: 0 } });
+  await p.evaluate(() => document.activeElement && document.activeElement.blur());
+  await p.keyboard.press("2");
+  ck("Erase armed", await p.locator("#board.targeting").count() === 1);
+  // cursor starts on the centre cell (5); move to 8 (bottom middle in Numbers view)
+  await p.keyboard.press("ArrowDown");
+  ck("arrows move the cursor while targeting", await p.evaluate(() => document.activeElement.dataset.n === "8"), await p.evaluate(() => document.activeElement.dataset.n));
+  await p.keyboard.press("Enter");
+  ck("Enter erases the number under the cursor", (await S(p)).owner[7] === 0 && (await S(p)).power.erase === 0);
+  ck("the erase target style is gone", await p.locator(".ft.target").count() === 0);
+  // Enter on a focused button is that button, never a claim
+  await p.focus("#v-grid"); await p.keyboard.press("Enter");
+  ck("Enter on the Grid button switches the view and claims nothing", await p.evaluate(() => window.__fifteen.view === "grid") && (await S(p)).owner.filter(o => o === 1).length === 2);
+  await p.click("#v-numbers");
+  // R7: a warning uses the neutral toast
+  await forge(p, { owner: B([5], [8]), turn: 1 });
+  await tile(p, 8).click();
+  ck("Already taken is a neutral toast", await p.evaluate(() => document.getElementById("toast").classList.contains("bad")));
+  // R10: a mid-match difficulty change asks first
+  await forge(p, { owner: B([5], [8]), turn: 1, moves: 2 });
+  await p.click('#diff button[data-d="hard"]');
+  ck("first tap on Hard asks Sure?", (await p.textContent('#diff button[data-d="hard"]')) === "Sure?" && (await S(p)).diff === "medium");
+  await p.click('#diff button[data-d="hard"]');
+  ck("second tap starts a Hard match", (await S(p)).diff === "hard" && (await p.textContent('#diff button[data-d="hard"]')) === "Hard");
+  await p.click('#diff button[data-d="medium"]');
 
   // 2. the two views: same board, tiles move, note on first switch, persists
   await forge(p, { owner: B([2, 6], [5]), turn: 1 });
@@ -54,6 +121,15 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("Peek names the block", /block 6/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("Peek marks tile 6", await tile(p, 6).evaluate(e => e.classList.contains("peek")));
   ck("Peek spent", (await S(p)).power.peek === 0);
+  // R3 in the page: claim, let the computer reply, Undo: the Peek stays spent
+  await forge(p, { owner: B([], []), turn: 1, power: { undo: 1, erase: 0, peek: 1, double: 0 } });
+  await tile(p, 5).click();
+  await p.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
+  await p.keyboard.press("3"); await p.keyboard.press("1");
+  const s0 = await S(p);
+  ck("Undo after Peek keeps the Peek spent", s0.power.peek === 0 && s0.power.undo === 0 && s0.owner.every(o => !o), JSON.stringify(s0.power));
+  await forge(p, { owner: B([5], [8, 1]), turn: 1, power: { undo: 1, erase: 1, peek: 1, double: 1 } });
+  await p.keyboard.press("3");
   // Erase: arm with key 2, tap a computer number
   await p.keyboard.press("2");
   ck("Erase arms targeting", await p.locator("#board.targeting").count() === 1);
@@ -85,25 +161,45 @@ module.exports = async function ({ browser, url, ck, shot }) {
   s = await S(p);
   ck("Double: 8 + 1 + 6 wins the round", s.result && s.result.winner === 1 && s.result.earned === null);
 
-  // 4. round end, winning triple in both views, next round, match end
-  ck("round result in the hint", /8 \+ 1 \+ 6 = 15|1 \+ 6 \+ 8 = 15/.test(await p.textContent("#hint")), await p.textContent("#hint"));
-  ck("winning triple lit", await p.locator(".ft.win").count() === 3);
+  // 4. round end: the family overlay (R8), the winning three kept visible as owner chips, next round, match end
+  ck("round end shows the overlay", await p.locator("#over").isVisible());
+  ck("headline names the round", /^You win round 1$/.test(await p.textContent("#over-title")), await p.textContent("#over-title"));
+  ck("winning three shown as gold chips", (await p.locator("#trio b.mine").allTextContents()).join() === "1,6,8", (await p.locator("#trio b").allTextContents()).join());
+  ck("summary line has the tally", /^You 1 : 0 Computer$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("R2: a round won with Double says it earned nothing", /No power-up/.test(await p.textContent("#over-best")));
+  ck("result not repeated in the hint (R7)", (await p.textContent("#hint")) === "");
+  ck("no Undo across the decided round (R1)", await p.locator("#tray .pw").nth(0).getAttribute("aria-disabled") === "true");
+  ck("winning triple still marked on the board", await p.locator(".ft.win").count() === 3);
   await p.click("#v-grid");
-  ck("still lit in the Grid view", await p.locator(".ft.win").count() === 3);
+  ck("still marked in the Grid view", await p.locator(".ft.win").count() === 3);
   await shot(p, "round-won-grid");
-  ck("Next round button shows", await p.locator("#next").isVisible());
+  ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
+  ck("Next round is the gold primary in the overlay", await p.locator("#over #next.primary").isVisible());
+  ck("the bottom row has no Next round", await p.locator(".row #next").count() === 0);
   await p.click("#next");
   s = await S(p);
   ck("next round: the computer starts", s.round === 2 && s.starter === 2);
   await p.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
   ck("and has played its opening", (await S(p)).owner.filter(o => o === 2).length === 1);
+  // the bottom row keeps its size when a round ends
+  await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, wins: [0, 1, 0], rounds: [1], round: 2 });
+  const rowBefore = await p.evaluate(() => [...document.querySelectorAll(".row .btn")].map(b => { const r = b.getBoundingClientRect(); return [r.width, r.height, getComputedStyle(b).fontSize].join(); }).join("|"));
+  await p.evaluate(() => { window.__toasts = []; const t = document.getElementById("toast"); new MutationObserver(() => window.__toasts.push(t.textContent)).observe(t, { childList: true, characterData: true, subtree: true }); });
+  await tile(p, 7).click();
+  const rowAfter = await p.evaluate(() => [...document.querySelectorAll(".row .btn")].map(b => { const r = b.getBoundingClientRect(); return [r.width, r.height, getComputedStyle(b).fontSize].join(); }).join("|"));
+  ck("bottom row unchanged when the round ends", rowBefore === rowAfter, rowBefore + " vs " + rowAfter);
+  ck("a clean round win pays, shown once in the overlay", /^\+1 /.test(await p.textContent("#over-best")) && (await p.evaluate(() => window.__toasts.length)) === 0, await p.evaluate(() => window.__toasts.join("|")));
+  await p.keyboard.press("Enter");
+  ck("Enter starts the next round", (await S(p)).round === 3);
   await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, wins: [0, 2, 0], rounds: [1, 1], round: 3 });
   await tile(p, 7).click();
   ck("3-0 ends the match with the overlay", await p.locator("#over").isVisible() && /You win the match/.test(await p.textContent("#over-title")));
+  ck("match summary", /^You 3 : 0 Computer · Medium$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("match end offers New game, not Next round", await p.locator("#again").isVisible() && await p.locator("#next").isHidden() && (await p.textContent("#again")) === "New game");
   await shot(p, "match-over");
   await p.click("#again");
   s = await S(p);
-  ck("New match resets", s.round === 1 && s.wins.join() === "0,0,0" && await p.locator("#over").isHidden());
+  ck("New game resets", s.round === 1 && s.wins.join() === "0,0,0" && await p.locator("#over").isHidden());
   // Hard with a power-up: the computer uses Double to fork
   await forge(p, { diff: "hard", owner: B([5], [8]), turn: 2, cpuPower: { undo: 0, erase: 0, peek: 0, double: 1 } });
   await p.waitForFunction(() => !!window.__fifteen.state.result || window.__fifteen.state.turn === 1, null, { timeout: 3000 });

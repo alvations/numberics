@@ -16,12 +16,12 @@
   <header>
     <div class="brand">
       <h1>Nine</h1>
-      <p class="sub"><a href="../">Numberics</a> &middot; <span id="mode">Take the last tile.</span></p>
+      <p class="sub"><a href="../">Numberics</a> &middot; Take turns lowering tiles.</p>
     </div>
     <div class="stats" aria-live="off">
-      <div class="stat"><span>Match</span><b id="match">0-0</b></div>
+      <div class="stat" title="Rounds in this match: you-computer, first to three"><span>Rounds</span><b id="match">0-0</b></div>
       <div class="stat"><span>Tiles</span><b id="tiles">3</b></div>
-      <div class="stat"><span>Best</span><b id="best">-</b></div>
+      <div class="stat" title="Most tiles in a match you won"><span>Best</span><b id="best" class="none">none</b></div>
     </div>
   </header>
 
@@ -46,6 +46,7 @@
     <div id="over" class="over" hidden>
       <h2 id="over-title">Round won</h2>
       <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
       <p id="over-note" class="note"></p>
       <button id="again" class="btn primary" type="button">Next round</button>
     </div>
@@ -53,11 +54,13 @@
 
   <div class="row">
     <button id="new" class="btn" type="button">New game</button>
-    <button id="learn-btn" class="btn" type="button" aria-pressed="false" title="Show each tile in binary and the nim-sum (L)">Learn</button>
+    <button id="learn-btn" class="btn" type="button" aria-pressed="false" title="Show each tile in binary and the goal (L). The live nim-sum is on Easy and Medium only.">Learn</button>
     <button id="misere" class="btn" type="button" aria-pressed="false" title="Misere: the last take loses" hidden>Misere</button>
   </div>
-  <p class="how">Tap a tile, then a pip or + and - to choose how much to take; a tile at 0 is gone. Keys: arrows, Enter, 1-4.
-     Take the last tile to win the round; best of five wins the match and adds a tile. Win a match to unlock Misere.</p>
+  <p class="how">Tap a tile, then a pip or + and - to choose how much to take; a tile at 0 is gone. Keys: arrows, Enter, 1-4, L for Learn.
+     Take the last tile to win the round; best of five wins the match and adds a tile. Easy and Medium always deal you a
+     winning start, so perfect play wins; Hard deals at random, so a bad start needs Pass or Add. Win a match to unlock
+     Misere, where the last take loses.</p>
   <nav id="games" class="games" data-root="../" data-current="nine" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

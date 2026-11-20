@@ -65,6 +65,94 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; s.over = true; window.__numberics.state = s; });
   ck("overlay shows when locked", await p.isVisible("#over"));
   await shot(p, "over");
+  ck("overlay scrim is the darker one (R8, F7)", await p.evaluate(() => /0\.95\)/.test(getComputedStyle(document.getElementById("over")).backgroundColor)));
+  ck("only one New game on screen while over (E2)", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden"));
+  ck("game over focuses the overlay's New game", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  await ctx.close();
+
+  // 4b. Round 1 fixes: header (R6), tray explains itself (R5), keyboard aiming (R9), toasts (R7), end screen (R8)
+  ctx = await b.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); const e5 = []; p.on("pageerror", x => e5.push(x.message));
+  await p.goto(url);
+  ck("H1 stays Numberics (home page)", (await p.textContent("h1")) === "Numberics");
+  ck("subtitle links to the games row", await p.evaluate(() => { const a = document.querySelector(".sub a"); return !!a && a.getAttribute("href") === "#games" && a.textContent === "Nine more games below."; }));
+  ck("tray buttons are never disabled; empty ones are aria-disabled", await p.evaluate(() => { const bs = [...document.querySelectorAll("#tray .pw")]; return bs.length === 4 && bs.every(x => !x.disabled) && bs.slice(1).every(x => x.getAttribute("aria-disabled") === "true"); }));
+  ck("tray tooltip voice: 2: Smash. Remove one tile.", (await p.getAttribute("#tray .pw:nth-child(2)", "title")) === "2: Smash. Remove one tile.");
+  ck("tray aria-label carries the count", /^Smash, 0 left\./.test(await p.getAttribute("#tray .pw:nth-child(2)", "aria-label")));
+  await p.click("#tray .pw:nth-child(2)", { force: true });
+  ck("tapping an empty Smash explains it and how to earn it", /^Smash: Remove one tile\. Each new highest tile from 32 up earns/.test(await p.textContent("#hint")));
+  await p.click("#tray .pw:nth-child(1)", { force: true });
+  ck("tapping Undo with nothing to rewind explains why", /^Undo: Take back the last move\. Undo goes back one move/.test(await p.textContent("#hint")));
+  await p.keyboard.press("4");
+  ck("key 4 on an empty Boost explains it too", /^Boost: Double one tile/.test(await p.textContent("#hint")));
+  ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await p.evaluate(() => { const s = window.__numberics.state; s.top = 0; window.__numberics.state = s; });
+  ck("an empty Top tile pill says none, dimmed (R11)", (await p.textContent("#top")) === "none" && await p.locator("#top.none").count() === 1);
+  // keyboard aiming: Smash, Swap, Boost with arrows + Enter, no pointer
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[0] = 3; s.grid[5] = 4; s.grid[15] = 2; s.top = 4; s.power = { undo: 0, smash: 1, swap: 1, boost: 2 }; s.prev = null; s.over = false; window.__numberics.state = s; });
+  await p.keyboard.press("2");
+  ck("smash armed by key shows the cursor on the top tile", await p.evaluate(() => window.__numberics.cursor === 5) && await p.locator(".tile.cur").count() === 1);
+  ck("aiming hint mentions the arrows on desktop", /Arrows \+ Enter aim, Esc cancels\./.test(await p.textContent("#hint")));
+  await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp");
+  ck("arrows move the cursor, not the tiles", await p.evaluate(() => window.__numberics.cursor === 0 && window.__numberics.state.grid[0] === 3 && window.__numberics.state.moves === 0));
+  await shot(p, "aim");
+  await p.keyboard.press("Enter");
+  ck("Enter smashes the tile under the cursor", await p.evaluate(() => window.__numberics.state.grid[0] === 0 && window.__numberics.state.power.smash === 0 && !window.__numberics.targeting));
+  await p.keyboard.press("3");
+  await p.keyboard.press("Enter"); // cell 0 (empty)
+  ck("swap: first pick is marked", await p.locator(".cells div.sel").count() === 1);
+  await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown"); await p.keyboard.press("Enter"); // cell 5
+  ck("Enter twice swaps two cells", await p.evaluate(() => window.__numberics.state.grid[0] === 4 && window.__numberics.state.grid[5] === 0 && window.__numberics.state.power.swap === 0));
+  await p.keyboard.press("4");
+  for (let i = 0; i < 3; i++) { await p.keyboard.press("ArrowDown"); await p.keyboard.press("ArrowRight"); }
+  await p.keyboard.press(" ");
+  ck("Space boosts the tile under the cursor", await p.evaluate(() => window.__numberics.state.grid[15] === 3 && window.__numberics.state.power.boost === 1));
+  await p.keyboard.press("4"); await p.keyboard.press("ArrowUp"); await p.keyboard.press("Enter"); // cell 11, empty
+  ck("a bad target warns with the neutral toast (R7)", await p.evaluate(() => { const t = document.getElementById("toast"); return t.classList.contains("bad") && /empty cell/.test(t.textContent); }));
+  await p.keyboard.press("Escape");
+  await p.keyboard.press("4"); for (let i = 0; i < 3; i++) { await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp"); } await p.keyboard.press("Enter"); // cell 0 = 4, the top
+  ck("boost to a new top tile says it earns no reward", /Boosted to 32\. Boosts earn no reward\./.test(await p.textContent("#toast")) && await p.evaluate(() => !document.getElementById("toast").classList.contains("bad")));
+  const tb = await p.evaluate(() => [document.getElementById("toast").getBoundingClientRect().bottom, document.getElementById("board").getBoundingClientRect().top, document.getElementById("games").getBoundingClientRect().top]);
+  ck("toast sits at the top, clear of the games row (F2)", tb[0] < tb[2] && tb[0] < tb[1] + 40, JSON.stringify(tb));
+  // Enter on a focused button presses that button only (R9)
+  await p.evaluate(() => { const s = window.__numberics.state; s.power = { undo: 0, smash: 1, swap: 0, boost: 0 }; s.moves = 5; window.__numberics.state = s; });
+  const g0 = await p.evaluate(() => JSON.stringify(window.__numberics.state.grid));
+  await p.keyboard.press("2"); await p.focus("#new"); await p.keyboard.press("Enter");
+  ck("Enter on a focused button presses it and does not pick a cell", await p.evaluate(g => JSON.stringify(window.__numberics.state.grid) === g && window.__numberics.state.power.smash === 1, g0) && /Sure\?/.test(await p.textContent("#new")));
+  await p.keyboard.press("Escape");
+  // end screen: New best only when the run beat the old best
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; s.score = window.__numberics.bestBefore + 500; s.over = true; window.__numberics.state = s; });
+  ck("a new best says New best.", await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
+  ck("summary reads Top tile ... · score ...", /^Top tile \d+ · score [\d,]+$/.test(await p.textContent("#over-text")));
+  ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.querySelector("#over h2"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
+  await shot(p, "over-best");
+  await p.click("#again");
+  await p.evaluate(() => { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 1000, bestTop: 8, bestBefore: 1000, state: window.__numberics.state })); });
+  await p.reload();
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.score = 900; s.over = true; window.__numberics.state = s; });
+  ck("a run below the saved best does not claim one", await p.isVisible("#over") && !(await p.isVisible("#over-best")));
+  await p.evaluate(() => { const s = window.__numberics.state; s.score = 1004; window.__numberics.state = s; });
+  ck("a run above the saved best does", await p.isVisible("#over-best"));
+  ck("no page errors in round 1 checks", e5.length === 0, e5.join("|"));
+  await ctx.close();
+
+  // 4c. a phone (no hover): no "Esc", and 320px does not scroll sideways
+  ctx = await b.newContext({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); await p.goto(url);
+  await p.evaluate(() => { const s = window.__numberics.state; s.power = { undo: 9, smash: 9, swap: 9, boost: 9 }; window.__numberics.state = s; });
+  ck("tray fits at 320px (no horizontal scroll)", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await p.tap("#tray .pw:nth-child(2)");
+  const ph = await p.textContent("#hint");
+  ck("phone aiming hint has no Esc and says how to cancel", !/Esc/.test(ph) && /Tap Smash to cancel\./.test(ph), ph);
+  await shot(p, "phone-aim");
+  await ctx.close();
+
+  // 4d. a malformed save (bad undo snapshot) starts a fresh game instead of breaking Undo
+  ctx = await b.newContext({ viewport: { width: 420, height: 800 } });
+  p = await ctx.newPage(); const e6 = []; p.on("pageerror", x => e6.push(x.message));
+  await p.addInitScript(() => { try { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 10, state: { size: 4, grid: new Array(16).fill(1), power: { undo: 1, smash: 0, swap: 0, boost: 0 }, score: 5, top: 1, moves: 3, seed: 1, over: false, prev: { grid: 7 } } })); } catch (e) {} });
+  await p.goto(url);
+  ck("malformed prev is rejected: fresh game", e6.length === 0 && await p.evaluate(() => window.__numberics.state.moves === 0 && window.__numberics.state.prev === null), e6.join("|"));
   await ctx.close();
 
   // 5. sandbox where storage throws: the game must still run
