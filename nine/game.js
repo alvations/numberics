@@ -137,7 +137,7 @@
         sum.className += " off"; sum.textContent = "Hard shows no live nim-sum (Easy and Medium do). Work it out from the binary.";
       } else {
         var x = N.nimSum(state.heaps);
-        sum.appendChild(document.createTextNode("Nim-sum " + state.heaps.filter(Boolean).map(bin).join(" ^ ") + " = "));
+        sum.appendChild(document.createTextNode("Nim-sum " + (state.heaps.filter(Boolean).map(bin).join(" ^ ") || bin(0)) + " = "));
         var xb = document.createElement("b"); xb.textContent = bin(x) + " (" + x + ")"; sum.appendChild(xb);
       }
       ln.appendChild(sum);

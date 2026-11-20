@@ -66,9 +66,9 @@
 .help h2{ margin:0 0 4px; font-size:1.3rem; }
 .help .lead{ margin:0 0 12px; color:var(--mute); font-size:.88rem; }
 .help ul{ list-style:none; margin:0 0 14px; padding:0; display:grid; gap:10px; text-align:left; }
-.help li{ display:grid; grid-template-columns:128px 1fr; gap:10px; align-items:center; font-size:.86rem; }
+.help li{ display:grid; grid-template-columns:140px 1fr; gap:10px; align-items:center; font-size:.86rem; }
 .help .ex{ display:flex; align-items:center; gap:3px; color:var(--mute); font-weight:700; }
-.help .tile{ position:relative; width:30px; height:30px; font-size:.9rem; flex:none; }
+.help .tile{ position:relative; width:28px; height:28px; font-size:.9rem; flex:none; }
 .help .tile[data-len="2"]{ font-size:.82rem; }
 .help .tile.one::before,.help .tile.two::before{ inset:3px; border-radius:5px; }
 .help .tile.three[data-oct="1"]{ box-shadow:inset 0 0 0 2px rgba(255,255,255,.85); }

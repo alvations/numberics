@@ -143,7 +143,7 @@
   function announce(list) {
     if (!list.length) return;
     var f = list[0], tail = list.length > 1 ? "  (x" + list.length + " cascade)" : "";
-    var pays = f.power ? "  +" + NAME[f.power] : f.paid ? "" : ". A power-up set it up, so no new one";
+    var pays = f.power ? "  +" + NAME[f.power] : f.paid ? "" : " (no power-up)";
     K.toast("Flush " + f.values.join("-") + " = " + f.value + ", +" + K.fmt(f.points) + pays + tail);
   }
   function play(list) {

@@ -100,7 +100,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   s = await st(p);
   ck("swap-made run collapsed and scored", s.grid[2] === 18 && s.score === 54, JSON.stringify(s.grid));
   ck("swap-made flush paid no power-up", s.power.undo + s.power.smash + s.power.swap + s.power.third === 0);
-  ck("toast says a power-up set it up", /no new one/.test(await p.textContent("#toast")), await p.textContent("#toast"));
+  ck("toast says a power-up set it up", /\(no power-up\)/.test(await p.textContent("#toast")), await p.textContent("#toast"));
   await p.keyboard.press("ArrowDown"); await p.waitForTimeout(400); s = await st(p);
   ck("the next swipe pays nothing either", s.power.undo + s.power.smash + s.power.swap + s.power.third === 0);
 
