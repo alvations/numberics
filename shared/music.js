@@ -11,7 +11,7 @@
  * Graph: note -> style bus (level-match gain, fades) -> mix (musicVolume * SCALE, 0 when Music is off) -> duck ->
  * destination. The style bus also feeds a shared reverb (convolver, seeded impulse) and an optional feedback echo.
  * The music has its own AudioContext, created and resumed only inside a user gesture (as shared/audio.js does). If
- * NumbericsAudio ever exposes `musicBus()` -> { context, input } the music plugs into that instead (MUSIC.md, Merge).
+ * NumbericsAudio ever exposes `musicBus()` -> { context, input } the music plugs into that instead (MUSIC.md, One context).
  * Pauses while the tab is hidden; duck(true) lowers it under an end card. Settings: `music`, `musicVolume`,
  * `musicStyle` from NumbericsSettings (missing fields keep the defaults below) and the `numberics:settings` event.
  * Also require()-able (Node tests): module.exports = { STYLES, GAMES, MODES, TPB, compile, tickTime, ... }. */
