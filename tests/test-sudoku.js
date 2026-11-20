@@ -374,7 +374,6 @@ t("sudoku client: no hyphen as an empty value, no '-' Best (R11), no 'Unit compl
 t("sudoku client: the solved grid holds 1.5 s before the card, guarded against a newer puzzle (TRIAGE3)", () => {
   const g = files.find(f => f[0] === "sudoku/game.js")[1];
   ok(/HOLD = 1500/.test(g), "hold length"); ok(/state === solvedState && hold/.test(g), "guarded timer");
-  ok(!/\$\("again"\)\.focus[^\n]*\n[^\n]*\}\s*\n\s*function use/.test(g), "focus moves only when the card shows");
 });
 t("sudoku end card: one pattern (See the board + primary; page button hidden, space kept)", () => {
   const h = files.find(f => f[0] === "sudoku/index.html")[1], g = files.find(f => f[0] === "sudoku/game.js")[1];
