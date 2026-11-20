@@ -7,10 +7,12 @@
   var store = K.store("numberics_six_v1");
   var $ = function (id) { return document.getElementById(id); };
 
-  var PW = [{ id: "hint", label: "Hint", title: "Reveal one step of a solution" },
-            { id: "skip", label: "Skip", title: "A new line in the same tier" },
-            { id: "peek", label: "Peek", title: "Show the value of one part of a solution" },
-            { id: "undo", label: "Undo", title: "Take back the last edit" }];
+  // Undo is slot 1 in every Numberics game (R5); keys 1-4 follow this order
+  var PW = [{ id: "undo", label: "Undo", desc: "Take back the last edit." },
+            { id: "hint", label: "Hint", desc: "Reveal one step of a solution." },
+            { id: "skip", label: "Skip", desc: "Get a new line in the same tier." },
+            { id: "peek", label: "Peek", desc: "Show the value of one part of a solution." }];
+  var EARN = "Three lines in a row made without help earn one.";
   var NAME = { hint: "Hint", skip: "Skip", peek: "Peek", undo: "Undo" };
   var SIGN = ["", "√", "!", "√√", "(√)!"];
 
@@ -29,15 +31,18 @@
   };
   var mode = saved.mode === "daily" ? "daily" : "climb";
   var best = Math.max(1, saved.best | 0);
+  // the best round before this Climb run began, so the end screen can say "New best."
+  var runBest = saved.runBest >= 1 ? Math.min(saved.runBest | 0, best) : best;
   var state = games[mode];
   var cursor = 0, anchor = -1, bracketMode = false, drag = null, kbd = false; // kbd: show the cursor only for keyboard play
+  var note = ""; // a one-off hint line message (a power-up explaining itself, a confirm), cleared by the next action
 
   function persist() {
     games[mode] = state;
     if (state.mode === "climb") best = Math.max(best, state.round);
-    store.save({ climb: games.climb, daily: games.daily, mode: mode, best: best });
+    store.save({ climb: games.climb, daily: games.daily, mode: mode, best: best, runBest: runBest });
   }
-  function toast(m) { K.toast(m); }
+  function toast(m, kind) { K.toast(m, kind); }
   function level(tok) { return (parseInt(tok, 10) % 11) + 1; }
   function ord(k) { return ["1st", "2nd", "3rd", "4th", "5th", "6th"][k] || (k + 1) + "th"; }
 
@@ -119,8 +124,8 @@
       pips.appendChild(i);
     });
 
-    $("round-label").textContent = state.mode === "daily" ? "Daily" : "Round";
-    $("round").textContent = state.mode === "daily" ? "Six" : String(state.round);
+    $("round-label").textContent = state.mode === "daily" ? "Made" : "Round";
+    $("round").textContent = state.mode === "daily" ? String(state.solved) : String(state.round);
     $("lineno").textContent = (state.idx + 1) + "/6";
     $("best").textContent = String(state.mode === "climb" ? Math.max(best, state.round) : best);
     Array.prototype.forEach.call($("modes").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
@@ -128,28 +133,41 @@
     $("next").hidden = !state.done || state.over;
     $("brk").hidden = state.done; $("clear").hidden = state.done; $("reveal").hidden = state.done;
     $("brk").setAttribute("aria-pressed", String(bracketMode));
-    P.tray($("tray"), PW, state.power, { disabled: function (id) { return !E.useable(state, id); }, onUse: activate });
+    P.tray($("tray"), PW, state.power, { disabled: function (id) { return E.why(state, id) || !E.useable(state, id); },
+      onUse: activate, earn: EARN, onInfo: function (id, t) { note = t; render(); } });
 
     var h = "";
-    if (state.done && !state.over) h = state.gave ? "One answer, shown. Next line (Enter)." : "Made " + L.g + ". Next line (Enter).";
+    if (note) h = note;
+    else if (state.done && !state.over) h = state.gave ? "One answer, shown. Next line (Enter)." : "Made " + L.g + ". Next line (Enter).";
     else if (bracketMode) h = anchor < 0 ? "Tap the first number to group (Esc cancels)." : "Now tap the last number of the group.";
     else if (anchor >= 0) h = "Bracket opened at number " + (anchor + 1) + ". Move and press ) to close.";
     else if (state.peeks.length) h = "Peek: " + state.peeks.map(function (p) { return L.n.slice(p.i, p.j + 1).join(" ") + " make " + p.v; }).join(" · ");
+    else if (val.why === "math") h = "Each step must be a whole number or a fraction.";
+    else if (!state.edits && !state.done && state.idx === 0 && state.round === 1) h = "Tap a gap for + − × ÷, a number for √ or !.";
     $("hint").textContent = h;
 
+    // end screens (R8): headline, one summary line "<result> · <tally>", the answer when one was shown, New best
     var over = $("over"); over.hidden = !state.over;
+    var pw = state.used + " power-up" + (state.used === 1 ? "" : "s") + " used";
+    var made = state.solved + " line" + (state.solved === 1 ? "" : "s") + " made";
+    $("over-answer").hidden = true; $("over-best").hidden = true;
     if (state.over) {
       if (state.mode === "daily") {
         $("over-title").textContent = "Daily Six done";
-        $("over-text").textContent = state.solved + " of 6 made, " + state.used + " power-up" + (state.used === 1 ? "" : "s") + " used. A new six tomorrow.";
+        $("over-text").textContent = state.solved + " of 6 made · " + pw;
         $("again").textContent = "Play Climb";
       } else if (state.ended) {
         $("over-title").textContent = "Run over";
-        $("over-text").textContent = "Reached round " + state.round + ", " + state.solved + " line" + (state.solved === 1 ? "" : "s") + " made. The answer is on the line.";
+        $("over-text").textContent = "Round " + state.round + " · " + made;
+        // the overlay covers the line, so the answer it ends on is printed here
+        $("over-answer").textContent = "The answer: " + txt + " = " + L.g;
+        $("over-answer").hidden = false;
+        $("over-best").hidden = !(state.round > runBest);
         $("again").textContent = "New game";
       } else {
         $("over-title").textContent = "Round " + state.round + " cleared";
-        $("over-text").textContent = state.solved + " lines solved, " + state.used + " power-up" + (state.used === 1 ? "" : "s") + " used.";
+        $("over-text").textContent = made + " · " + pw;
+        $("over-best").hidden = !(state.round + 1 > runBest);
         $("again").textContent = "Next round";
       }
     }
@@ -158,50 +176,58 @@
   // ---------- actions ----------
   function apply(r, quiet) {
     if (!r.ok) {
-      if (!quiet && r.why === "cross") toast("Brackets cannot cross");
-      else if (!quiet && r.why === "one") toast("Group two numbers or more");
-      else if (!quiet && r.why === "dot") toast("One number takes one decimal point");
+      if (!quiet && r.why === "cross") toast("Brackets cannot cross", "bad");
+      else if (!quiet && r.why === "one") toast("Group two numbers or more", "bad");
+      else if (!quiet && r.why === "dot") toast("One number takes one decimal point", "bad");
       return false;
     }
-    state = r.state;
-    if (r.solved) toast(r.award ? "Three clean lines: +" + NAME[r.award] : "Made " + E.line(state).g + "!");
+    state = r.state; note = "";
+    // a made line is said once, in the hint line (R7); only a reward gets the toast
+    if (r.award) toast("Three clean lines: +" + NAME[r.award]);
     persist(); render(); return true;
   }
   function doEdit(act, quiet) { return apply(E.edit(state, act), quiet); }
   function activate(id) {
-    if (!E.useable(state, id)) return;
+    if (!E.useable(state, id)) { // a slot that cannot act explains itself (R5), the same for keys 1-4 and taps
+      var d = PW.filter(function (x) { return x.id === id; })[0];
+      note = P.info(d, state.power, E.why(state, id), { earn: EARN }); render(); return;
+    }
     var r = E.use(state, id);
     if (!r.ok) return;
-    state = r.state; anchor = -1; bracketMode = false;
+    state = r.state; anchor = -1; bracketMode = false; note = "";
     if (id === "hint" && r.step) {
       var st = r.step, sol = E.line(state).sol;
       toast(st.kind === "gap" ? "Hint: the " + ord(st.i) + " gap is " + (sol.g[st.i] === "j" ? "joined" : sol.g[st.i] === "." ? "a decimal point" : E.SYM[sol.g[st.i]])
         : st.kind === "un" ? "Hint: the " + ord(st.i) + " number takes " + (SIGN[sol.u[st.i]] || "no sign")
         : st.kind === "brx" ? "Hint: that bracket is not needed" : "Hint: group numbers " + (st.b[0] + 1) + " to " + (st.b[1] + 1));
-      if (r.solved) toast(r.award ? "+" + NAME[r.award] : "Made " + E.line(state).g + "!");
-    } else if (id === "skip") { toast("New line"); cursor = 0; }
+    } else if (id === "skip") { toast("New line"); cursor = 0; disarm(); }
     else if (id === "undo") toast("Took back the last edit");
     persist(); render();
   }
+  // an armed two-step never carries over to another line, mode or game
+  function disarm() { disarmReveal(); disarmClear(); }
   function nextLine() {
-    var r = E.next(state); if (!r.ok) return;
-    state = r.state; cursor = 0; anchor = -1; bracketMode = false; persist(); render();
+    var r = E.next(state); if (!r.ok) return; disarm();
+    state = r.state; cursor = 0; anchor = -1; bracketMode = false; note = ""; persist(); render();
   }
   function again() {
     if (!state.over) return;
     if (state.mode === "daily") return setMode("climb");
     if (state.ended) return startNew();
-    state = E.nextRound(state).state; cursor = 0; persist(); render();
+    disarm();
+    state = E.nextRound(state).state; cursor = 0; note = ""; persist(); render();
   }
   function setMode(m) {
     if (m === mode) return;
-    games[mode] = state; mode = m;
+    disarm(); games[mode] = state; mode = m;
     if (m === "daily" && games.daily.start !== K.daySeed()) games.daily = E.newGame(K.daySeed(), "daily");
-    state = games[m]; cursor = 0; anchor = -1; bracketMode = false; drag = null; persist(); render();
+    state = games[m]; cursor = 0; anchor = -1; bracketMode = false; drag = null; note = ""; persist(); render();
   }
   function startNew() {
+    disarm();
     state = mode === "daily" ? E.newGame(K.daySeed(), "daily") : E.newGame(K.freshSeed(), "climb");
-    cursor = 0; anchor = -1; bracketMode = false; persist(); render();
+    if (mode === "climb") runBest = best;
+    cursor = 0; anchor = -1; bracketMode = false; note = ""; persist(); render();
   }
   function pickTile(k) {
     if (state.done) return;
@@ -246,18 +272,33 @@
     var b = e.target.closest && e.target.closest(".bar"); if (!b || b.dataset.x === undefined) return;
     doEdit({ k: "bu", x: +b.dataset.x });
   });
-  $("brk").addEventListener("click", function () { bracketMode = !bracketMode; anchor = -1; render(); });
-  $("clear").addEventListener("click", function () { anchor = -1; bracketMode = false; doEdit({ k: "clear" }, true); });
+  $("brk").addEventListener("click", function () { bracketMode = !bracketMode; anchor = -1; note = ""; render(); });
+  // Clear asks first once the line has something on it: getting it back would cost an Undo charge
+  var clearArmed = null;
+  function disarmClear() { if (clearArmed) clearTimeout(clearArmed); clearArmed = null; $("clear").textContent = "Clear"; }
+  $("clear").addEventListener("click", function () {
+    if (state.done || E.sameM(state.cur, E.blank(state.cur.u.length))) return disarmClear();
+    if (!clearArmed) { $("clear").textContent = "Sure? Clear"; clearArmed = setTimeout(disarmClear, 3000); return; }
+    disarmClear(); anchor = -1; bracketMode = false; doEdit({ k: "clear" }, true);
+  });
   $("next").addEventListener("click", nextLine);
-  // Answer: two taps (it ends a Climb run), no blocking confirm() dialog
+  // Show answer: two taps (it ends a Climb run), no blocking confirm() dialog; the first tap says what it costs
   var revealArmed = null;
+  function disarmReveal() {
+    if (revealArmed) { clearTimeout(revealArmed); note = ""; }
+    revealArmed = null; $("reveal").textContent = "Show answer";
+  }
   $("reveal").addEventListener("click", function () {
     var b = $("reveal");
     if (!revealArmed) {
-      b.textContent = state.mode === "climb" ? "Sure? Ends the run" : "Sure? Show it";
-      revealArmed = setTimeout(function () { revealArmed = null; b.textContent = "Answer"; }, 3000); return;
+      var climb = state.mode === "climb";
+      b.textContent = climb ? "Sure? Ends run" : "Sure? Show it";
+      note = climb ? "This ends the Climb run. Tap again to show it." : "This gives up the line. Tap again to show it.";
+      render();
+      var asked = note;
+      revealArmed = setTimeout(function () { revealArmed = null; b.textContent = "Show answer"; if (note === asked) { note = ""; render(); } }, 3000); return;
     }
-    clearTimeout(revealArmed); revealArmed = null; b.textContent = "Answer";
+    disarmReveal(); note = "";
     var r = E.reveal(state); if (!r.ok) return;
     state = r.state; anchor = -1; bracketMode = false; persist(); render();
   });
@@ -270,10 +311,13 @@
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var n = E.line(state).n.length, max = 2 * n - 2, key = e.key;
+    // Enter or Space on a focused button or link is that control's own click, never a game action (R9)
+    var tag = e.target && e.target.tagName;
+    if ((key === "Enter" || key === " ") && (tag === "BUTTON" || tag === "A")) return;
     kbd = true;
     var pi = ["1", "2", "3", "4"].indexOf(key);
-    if (pi >= 0) { activate(E.POWERS[pi]); return; }
-    if (key === "Escape") { anchor = -1; bracketMode = false; render(); return; }
+    if (pi >= 0) { activate(PW[pi].id); return; }
+    if (key === "Escape") { anchor = -1; bracketMode = false; note = ""; render(); return; }
     if (state.over) { if (key === "Enter") { e.preventDefault(); again(); } return; }
     if (state.done) { if (key === "Enter" || key === " ") { e.preventDefault(); nextLine(); } return; }
     var onGap = cursor % 2 === 1, k = Math.floor(cursor / 2);
@@ -284,7 +328,7 @@
       return;
     }
     if (OPKEY[key]) {
-      if ((key === "j" || key === ".") && !E.canJoin(state)) { toast("Joining digits arrives at Tier 4"); return; }
+      if ((key === "j" || key === ".") && !E.canJoin(state)) { toast("Joining digits arrives at Tier 4", "bad"); return; }
       e.preventDefault();
       var gi = onGap ? k : Math.min(k, n - 2);
       doEdit({ k: "gap", i: gi, op: OPKEY[key] }, true);
@@ -312,7 +356,7 @@
       if (inb) doEdit({ k: "bu", x: inb[1] }, true);
       return;
     }
-    if (key === "c") { doEdit({ k: "clear" }, true); }
+    if (key === "c") $("clear").click(); // the same two-step as the button
   });
 
   render();

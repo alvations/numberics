@@ -14,6 +14,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("line drawn as tiles", await p.locator("#line .num").count() >= 3);
   ck("gold target shown", /^6/.test(await p.textContent("#target")));
   ck("unset gaps show ?", (await p.textContent("#val")).trim() === "= ?");
+  ck("R6 header: Numberics link then a tagline", (await p.textContent(".sub")) === "Numberics · Every line makes six, then 66, 6.6, 666." && (await p.getAttribute(".sub a", "href")) === "../");
+  ck("the first line needs only + - x /", await p.evaluate(() => window.__six.E.plain(window.__six.state.lines[0])));
+  ck("a fresh board prompts the first move", /Tap a gap/.test(await p.textContent("#hint")));
   // force a known line with a bracket and a sign: 8 8 8 -> (sqrt(8 / 8 + 8))!
   await p.evaluate(() => {
     const E = window.__six.E, s = JSON.parse(JSON.stringify(window.__six.state));
@@ -37,6 +40,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("live value shows", /^= \d/.test((await p.textContent("#val")).trim()));
   ck("line turns gold on the target", await p.locator("#board.gold").count() === 1 && (await st(p)).done);
   ck("Next line shows", await p.isVisible("#next"));
+  ck("R7: a made line is said once (hint line), no toast", /^Made 6\./.test(await p.textContent("#hint")) && !(await p.locator("#toast.on").count()));
   await shot(p, "solved");
   // tapping a number cycles its sign
   await p.click("#next");
@@ -54,6 +58,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
     window.__six.state = s;
   });
   await p.focus("#board");
+  // a value that is not exact states the rule
+  await p.keyboard.press("+"); await p.keyboard.press("+"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft");
+  await p.keyboard.press("!"); await p.keyboard.press("!"); // (sqrt 0)! is 1, fine; now an inexact one
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.cur = { g: ["/", "+"], u: [0, 0, 0], b: [] }; window.__six.state = s; });
+  ck("no exact value states the exactness rule", (await p.textContent("#val")).trim() === "= no exact value" && /whole number or a fraction/.test(await p.textContent("#hint")));
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.cur = window.__six.E.blank(3); window.__six.state = s; });
+  await p.focus("#board");
   // (0! + 0! + 0!)!  : cursor on the 1st number
   for (const k of ["!", "+", "!", "+", "!"]) await p.keyboard.press(k);
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft");
@@ -67,23 +78,48 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 3. power-ups
   await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.power = { hint: 2, skip: 1, peek: 1, undo: 1 }; window.__six.state = s; });
   let s0 = await st(p);
-  await p.keyboard.press("1");
+  ck("tray order is Undo, Hint, Skip, Peek (R5)", JSON.stringify(await p.$$eval("#tray .pw", bs => bs.map(b => b.firstChild.textContent))) === '["Undo","Hint","Skip","Peek"]');
+  ck("tray tooltip voice", (await p.getAttribute("#tray .pw:first-child", "title")) === "1: Undo. Take back the last edit.");
+  await p.keyboard.press("2");
   let s1 = await st(p);
   const S2 = await sol(p);
   ck("Hint sets one gap of the known solution", s1.power.hint === 1 && s1.cur.g[0] === S2.g[0] && JSON.stringify(s1.cur) !== JSON.stringify(s0.cur));
-  await p.keyboard.press("3");
+  await p.keyboard.press("4");
   ck("Peek shows a part's value", /^Peek: .+ make /.test(await p.textContent("#hint")) && (await st(p)).power.peek === 0);
   ck("peeked numbers are marked", await p.locator(".num.pk").count() >= 1);
   await shot(p, "peek");
   const n0 = (await st(p)).n.join(" "), idx0 = (await st(p)).idx;
-  await p.keyboard.press("2");
+  await p.keyboard.press("3");
   const s3 = await st(p);
   ck("Skip gives a new line in the same place", s3.power.skip === 0 && s3.idx === idx0 && s3.n.join(" ") !== n0 && JSON.stringify(s3.cur.g.filter(Boolean)) === "[]");
   await p.locator('.gp[data-g="0"]').click();
   ck("edit made", (await st(p)).cur.g[0] === "+");
-  await p.keyboard.press("4");
+  await p.keyboard.press("1");
   const s4 = await st(p);
   ck("Undo takes back the last edit", s4.cur.g[0] === "" && s4.power.undo === 0);
+  // R5: a slot that cannot act explains itself on a tap (and on its key)
+  await p.locator("#tray .pw").nth(0).click({ force: true }); // aria-disabled: a real tap still lands
+  ck("empty Undo tap explains itself", /^Undo: Take back the last edit\. Three lines in a row made without help earn one\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("empty slots are aria-disabled, never disabled", await p.locator("#tray .pw[aria-disabled=true]").count() >= 1 && await p.locator("#tray .pw:disabled").count() === 0);
+  await p.keyboard.press("3");
+  ck("key on an empty slot explains it too", /^Skip: /.test(await p.textContent("#hint")));
+  // R9: Enter / Space on a focused button is that button's click, never an edit at the cursor
+  const kb0 = await st(p);
+  await p.focus('.gp[data-g="1"]'); await p.keyboard.press("Enter");
+  const kb1 = await st(p);
+  ck("Enter on a focused gap cycles that gap only", kb1.cur.g[1] !== kb0.cur.g[1] && JSON.stringify(kb1.cur.u) === JSON.stringify(kb0.cur.u) && kb1.cur.g[0] === kb0.cur.g[0], JSON.stringify(kb0.cur) + " " + JSON.stringify(kb1.cur));
+  await p.keyboard.press(" ");
+  const kb2 = await st(p);
+  ck("Space on a focused gap cycles that gap only", kb2.cur.g[1] !== kb1.cur.g[1] && JSON.stringify(kb2.cur.u) === JSON.stringify(kb1.cur.u));
+  await p.focus("#brk"); await p.keyboard.press("Enter");
+  ck("Enter on Brackets toggles bracket mode, edits nothing", (await p.getAttribute("#brk", "aria-pressed")) === "true" && JSON.stringify((await st(p)).cur) === JSON.stringify(kb2.cur));
+  await p.keyboard.press("Escape");
+  ck("focus ring on a gap sits on its chip", await p.evaluate(() => { const g = document.querySelector('.gp[data-g="0"]'); g.focus(); const b = getComputedStyle(g.querySelector("b")); return b.outlineStyle === "solid" && getComputedStyle(g).outlineStyle === "none"; }));
+  // Clear asks first (a stray c must not wipe a line)
+  await p.focus("#board"); await p.keyboard.press("c");
+  ck("c once only arms Clear", JSON.stringify((await st(p)).cur) === JSON.stringify(kb2.cur) && (await p.textContent("#clear")) === "Sure? Clear");
+  await p.keyboard.press("c");
+  ck("c twice clears", (await st(p)).cur.g.every(g => !g));
   await p.keyboard.press("Escape");
 
   // 4. round end, then the next round climbs a tier
@@ -97,23 +133,45 @@ module.exports = async function ({ browser, url, ck, shot }) {
   for (let guard = 0; guard < 6 && !(await st(p)).done; guard++) await p.locator('.gp[data-g="0"]').click();
   await p.click("#next");
   ck("round end overlay", await p.isVisible("#over") && /Round 1 cleared/.test(await p.textContent("#over-title")));
+  ck("R8 summary line", /^\d+ lines? made · \d+ power-ups? used$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("first cleared round is a new best", await p.isVisible("#over-best"));
   await shot(p, "round");
   await p.click("#again");
   const r2 = await st(p);
   ck("next round is round 2 at tier 2", r2.round === 2 && !r2.over && await p.evaluate(() => window.__six.state.lines.every(l => l.t === 2)));
 
-  // 5. Answer: two taps, ends the Climb run
-  await p.click("#reveal"); ck("Answer asks first", !(await st(p)).done);
+  // 5. Show answer: two taps, the first says it ends the run; the tools never wrap at 390px
+  await p.setViewportSize({ width: 390, height: 844 });
+  ck("Show answer label", (await p.textContent("#reveal")) === "Show answer");
+  const row0 = (await p.locator("#board .tools").boundingBox()).height;
+  await p.click("#reveal"); ck("Show answer asks first", !(await st(p)).done);
+  ck("first tap says it ends the run", /ends the Climb run/.test(await p.textContent("#hint")) && /Ends run/.test(await p.textContent("#reveal")));
+  const row1 = (await p.locator("#board .tools").boundingBox()).height;
+  const oneLine = await p.$$eval("#board .tools .btn:not([hidden])", bs => bs.every(b => b.getBoundingClientRect().height < 40));
+  ck("tool row does not wrap or grow at 390px", row0 === row1 && oneLine, row0 + " " + row1);
+  await shot(p, "armed");
   await p.click("#reveal");
-  ck("Answer shows the solution and ends the run", (await st(p)).ended && await p.isVisible("#over") && /Run over/.test(await p.textContent("#over-title")));
+  ck("Show answer ends the run", (await st(p)).ended && await p.isVisible("#over") && /Run over/.test(await p.textContent("#over-title")));
+  const ans = await p.textContent("#over-answer");
+  ck("Run over prints the answer it refers to", await p.isVisible("#over-answer") && ans === "The answer: " + (await p.textContent("#expr")) + " = " + (await p.textContent("#target")), ans);
+  ck("Run over summary", /^Round \d+ · \d+ lines? made$/.test(await p.textContent("#over-text")));
+  await shot(p, "runover");
+  await p.setViewportSize({ width: 375, height: 812 });
   await p.click("#again");
   ck("New game after the run", (await st(p)).round === 1 && !(await st(p)).over);
 
   // 6. Daily Six
   await p.click('#modes button[data-mode="daily"]');
   const d = await st(p);
-  ck("Daily Six mode", d.mode === "daily" && (await p.textContent("#round-label")) === "Daily");
+  ck("Daily Six mode", d.mode === "daily" && (await p.textContent("#round-label")) === "Made" && /^\d$/.test(await p.textContent("#round")));
   ck("Daily tiers climb", await p.evaluate(() => JSON.stringify(window.__six.state.lines.map(l => l.t)) === JSON.stringify(window.__six.E.DAILY)));
+  await p.click("#reveal");
+  ck("Daily: first tap says it gives up the line", /gives up the line/.test(await p.textContent("#hint")));
+  await p.click('#modes button[data-mode="climb"]'); await p.click("#reveal");
+  ck("an armed Show answer does not carry over to another mode", !(await st(p)).done && /Ends run/.test(await p.textContent("#reveal")));
+  await p.locator('.gp[data-g="0"]').click(); await p.click("#clear");
+  await p.click('#modes button[data-mode="daily"]');
+  ck("switching mode disarms both two-steps", (await p.textContent("#reveal")) === "Show answer" && (await p.textContent("#clear")) === "Clear");
   await p.reload();
   ck("mode and state survive reload", (await st(p)).mode === "daily");
   await p.click('#modes button[data-mode="climb"]');

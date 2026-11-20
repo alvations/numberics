@@ -314,12 +314,25 @@
     if (!pool.length) pool = POOL[tier].slice();
     return pool[Math.floor(rnd(s) * pool.length)];
   }
+  // a plain line: one shortest solution uses only the four operators (no signs, no brackets)
+  function plain(l) { return l.sol.u.every(function (u) { return !u; }) && !l.sol.b.length && l.sol.g.every(function (g) { return OPS.indexOf(g) >= 0; }); }
+  function drawPlain(s, avoid) {
+    var pool = POOL[1].filter(function (id) { return plain(entry(id)) && avoid.indexOf(id) < 0; });
+    if (!pool.length) pool = POOL[1].filter(function (id) { return plain(entry(id)); });
+    return pool[Math.floor(rnd(s) * pool.length)];
+  }
   function deal(s) {
     var t = s.mode === "daily" ? 0 : climbTier(s);
     var tiers = s.mode === "daily" ? DAILY : [t, t, t, t, t, t];
     var ids = [];
     tiers.forEach(function (t) { ids.push(draw(s, t, ids.concat(s.recent))); });
     var lines = ids.map(entry).sort(function (a, b) { return a.t - b.t || a.d - b.d; });
+    // the very first line of a run (Climb round 1, every Daily) needs only + - x /: the tools come one at a time
+    if (s.round === 1) {
+      var first = lines.findIndex(function (l) { return l.t === 1 && plain(l); });
+      if (first < 0) { var pid = drawPlain(s, ids.concat(s.recent)); lines[0] = entry(pid); ids.push(pid); }
+      else if (first > 0) lines.unshift(lines.splice(first, 1)[0]);
+    }
     s.lines = lines; s.idx = 0; s.recent = s.recent.concat(ids).slice(-24);
     startLine(s);
   }
@@ -435,12 +448,21 @@
 
   function useable(s, name) {
     if (!s.power[name]) return false;
-    if (name === "undo") return !!s.prev;
+    if (name === "undo") return !!s.prev && !s.done && !s.over; // Undo never crosses a made line or an ended round (R1)
     if (s.over) return false;
     if (name === "skip") return !s.done;
     if (s.done) return false;
     if (name === "peek") return s.peeks.length < parts(line(s).n, line(s).sol).length;
     return true;
+  }
+  // why a power-up with charges cannot act now (for the hint line), or "" when it can
+  function why(s, name) {
+    if (!s.power[name] || useable(s, name)) return "";
+    if (s.over) return s.ended || s.mode === "daily" ? "The game is over." : "The round is over.";
+    if (s.done) return name === "undo" ? "A made line cannot be taken back." : "This line is already made.";
+    if (name === "undo") return "Nothing to take back yet.";
+    if (name === "peek") return "Every part is already shown.";
+    return "";
   }
   // use(state, name) -> {ok, state, ...}: hint {step}, peek {part}, skip, undo.
   // Undo rewinds the last edit and restores that whole snapshot (stock included), so a reward earned by the
@@ -505,5 +527,5 @@
            treeToModel: treeToModel, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial,
            BANK: BANK, POOL: POOL, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK,
            newGame: newGame, line: line, target: target, current: current, onTarget: onTarget, canJoin: canJoin,
-           edit: edit, use: use, useable: useable, next: next, nextRound: nextRound, reveal: reveal, hintStep: hintStep, parts: parts };
+           edit: edit, use: use, useable: useable, why: why, plain: plain, sameM: sameM, next: next, nextRound: nextRound, reveal: reveal, hintStep: hintStep, parts: parts };
 });

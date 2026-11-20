@@ -113,7 +113,7 @@ function solveLine(s) {
 t("a new game is deterministic by seed, six lines of one tier, easiest first", () => {
   const a = E.newGame(42, "climb"), b = E.newGame(42, "climb");
   eq(a, b); eq(a.lines.length, 6); ok(a.lines.every(l => l.t === 1));
-  for (let k = 1; k < 6; k++) ok(a.lines[k].d >= a.lines[k - 1].d, "sorted");
+  for (let k = 2; k < 6; k++) ok(a.lines[k].d >= a.lines[k - 1].d, "sorted after the plain first line");
   eq(new Set(a.lines.map(l => l.id)).size, 6, "distinct lines");
   eq(a.power, { hint: 1, skip: 0, peek: 0, undo: 1 });
 });
@@ -193,21 +193,60 @@ t("three lines in a row without help earn one power-up; help resets the streak",
   eq(after, before + 1); eq(s.streak, 0);
   s = E.next(s).state; s.power.peek = 1; s = E.use(s, "peek").state; s = solveLine(s); eq(s.streak, 0, "peeked line breaks the streak");
 });
-t("Undo rewinds the last edit and takes back a reward it earned; spent Hint stays spent", () => {
-  let s = E.newGame(11, "climb");
-  for (let k = 0; k < 2; k++) { s = solveLine(s); s = E.next(s).state; }
-  const L = E.line(s); s.power.undo = 2;
+t("Undo rewinds the last edit; spent Hint stays spent", () => {
+  let s = E.newGame(11, "climb"); s.power.undo = 2;
+  const pre = JSON.parse(JSON.stringify(s));
+  s = E.edit(s, { k: "gap", i: 0, op: "+" }).state;
+  const u = E.use(s, "undo"); ok(u.ok); s = u.state;
+  eq(s.cur, pre.cur); eq(s.power.undo, pre.power.undo - 1); eq(s.used, pre.used + 1, "Undo counts as a power-up used");
+  eq(E.use(s, "undo").ok, false, "one level of undo");
+  s = E.edit(s, { k: "gap", i: 0, op: "+" }).state;
+  s.power.hint = 1; s = E.use(s, "hint").state; eq(s.prev, null); eq(E.useable(s, "undo"), false, "a hint cannot be undone");
+});
+t("R1: Undo is refused on a made line, an ended round and an ended run, with a reason", () => {
+  let s = E.newGame(11, "climb"); s.power.undo = 3;
+  const L = E.line(s);
   L.sol.g.slice(0, -1).forEach((op, i) => { s = E.edit(s, { k: "gap", i, op }).state; });
   L.sol.u.forEach((u, i) => { if (u) s = E.edit(s, { k: "un", i, u }).state; });
   L.sol.b.forEach(b => { s = E.edit(s, { k: "br", i: b[0], j: b[1] }).state; if (b[2]) { const x = s.cur.b.findIndex(c => c[0] === b[0] && c[1] === b[1]); s = E.edit(s, { k: "bu", x, u: b[2] }).state; } });
-  const pre = JSON.parse(JSON.stringify(s)), last = L.sol.g.length - 1;
-  s = E.edit(s, { k: "gap", i: last, op: L.sol.g[last] }).state;
-  ok(s.done, "solved"); const tot = p => p.hint + p.skip + p.peek + p.undo;
-  eq(tot(s.power), tot(pre.power) + 1, "award");
-  const u = E.use(s, "undo"); ok(u.ok); s = u.state;
-  ok(!s.done); eq(s.cur, pre.cur); eq(s.power.undo, pre.power.undo - 1); eq(tot(s.power), tot(pre.power) - 1, "award taken back, undo paid");
-  eq(E.use(s, "undo").ok, false, "one level of undo");
-  s.power.hint = 1; s = E.use(s, "hint").state; eq(s.prev, null); eq(E.useable(s, "undo"), false, "a hint cannot be undone");
+  const last = L.sol.g.length - 1; s = E.edit(s, { k: "gap", i: last, op: L.sol.g[last] }).state;
+  ok(s.done && s.prev, "made, with a snapshot behind it");
+  eq(E.useable(s, "undo"), false, "no Undo across a made line"); eq(E.use(s, "undo").ok, false);
+  eq(E.why(s, "undo"), "A made line cannot be taken back.");
+  eq(E.why(s, "hint"), "This line is already made.");
+  for (let k = 0; k < 5; k++) { s = E.next(s).state; s = solveLine(s); }
+  s = E.next(s).state; ok(s.over); eq(E.useable(s, "undo"), false); eq(E.why(s, "undo"), "The round is over.");
+  let r = E.newGame(12, "climb"); r.power.undo = 1; r = E.edit(r, { k: "gap", i: 0 }).state; r = E.reveal(r).state;
+  eq(E.useable(r, "undo"), false); eq(E.why(r, "undo"), "The game is over.");
+  let f = E.newGame(13, "climb"); eq(E.why(f, "undo"), "Nothing to take back yet."); f.power.undo = 0; eq(E.why(f, "undo"), "", "no charge: the earn text explains it");
+});
+t("R2: a Hint that makes the line never pays a reward, even on a two-clean-lines streak", () => {
+  let s = E.newGame(14, "climb"); s.streak = 2; s.power.hint = 9;
+  const tot = p => p.hint + p.skip + p.peek + p.undo, before = tot(s.power);
+  let spent = 0; while (!s.done) { const r = E.use(s, "hint"); ok(r.ok && !r.award, "no award"); s = r.state; spent++; }
+  eq(tot(s.power), before - spent, "stock only went down"); eq(s.streak, 0);
+});
+t("used rises by exactly one per power-up, Undo included", () => {
+  let s = E.newGame(15, "climb"); s.power = { hint: 2, skip: 2, peek: 2, undo: 2 };
+  ["peek", "hint", "skip"].forEach(n => { const u0 = s.used; s = E.use(s, n).state; eq(s.used, u0 + 1, n); });
+  s = E.edit(s, { k: "gap", i: 0 }).state; const u0 = s.used; s = E.use(s, "undo").state; eq(s.used, u0 + 1, "undo");
+});
+t("the first line of a run needs only + - x / (no signs, no brackets), on every seed and Daily", () => {
+  for (let seed = 1; seed <= 400; seed++) {
+    const a = E.newGame(seed, "climb"); ok(E.plain(a.lines[0]), "climb seed " + seed + " " + a.lines[0].n.join(" "));
+    eq(a.lines[0].t, 1); for (let k = 2; k < 6; k++) ok(a.lines[k].d >= a.lines[k - 1].d, "rest sorted " + seed);
+    eq(new Set(a.lines.map(l => l.id)).size, 6, "distinct " + seed);
+    const v = E.value(a.lines[0].n, a.lines[0].sol).v; eq(v, E.literal(a.lines[0].g), "the plain solution works");
+  }
+  for (let day = 20261101; day <= 20261130; day++) {
+    const d = E.newGame(day, "daily"); ok(E.plain(d.lines[0]), "daily " + day); eq(d.lines.map(l => l.t), E.DAILY);
+  }
+  ok(E.BANK.filter(e => e.t === 1 && e.c === 0 && !e.s.b.length).length >= 3, "enough plain tier-1 lines");
+});
+t("Peek says why it cannot act once every part is shown", () => {
+  let s = E.newGame(5, "climb"); s.power.peek = 9;
+  while (E.useable(s, "peek")) s = E.use(s, "peek").state;
+  eq(E.why(s, "peek"), "Every part is already shown.");
 });
 t("Skip gives a new line in the same tier and resets the streak", () => {
   let s = E.newGame(21, "climb"); s.power.skip = 1; s.streak = 2;
