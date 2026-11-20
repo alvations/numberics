@@ -63,7 +63,7 @@ a:focus-visible{ border-radius:6px; }
 .games{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px 10px; margin:10px 0 4px; font-size:.82rem; }
 .games a{ color:var(--mute); } .games a[aria-current="page"]{ color:var(--accent); text-decoration:none; }
 .toast{ position:fixed; left:50%; top:max(12px,env(safe-area-inset-top)); transform:translateX(-50%); background:var(--accent);
-  color:#1b1b22; padding:8px 16px; border-radius:99px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 200ms;
+  color:#1b1b22; padding:5px 14px; font-size:.9rem; line-height:1.35; border-radius:99px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 200ms;
   width:max-content; max-width:calc(100vw - 32px); text-align:center; z-index:5; box-shadow:0 4px 18px rgba(0,0,0,.45); }
 .toast.on{ opacity:1; }
 /* warnings and losses: neutral, never the gold reward pill */

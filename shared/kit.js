@@ -51,7 +51,9 @@
     try {
       var b = document.querySelector("#board, .board"), r = b && b.getBoundingClientRect();
       if (r && r.height) {
-        var h = el.offsetHeight || 40, top = r.top - h - 6;
+        // centre on the hint line when there is one (it sits between the tray and the board), else just above
+        var h = el.offsetHeight || 34, hint = document.getElementById("hint"), hr = hint && hint.getBoundingClientRect();
+        var top = (hr && hr.height && hr.bottom <= r.top + 2) ? hr.top + hr.height / 2 - h / 2 : r.top - h - 6;
         if (top < 12) top = r.top + 8;
         el.style.top = Math.max(12, Math.min(window.innerHeight - h - 12, top)) + "px";
       }
