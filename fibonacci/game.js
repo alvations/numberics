@@ -33,6 +33,12 @@
   var cursor = 0;                 // keyboard cursor cell while targeting (R9)
   var note = "";                  // a tray explanation shown in the hint line until the next action (R5)
   var timer = null, pendingFx = null;
+  // Round 3 end-card pattern (as Endless): the locked board shows undimmed for HOLD ms, then the card; "See the
+  // board" hides it again (a tap on the board, Esc or Enter brings it back). A run that loads already over shows the card.
+  var HOLD = 1500, holding = false, holdT = null, viewing = false, wasOver = !!state.over;
+  // a fine pointer with hover means a keyboard is likely: only then mention Esc and the arrow keys
+  var desk = false;
+  try { desk = window.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (e) { desk = false; }
   var els = [];                   // cell index -> tile element
 
   var $ = function (id) { return document.getElementById(id); };
@@ -73,20 +79,36 @@
       tilesEl.appendChild(el); els[cell] = el;
     });
     $("score").textContent = fmt(state.score);
-    $("best").textContent = fmt(Math.max(best.score, state.score));
+    var bs = Math.max(best.score, state.score);
+    $("best").textContent = bs ? fmt(bs) : "none"; $("best").classList.toggle("none", !bs); // R11: an empty best says none
     $("top").textContent = state.top ? N.label(state.top) : "none";
     $("top").classList.toggle("none", !state.top);
     renderTray();
     renderMarks();
     boardEl.classList.toggle("targeting", !!targeting);
-    var over = $("over");
-    over.hidden = !state.over;
+    var over = $("over"), was = !over.hidden;
+    if (state.over && !wasOver) { // the run just ended: hold the final board first
+      holding = true; viewing = false; clearTimeout(holdT);
+      var gen = state.moves;
+      holdT = setTimeout(function () { holdT = null; if (holding && state.over && state.moves === gen) { holding = false; render(); } }, HOLD);
+    }
+    if (!state.over) { holding = false; viewing = false; clearTimeout(holdT); holdT = null; }
+    wasOver = !!state.over;
+    over.hidden = !state.over || holding || viewing;
+    // one "New game" on screen at a time: the card's primary replaces the page button, whose space is kept
+    $("new").style.visibility = state.over ? "hidden" : "";
     if (state.over) {
       K.clearToast(); // the end card is the only message (round 2: a toast sat on it)
       // R8: one summary line, "<Result> · <score>", and a new best says so.
-      $("over-text").textContent = "Top tile " + N.label(state.top) + " · " + fmt(state.score) + " points";
+      $("over-text").textContent = "Top tile " + N.label(state.top) + " · Score " + fmt(state.score);
       $("over-best").hidden = !(state.score > runBest);
+      if (!over.hidden && !was) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
     }
+  }
+  // "See the board" hides the card; a tap on the board, Esc or Enter brings it back (or skips the hold)
+  function view(on) {
+    viewing = on; holding = false; clearTimeout(holdT); holdT = null; render();
+    if (on) { try { boardEl.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
   }
   // Picked cells (gold) and the keyboard cursor (dashed), drawn above the tiles so a tile never hides them.
   function renderMarks() {
@@ -100,11 +122,13 @@
       place(m, k); marksEl.appendChild(m);
     }
   }
-  // Sequence colours (craft B2): the family hue formula (K.hue: 43 degrees a level) put 5 next to 233 and 8
-  // next to 377. Fibonacci steps 111 degrees a level instead, so neighbours in the sequence (the pairs that
-  // merge) are 111 degrees apart and the nearest repeat among 2 to 610 is 27 degrees. The phase keeps dark text at
-  // 4.8:1 or better from 2 to 89. 1 keeps the cream tile.
-  function hue(level) { return (level * 111 + 120) % 360; }
+  // Sequence colours. Round 3 (craft #2): a 111-degree step put 3 (green) beside 13 (lime) and 34 beside 144, both
+  // 27 degrees apart. Now a table of 11 hues, picked so that at the tile's own saturation and lightness any two of
+  // them differ by at least 30 (CIELAB delta E) and dark text keeps 4.79:1 or better, and ordered so that the pairs
+  // that merge (neighbours in the sequence) differ by 86 or more. Any 11 values in a row (2 to 233, 3 to 377 ...)
+  // never share a colour. 1 keeps the cream tile.
+  var HUES = [357, 178, 326, 151, 222, 45, 290, 22, 118, 203, 75];
+  function hue(level) { return level < 2 ? 40 : HUES[(level - 2) % HUES.length]; }
 
   var PW = { undo: "Undo", smash: "Smash", swap: "Swap", boost: "Boost" };
   // R5: tooltip voice "1: Undo. Take back the last move.", and a tap on an unusable slot explains it.
@@ -119,16 +143,11 @@
                   swap: "Tap two cells to swap them." };
   // Milestone toasts start at 13 (round 2 craft nit: "New tile 2", "New tile 3" were noise every game).
   var TOAST_FROM = 6;
-  var touchOnly = (function () { try { return window.matchMedia("(hover: none) and (pointer: coarse)").matches; } catch (e) { return false; } })();
+  // Round 3 (craft #13): the same targeting copy as Endless, which always says how to aim by tap; the keys and Esc
+  // only where a keyboard is likely, and a phone is told how to cancel.
   function targetHint() {
-    if (targeting.kbd) {
-      // kept to one line at 375px so the board never jumps
-      var what = targeting.name === "swap" ? (targeting.picks.length ? "the second cell." : "the first cell.")
-        : "to " + targeting.name + ".";
-      return "Arrows, then Enter " + what + " (Esc cancels)";
-    }
-    // cold #5: there is no Esc on a phone
-    return PW_HINT[targeting.name] + (touchOnly ? " Tap " + PW[targeting.name] + " to cancel." : " (Esc cancels)");
+    var t = targeting.name === "swap" && targeting.picks.length ? "Now tap the cell to swap it with." : PW_HINT[targeting.name];
+    return t + (desk ? " Arrows + Enter aim, Esc cancels." : " Tap " + PW[targeting.name] + " to cancel.");
   }
   // The tray is rebuilt only when what it shows changes, and at once after a swipe, so a tap that lands
   // while the slide animates still hits a live button (cold #2: the animation's redraw swallowed it).
@@ -150,8 +169,8 @@
     });
   }
   function renderHint() {
-    $("hint").textContent = targeting ? targetHint() : note ? note
-      : (!N.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
+    $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : "")
+      : note ? note : (!N.canMove(state) ? "Stuck. Use a power-up to keep going." : "");
   }
   function toast(msg, kind) { K.toast(msg, kind); }
 
@@ -177,9 +196,10 @@
       var why = "";
       if (r.awarded.length) why = "  +" + PW[r.awarded[0].power];
       else if (top >= N.AWARD_FROM_INDEX) // a paying tile that paid nothing: say why (R2, R15)
-        why = r.free ? ". No reward right after a power-up"
-          : N.POWERS.every(function (k) { return before.power[k] >= N.POWER_CAP; }) ? ". Power-ups full" : "";
-      toast("New tile " + N.label(top) + why);
+        why = r.free ? ". No reward right after a power-up."
+          : r.marked ? ". Swapped and boosted tiles earn no reward." // R2 by tile (round 3)
+          : r.full || N.POWERS.every(function (k) { return before.power[k] >= N.POWER_CAP; }) ? ". Power-ups full." : "";
+      toast("New tile " + N.label(top) + why, why && !r.awarded.length ? "info" : undefined);
     }
     persist(); renderTray();
     if (ANIM) { var gen = state.moves; timer = setTimeout(function () { if (state.moves === gen) { timer = null; finalize(); } }, ANIM); }
@@ -226,6 +246,8 @@
     return (c < 0 || c > 3 || r < 0 || r > 3) ? -1 : r * 4 + c;
   }
   function pick(ev) {
+    if (ev.target && ev.target.closest && ev.target.closest("#over")) return; // the card's own buttons
+    if (state.over && (viewing || holding)) return view(false);
     if (!targeting) return;
     var cell = cellAt(ev); if (cell < 0) return;
     targeting.kbd = false; pickCell(cell);
@@ -241,8 +263,8 @@
     if (res.ok) {
       state = res.state; targeting = null; persist();
       // gameplay nit: a Boost that makes a new highest tile pays nothing, so say why no reward came
-      toast(name === "boost" && state.top > wasTop && state.top >= N.AWARD_FROM_INDEX
-        ? "Boost! Boosted tiles earn no reward" : PW[name] + "!");
+      if (!state.over) toast(name === "boost" && state.top > wasTop && state.top >= N.AWARD_FROM_INDEX
+        ? "Boosted to " + N.label(state.top) + ". Boosted tiles earn no reward." : PW[name] + "!");
     } else {
       targeting.picks = [];
       toast(name === "swap" ? "Pick two cells, at least one with a tile" : "Pick a tile, not an empty cell", "bad");
@@ -258,6 +280,7 @@
     // field is never a game key
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     if ((e.key === "Enter" || e.key === " ") && (tag === "BUTTON" || tag === "A" || tag === "SUMMARY")) return;
+    if (state.over && (viewing || holding) && (e.key === "Escape" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); return view(false); }
     if (e.key === "Escape") { targeting = null; return render(); }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
     if (pi >= 0) return activate(N.POWERS[pi], true);
@@ -276,6 +299,9 @@
   });
   boardEl.addEventListener("click", pick);
   K.swipe(boardEl, doMove);
+  // Round 3 (cold #5, as Endless): without a non-passive touchmove the browser runs its own scroll gesture for a
+  // swipe, and the next tap (on a power-up just earned) only stops it: no click. Owning the move keeps the tap.
+  boardEl.addEventListener("touchmove", function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
   // ---- new game: two-step instead of a blocking confirm() dialog ----
   function startNew() {
@@ -285,6 +311,7 @@
   }
   K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, startNew);
   $("again").addEventListener("click", startNew);
+  $("over-view").addEventListener("click", function () { view(true); });
 
   render();
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
@@ -302,5 +329,6 @@
   };
   window.__fibonacci = { get state() { return state; }, set state(s) { state = s; render(); }, render: render,
     get cursor() { return cursor; }, get targeting() { return targeting; }, hue: hue,
-    get runBest() { return runBest; }, set runBest(v) { runBest = v; } };
+    get runBest() { return runBest; }, set runBest(v) { runBest = v; },
+    get viewing() { return viewing; }, get holding() { return holding; }, showCard: function () { view(false); } };
 })();

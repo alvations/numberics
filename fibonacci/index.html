@@ -20,7 +20,7 @@
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
-      <div class="stat"><span>Best</span><b id="best">0</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
       <div class="stat"><span>Top tile</span><b id="top" class="none">none</b></div>
     </div>
   </header>
@@ -36,7 +36,10 @@
       <h2>No moves left</h2>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden>New best.</p>
-      <button id="again" class="btn primary" type="button">New game</button>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">New game</button>
+      </div>
     </div>
   </div>
 
@@ -44,7 +47,8 @@
     <button id="new" class="btn" type="button">New game</button>
   </div>
   <p class="how">Slide with arrow keys, WASD or a swipe. Neighbours in the sequence merge: 1+1, 1+2, 2+3, 3+5 and on.
-     Every new highest tile from 55 up earns a power-up. Pass 2584 and keep going.</p>
+     Equal tiles do not merge, except 1 + 1. Every new highest tile from 55 up earns a power-up. Swapped and boosted
+     tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost. Pass 2584 and keep going.</p>
   <nav id="games" class="games" data-root="../" data-current="fibonacci" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

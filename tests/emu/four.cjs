@@ -99,6 +99,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.evaluate(() => { document.querySelector("#board").dispatchEvent(new MouseEvent("mousemove", { clientX: -1 })); });
   await p.keyboard.press("2");
   ck("R9: Pop shows a keyboard cursor", await p.locator(".slot.cur").count() === 1);
+  ck("craft #1: arming Pop clears a toast so the instruction reads", !(await p.locator("#toast.on").count()));
   // walk the cursor to column 2, bottom row
   for (let k = 0; k < 7; k++) {
     const at = await p.evaluate(() => [...document.querySelectorAll(".slot")].indexOf(document.querySelector(".slot.cur")));
@@ -304,6 +305,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 320px (craft #5): the pills wrap, no sideways scroll, even with the long "Sure?" armed
   ctx = await browser.newContext({ viewport: { width: 320, height: 568 }, deviceScaleFactor: 2 });
   p = await ctx.newPage(); await p.goto(page);
+  ck("320px (craft #3): the four pills sit on one row", await p.evaluate(() => new Set([...document.querySelectorAll(".stat")].map(e => Math.round(e.getBoundingClientRect().top))).size === 1));
   ck("320px: no horizontal scroll", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
      await p.evaluate(() => document.documentElement.scrollWidth));
   await myTurn(p);

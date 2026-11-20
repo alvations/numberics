@@ -88,3 +88,5 @@ a:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-rad
 .pw.empty:focus-visible{ opacity:1; }
 .games.detail a b .vs{ font-style:normal; font-weight:600; font-size:.66rem; letter-spacing:.06em; text-transform:uppercase; color:var(--cool); margin-left:6px; vertical-align:1px; }
 .stat b.none,.stat .none{ color:var(--mute); font-weight:600; font-size:1.1rem; }
+/* Round 3 end card: See the board beside New game */
+.over .row{ margin:4px 0 0; gap:8px; flex-wrap:wrap; }

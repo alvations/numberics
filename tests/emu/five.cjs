@@ -90,6 +90,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await idle(p);
   // R13: the burst stays on an undimmed board for about 1.5 s, then the card
   ck("R13: the board shows first, no card yet", await p.evaluate(() => window.__five.holding) && !(await p.isVisible("#over")) && await p.locator('.slot.hit[data-i="3"]').count() === 1);
+  ck("round 3: no reward toast over the hold's hint (the card says what the round paid)", await p.evaluate(() => !document.getElementById("toast").classList.contains("on")));
   ck("R13: the hint says what burst", /^Your 1 onto their 4 made 5: burst\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await shot(p, "hold");
   const t0 = Date.now(); await card(p); const held = Date.now() - t0;

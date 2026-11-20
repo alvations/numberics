@@ -31,7 +31,10 @@
   var targeting = null;           // {name, picks:[]} while a power-up waits for a target
   var cur = -1, kbd = false;      // keyboard aiming cursor (cell), shown once a key aims
   var note = "";                  // a tray explanation in the hint line, until the next action
-  var timer = null, pendingFx = null, newArmed = null, wasOver = false;
+  var timer = null, pendingFx = null, newArmed = null;
+  // Round 3 end-card pattern: the locked board shows undimmed for HOLD ms, then the card; "See the board" hides
+  // the card again (a tap on the board, Esc or Enter brings it back). A run that loads already over shows the card.
+  var HOLD = 1500, holding = false, holdT = null, viewing = false, wasOver = !!state.over;
   var els = [];                   // cell index -> tile element
 
   var $ = function (id) { return document.getElementById(id); };
@@ -81,16 +84,27 @@
     boardEl.classList.toggle("targeting", !!targeting);
     var topEl = $("top");
     topEl.textContent = state.top ? N.label(state.top) : "none"; topEl.classList.toggle("none", !state.top);
-    var over = $("over");
-    over.hidden = !state.over;
-    // one "New game" on screen at a time: the overlay's primary replaces the page button while over
+    var over = $("over"), was = !over.hidden;
+    if (state.over && !wasOver) { // the run just ended: hold the final board first
+      holding = true; viewing = false; clearTimeout(holdT);
+      var gen = state.moves;
+      holdT = setTimeout(function () { holdT = null; if (holding && state.over && state.moves === gen) { holding = false; render(); } }, HOLD);
+    }
+    if (!state.over) { holding = false; viewing = false; clearTimeout(holdT); holdT = null; }
+    wasOver = !!state.over;
+    over.hidden = !state.over || holding || viewing;
+    // one "New game" on screen at a time: the card's primary replaces the page button, whose space is kept
     $("new").style.visibility = state.over ? "hidden" : "";
     if (state.over) {
-      $("over-text").textContent = "Top tile " + N.label(state.top) + " · score " + fmt(state.score);
+      $("over-text").textContent = "Top tile " + N.label(state.top) + " · Score " + fmt(state.score);
       $("over-best").hidden = !(state.score > 0 && state.score > bestBefore);
-      if (!wasOver) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
+      if (!over.hidden && !was) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
     }
-    wasOver = !!state.over;
+  }
+  // "See the board" hides the card; a tap on the board, Esc or Enter brings it back (or skips the hold)
+  function view(on) {
+    viewing = on; holding = false; clearTimeout(holdT); holdT = null; render();
+    if (on) { try { boardEl.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
   }
 
   var PW = { undo: "Undo", smash: "Smash", swap: "Swap", boost: "Boost" };
@@ -98,7 +112,7 @@
     { id: "undo", label: "Undo", desc: "Take back the last move." },
     { id: "smash", label: "Smash", desc: "Remove one tile." },
     { id: "swap", label: "Swap", desc: "Swap any two cells." },
-    { id: "boost", label: "Boost", desc: "Double one tile. A boost earns no reward." }
+    { id: "boost", label: "Boost", desc: "Double one tile. Boosted tiles never earn a reward." }
   ];
   var EARN = "Each new highest tile from 32 up earns a random power-up.";
   var PW_HINT = { smash: "Tap a tile to smash it.", boost: "Tap a tile to double it.",
@@ -119,8 +133,8 @@
   function renderTray() {
     var key = JSON.stringify([state.power, targeting && targeting.name, N.POWERS.map(trayWhy)]);
     if (key !== trayKey) { trayKey = key; drawTray(); }
-    $("hint").textContent = targeting ? targetHint()
-      : note || (!N.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
+    $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : "")
+      : note || (!N.canMove(state) ? "Stuck. Use a power-up to keep going." : "");
   }
   function drawTray() {
     P.tray($("tray"), DEFS, state.power, {
@@ -152,9 +166,12 @@
     state = r.state; pendingFx = { merged: merged, spawned: r.spawned };
     // only reward-sized tiles are news (round 2: "New tile 4, 8, 16" was noise before the rewards begin)
     var top = r.milestones.length ? r.milestones[r.milestones.length - 1] : 0;
-    if (top >= N.AWARD_FROM_LEVEL) {
+    // R7: when the move ends the run, the end card is the only message
+    if (top >= N.AWARD_FROM_LEVEL && !state.over) {
       if (r.awarded.length) toast("New tile " + N.label(top) + "  +" + PW[r.awarded[0].power]);
       else if (r.free) toast("New tile " + N.label(top) + ". No reward right after a power-up.", "info");
+      else if (r.marked) toast("New tile " + N.label(top) + ". Swapped and boosted tiles earn no reward.", "info"); // R2 by tile
+      else if (r.full) toast("New tile " + N.label(top) + ". Power-ups full.", "info"); // R15
       else toast("New tile " + N.label(top));
     }
     renderTray(); // the tray and hint follow the move at once, so a quick tap meets the final buttons
@@ -197,14 +214,18 @@
     var res = N.use(state, name, targeting.picks[0], targeting.picks[1]);
     if (res.ok) {
       state = res.state; targeting = null; persist();
-      toast(name === "boost" && state.top > top0 ? "Boosted to " + N.label(state.top) + ". Boosts earn no reward." : PW[name] + "!");
+      if (!state.over) toast(name === "boost" && state.top > top0 ? "Boosted to " + N.label(state.top) + ". Boosted tiles earn no reward." : PW[name] + "!");
     } else {
       targeting.picks = [];
       toast(name === "swap" ? "Pick two cells, at least one with a tile." : "Pick a tile, not an empty cell.", "bad");
     }
     render();
   }
-  function pick(ev) { if (!targeting) return; kbd = false; pickCell(cellAt(ev)); }
+  function pick(ev) {
+    if (ev.target && ev.target.closest && ev.target.closest("#over")) return; // the card's own buttons
+    if (state.over && (viewing || holding)) return view(false);
+    if (!targeting) return; kbd = false; pickCell(cellAt(ev));
+  }
   var STEP = { left: -1, right: 1, up: -4, down: 4 };
   function aim(dir) {
     if (!kbd) { kbd = true; return render(); } // the first key shows the cursor where it is
@@ -223,6 +244,7 @@
     // activates that control (a link navigates), never a game action
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     if ((e.key === "Enter" || e.key === " ") && (tag === "BUTTON" || tag === "A")) return;
+    if (state.over && (viewing || holding) && (e.key === "Escape" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); return view(false); }
     if (e.key === "Escape") { if (targeting) { targeting = null; render(); } return; }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
     if (pi >= 0) { kbd = true; return pressTray(N.POWERS[pi]); }
@@ -237,6 +259,9 @@
   boardEl.addEventListener("click", pick);
   var sx = 0, sy = 0, touching = false;
   boardEl.addEventListener("touchstart", function (e) { var t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; touching = true; }, { passive: true });
+  // Round 3 (cold #5): without a non-passive touchmove the browser still runs its own scroll gesture for a swipe,
+  // and the next tap (on a power-up just earned) only stops that gesture: no click. Owning the move keeps the tap.
+  boardEl.addEventListener("touchmove", function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
   boardEl.addEventListener("touchend", function (e) {
     if (!touching) return; touching = false;
     var t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
@@ -258,6 +283,7 @@
     clearTimeout(newArmed); newArmed = null; b.textContent = "New game"; startNew();
   });
   $("again").addEventListener("click", startNew);
+  $("over-view").addEventListener("click", function () { view(true); });
 
   render();
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
@@ -269,5 +295,6 @@
     state = s; render();
   };
   window.__numberics = { get state() { return state; }, set state(s) { state = s; render(); }, render: render,
-    get targeting() { return targeting; }, get cursor() { return cur; }, get bestBefore() { return bestBefore; } };
+    get targeting() { return targeting; }, get cursor() { return cur; }, get bestBefore() { return bestBefore; },
+    get viewing() { return viewing; }, get holding() { return holding; }, showCard: function () { view(false); } };
 })();

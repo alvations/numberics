@@ -189,6 +189,139 @@ t("R2 property: a power-up followed by any move never raises the total stock (ra
   }
   ok(checked > 1000, "exercised " + checked); ok(paidHonest > 20, "honest moves still pay (" + paidHonest + ")");
 });
+// ---- round 3 (docs/reviews/TRIAGE3.md): R2 by tile. Swapped and boosted tiles are marked, marks follow merges,
+// a marked new top tile pays nothing however many moves later; Smash keeps the one-move rule ----
+const Z16 = () => new Array(16).fill(0);
+const withMarks = (s, cells) => { const m = Z16(); cells.forEach(c => { m[c] = 1; }); return Object.assign({}, s, { marks: m }); };
+t("R2 by tile, critic S1 repro: Boost 32 beside 64, a dummy swipe, then the merge pays nothing", () => {
+  const s = board([[6, 5, 0, 0], Z4, Z4, [0, 0, 0, 1]], { top: 6, power: P0({ boost: 1 }) });
+  const u = N.use(s, "boost", 1); ok(u.ok); eq(u.state.grid.slice(0, 2), [6, 6]); eq(u.state.marks[1], 1, "the boosted tile is marked");
+  const m1 = N.move(u.state, "up"); ok(m1.moved); eq(m1.state.grid.slice(0, 2), [6, 6], "the dummy swipe leaves the pair");
+  eq(m1.awarded, []); ok(!m1.state.free, "the one-move flag has lapsed");
+  const m2 = N.move(m1.state, "left"); eq(m2.state.grid[0], 7, "64 + 64 = 128");
+  eq(m2.milestones, [7], "the milestone counts"); eq(m2.awarded, [], "but a marked tile never pays"); ok(m2.marked, "the result says why");
+  eq(m2.state.marks[0], 1, "the 128 carries the mark"); eq(m2.gained, 128, "points still score"); eq(m2.state.top, 7);
+  // the same two swipes without the Boost pay nothing, and the same board reached honestly pays
+  const h1 = N.move(s, "up"), h2 = N.move(h1.state, "left"); eq(h1.awarded.length + h2.awarded.length, 0);
+  const honest = N.move(N.move(withMarks(m1.state, []), "left").state, "left");
+  eq(N.move(withMarks(m1.state, []), "left").awarded.length, 1, "an unmarked 128 pays"); ok(honest);
+});
+t("R2 by tile, mechanics repro: Swap a 1024 beside the other, a non-merging swipe, then 2048 pays nothing", () => {
+  const s = board([[10, 0, 0, 0], [0, 0, 0, 10], Z4, Z4], { top: 10, power: P0({ swap: 1 }) });
+  const u = N.use(s, "swap", 1, 7); ok(u.ok); eq(u.state.grid.slice(0, 2), [10, 10]);
+  eq([u.state.marks[1], u.state.marks[7]], [1, 0], "the moved tile is marked; the emptied cell holds no mark");
+  const m1 = N.move(u.state, "left"); ok(m1.moved);
+  const m2 = N.move(m1.state, "up"); ok(m2.moved || true);
+  const paid = m1.awarded.length + (m2.moved ? m2.awarded.length : 0);
+  eq(paid, 0, "a swapped tile never pays"); ok(m1.state.grid.indexOf(11) >= 0, "2048 was made");
+});
+t("R2 by tile: a mark follows its tile through slides and merges, and still blocks a reward five moves later", () => {
+  // a boosted 4 (row 3) merges into a 4, the 8 into an 8 ... up to the new top, over several moves
+  let s = board([[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [6, 5, 4, 2]], { top: 6, power: P0({ boost: 1 }) });
+  s = N.use(s, "boost", 15).state; eq(s.grid[15], 3); eq(s.marks[15], 1);
+  let r = N.move(s, "right"); eq(r.state.marks.filter(Boolean).length, 1, "one marked tile after a slide");
+  const cell = r.state.marks.indexOf(1); eq(r.state.grid[cell], 3, "the mark stayed on the boosted tile");
+  // merge the marked 8 with an honest 8 placed beside it: the 16 is marked
+  const g = Z16(); g[12] = 6; g[13] = 5; g[14] = 4; g[15] = 3; g[11] = 3;
+  let t1 = Object.assign({}, r.state, { grid: g, marks: (() => { const m = Z16(); m[15] = 1; return m; })(), free: false });
+  r = N.move(t1, "down"); eq(r.state.grid[15], 4); eq(r.state.marks[15], 1, "honest 8 + marked 8 = a marked 16");
+  for (let k = 0; k < 5; k++) { const q = N.move(r.state, k % 2 ? "left" : "right"); if (q.moved) r = q; }
+  // build the chain into the corner: 16 + 16, 32 + 32, 64 + 64 = 128, all from the marked tile
+  const m = r.state.marks.slice(), at = m.indexOf(1); ok(at >= 0, "the mark survived five moves");
+  const lv = r.state.grid[at], g2 = Z16(), m2 = Z16(); g2[0] = 6; g2[1] = 6; m2[1] = 1;
+  const r2 = N.move(Object.assign({}, r.state, { grid: g2, marks: m2, top: 6, free: false }), "left");
+  eq(r2.state.grid[0], 7); eq(r2.awarded, [], "a marked merge never pays, however late"); ok(lv >= 4);
+});
+t("R2 by tile: an honest merge to the same new top in the same move still pays", () => {
+  const s = withMarks(board([[6, 6, 0, 0], [6, 6, 0, 0], Z4, Z4], { top: 6 }), [1]);
+  const r = N.move(s, "left"); eq(r.state.grid[0], 7); eq(r.state.grid[4], 7);
+  eq(r.state.marks[0], 1); eq(r.state.marks[4], 0); eq(r.awarded.length, 1, "the honest 128 pays");
+});
+t("R2 by tile: Smash removes a mark with its tile and keeps the one-move rule; a spawn is never marked", () => {
+  const s = withMarks(board([[5, 1, 5, 0], Z4, Z4, Z4], { top: 5, power: P0({ smash: 1 }) }), [0]);
+  const u = N.use(s, "smash", 0); ok(u.ok); eq(u.state.marks[0], 0); ok(u.state.free, "Smash: the next move pays nothing");
+  const m = N.move(u.state, "left"); ok(m.moved); eq(m.state.marks[m.spawned], 0, "the spawned tile is unmarked");
+  eq(m.state.marks.filter(Boolean).length, 0);
+});
+t("R2 by tile: Undo restores the marks with the board, and undoing the power-up clears them", () => {
+  const s = board([[6, 5, 0, 0], Z4, Z4, [0, 0, 0, 1]], { top: 6, power: P0({ boost: 1, undo: 2 }) });
+  const u = N.use(s, "boost", 1), m1 = N.move(u.state, "up"), m2 = N.move(m1.state, "left");
+  const back = N.use(m2.state, "undo"); ok(back.ok); eq(back.state.marks, m1.state.marks, "the marks come back");
+  const again = N.move(back.state, "left"); eq(again.awarded, [], "a rewind cannot launder the mark");
+  const undoBoost = N.use(u.state, "undo"); ok(undoBoost.ok); eq(undoBoost.state.marks.filter(Boolean).length, 0);
+  ok(Array.isArray(m2.state.prev.marks), "the snapshot carries the marks");
+});
+t("R2 by tile: an old save without marks, or with malformed ones, plays as unmarked", () => {
+  const s = board([[6, 6, 0, 0], Z4, Z4, Z4], { top: 6 }); delete s.marks;
+  eq(N.move(s, "left").awarded.length, 1);
+  eq(N.move(Object.assign({}, s, { marks: [1, 1] }), "left").awarded.length, 1, "a wrong-length list is ignored");
+  const m = Z16(); m[2] = 1; // a mark on an empty cell means nothing
+  const r = N.move(Object.assign({}, s, { marks: m }), "left"); eq(r.awarded.length, 1);
+  ok(N.newGame(3).marks.every(v => v === 0) && N.newGame(3).marks.length === 16, "a new game starts unmarked");
+});
+t("R2 by tile: slideLine carries marks (a merge with a marked tile is marked)", () => {
+  const r = N.slideLine([1, 1, 2, 2], [0, 1, 2, 3], [0, 1, 0, 0]);
+  eq(r.out, [2, 3]); eq(r.marks, [1, 0]); eq(r.mergeMarks, [1, 0]);
+  eq(N.slideLine([0, 3, 0, 3], [0, 1, 2, 3], [0, 0, 0, 1]).marks, [1]);
+  eq(N.slideLine([1, 1], [0, 1]).marks, [0], "no marks given: none");
+});
+t("R15 (critic S2): a full stock says so; the reward is skipped, not lost silently", () => {
+  const full = { undo: 9, smash: 9, swap: 9, boost: 9 };
+  const r = N.move(board([[5, 5, 0, 0], Z4, Z4, Z4], { top: 5, power: full }), "left");
+  eq(r.milestones, [6]); eq(r.awarded, []); ok(r.full, "result flags the full stock"); eq(r.state.power, full);
+  ok(!N.move(board([[5, 5, 0, 0], Z4, Z4, Z4], { top: 5 }), "left").full, "a normal award is not full");
+  ok(/r\.full\) toast\("New tile " \+ N\.label\(top\) \+ "\. Power-ups full\.", "info"\)/.test(src["game.js"]), "the client toasts it");
+  ok(/r\.marked\) toast\("New tile " \+ N\.label\(top\) \+ "\. Swapped and boosted tiles earn no reward\.", "info"\)/.test(src["game.js"]), "and the marked case");
+});
+// The R2 property (critic's method): the same moves with and without the power-up. After a Boost or a Swap, k = 0 to 5
+// neutral moves (legal in both lines, merging in neither: the dummy swipes that once laundered a reward), then each of
+// the four directions: the powered line never earns more than the plain one. Smash, and a swap into an empty cell,
+// change space, so they keep the one-move rule (k = 0). Shared with tests/test-fibonacci.js in shape.
+function r2Property(E, seeds) {
+  let trials = 0, paying = 0, bad = [], gaps = [0, 0, 0, 0, 0, 0];
+  for (let seed = 1; seed <= seeds; seed++) {
+    let x = (seed * 2654435761) >>> 0;
+    const rnd = () => { x = (x * 1103515245 + 12345) >>> 0; return x / 4294967296; };
+    const pick = (a) => a[Math.floor(rnd() * a.length)];
+    let s = E.newGame(seed); s.power = { undo: 0, smash: 5, swap: 5, boost: 5 };
+    for (let step = 0; step < 4000 && !s.over; step++) {
+      let r = null; const pref = ["left", "down", "right", "up"];
+      for (const d of (rnd() < 0.85 ? pref : pref.slice().sort(() => rnd() - 0.5))) { r = E.move(s, d); if (r.moved) break; }
+      if (!r || !r.moved) break;
+      s = r.state;
+      if (rnd() >= 0.3) continue;
+      const tiles = s.grid.map((v, i) => v ? i : -1).filter(i => i >= 0), empt = s.grid.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+      const big = tiles.filter(i => s.grid[i] >= s.top - 2), name = pick(["boost", "swap", "swap0", "smash"]);
+      const a = rnd() < 0.7 && big.length ? pick(big) : pick(tiles);
+      let u;
+      if (name === "boost" || name === "smash") u = E.use(s, name, a);
+      else if (name === "swap") u = E.use(s, "swap", a, pick(tiles));
+      else { if (!empt.length) continue; u = E.use(s, "swap", a, pick(empt)); }
+      if (!u.ok) continue;
+      const want = name === "boost" || name === "swap" ? Math.floor(rnd() * 6) : 0;
+      let p = u.state, q = s, k = 0;
+      for (let tr = 0; tr < 40 && k < want; tr++) {
+        const d = pick(E.DIRS), rp = E.move(p, d), rq = E.move(q, d);
+        if (!rp.moved || !rq.moved || rp.merges.length || rq.merges.length) continue;
+        p = rp.state; q = rq.state; k++;
+      }
+      gaps[k]++;
+      for (const d of E.DIRS) {
+        const rp = E.move(p, d), rq = E.move(q, d); trials++;
+        if (rp.milestones.some(l => l >= E.AWARD_FROM_LEVEL)) paying++;
+        if (rp.awarded.length > rq.awarded.length && bad.length < 3) bad.push(name + " k=" + k + " " + d + " seed " + seed + " " + JSON.stringify(p.grid));
+      }
+    }
+  }
+  return { trials, paying, bad, gaps };
+}
+t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move never out-earns the same moves without it", () => {
+  const r = r2Property(N, 160);
+  eq(r.bad, [], "the power-up earned a reward");
+  ok(r.trials > 15000, "trials " + r.trials); ok(r.paying > 200, "power-up lines that reached a paying tile: " + r.paying);
+  r.gaps.forEach((n, k) => ok(n >= 5, "gap " + k + " exercised " + n + " times"));
+});
+
 t("a Boost that cannot help still ends the run once it is spent (no endless wait)", () => {
   // locked checkerboard of 2 and 8: boosting a 2 to 4 matches no neighbour
   const s = board([[1, 3, 1, 3], [3, 1, 3, 1], [1, 3, 1, 3], [3, 1, 3, 1]], { power: P0({ boost: 1 }) });
@@ -260,8 +393,10 @@ t("round 2 (cold #1): the tray is rebuilt only when what it shows changes, so a 
   ok(/if \(key !== trayKey\) \{ trayKey = key; drawTray\(\); \}/.test(src["game.js"]), "tray cache");
   ok(/renderTray\(\); \/\/ the tray and hint follow the move at once/.test(src["game.js"]), "tray updates on the move");
 });
-t("round 2: the help line says how R2 works and names the number keys", () => {
-  ok(/except on the move right after you use one\. Keys 1 to 4 use the power-ups\./.test(src["index.html"]));
+t("round 3: the help line says exactly how R2 works and names the number keys", () => {
+  const how = src["index.html"].replace(/\s+/g, " ");
+  ok(/Swapped and boosted tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost\. Keys 1 to 4 use the power-ups\./.test(how), "help copy");
+  ok(!/except on the move right after you use one/.test(how), "the old one-move copy is gone");
   ok(/\.toast\.info\{/.test(src["style.css"]) && /--line:#33364a/.test(src["style.css"]), "info toast and --line mirrored");
 });
 

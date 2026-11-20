@@ -34,15 +34,19 @@
       <h2>No moves left</h2>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden>New best.</p>
-      <button id="again" class="btn primary" type="button">New game</button>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">New game</button>
+      </div>
     </div>
   </div>
 
   <div class="row">
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up,
-     except on the move right after you use one. Keys 1 to 4 use the power-ups. Merge past 2048 and keep going.</p>
+  <p class="how">Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up.
+     Swapped and boosted tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost.
+     Keys 1 to 4 use the power-ups. Merge past 2048 and keep going.</p>
   <nav id="games" class="games" data-root="" data-current="endless" data-detail aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

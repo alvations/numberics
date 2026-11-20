@@ -73,11 +73,12 @@
     if (ghost >= 0 && marks[cursor]) marks[cursor].cells.forEach(function (x) { opened[x] = 1; });
     slots.forEach(function (slot, cell) {
       slot.textContent = ""; slot.className = "slot";
-      if (threat[cell]) { slot.classList.add("threat"); slot.setAttribute("aria-label", "the computer's next disc wins here"); }
-      else if (risky[cell]) { slot.classList.add("risky"); slot.setAttribute("aria-label", "dropping here lets the computer win"); }
-      else if (opened[cell]) { slot.classList.add("opens"); slot.setAttribute("aria-label", "your drop would let the computer win here"); }
-      else slot.removeAttribute("aria-label");
-      if (threat[cell] && opened[cell]) slot.classList.add("opens");
+      if (threat[cell]) slot.classList.add("threat");
+      if (risky[cell]) slot.classList.add("risky");
+      if (opened[cell]) slot.classList.add("opens");
+      var say = threat[cell] ? "the computer's next disc wins here" : risky[cell] ? "dropping here lets the computer win"
+        : opened[cell] ? "your drop would let the computer win here" : "";
+      if (say) slot.setAttribute("aria-label", say); else slot.removeAttribute("aria-label");
       if (!targeting && myTurn() && cell % COLS === cursor) slot.classList.add("aim");
       if (popping && cell === popCur) slot.classList.add("cur");
       var who = state.own[cell], n = state.num[cell];
@@ -127,7 +128,7 @@
     if (note) { h.textContent = note; return; }
     if (targeting && targeting.name === "pop") { h.textContent = "Tap a disc to pop it (Esc cancels)"; return; }
     if (targeting && targeting.name === "tune") {
-      h.appendChild(document.createTextNode("Your next disc becomes:"));
+      h.appendChild(document.createTextNode("Your next disc:"));
       var box = document.createElement("span"); box.className = "pick";
       [1, 2, 3, 4].forEach(function (n) {
         var b = document.createElement("button"); b.type = "button"; b.textContent = n;
@@ -232,7 +233,7 @@
       if (h.ok) { state = h.state; persist(); K.toast("Holding a " + state.held[0]); }
       return render();
     }
-    targeting = { name: name };
+    targeting = { name: name }; K.clearToast(); // the aiming instruction is never under a toast (craft #1)
     if (name === "pop") { var h = F.height(state.own, cursor); popCur = (h ? h - 1 : 0) * COLS + cursor; }
     render();
   }

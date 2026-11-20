@@ -208,7 +208,8 @@
     var before = state.tiles.slice();
     state = res.state; persist();
     // R7: a reward is a toast; a round result is the overlay alone (no "Burst!" note on the round-ending burst)
-    if (res.awarded) K.toast("Burst! +" + PW[res.awarded]);
+    // a reward on the round-ending burst is said on the card ("earned Shield"), never in a toast over the hold's hint
+    if (res.awarded && !state.roundOver) K.toast("Burst! +" + PW[res.awarded]);
     else if (res.unpaid && !state.roundOver) K.toast("Burst! No reward after Shield.", "info"); // R2
     else if (res.burst && who === "p" && !state.roundOver) K.toast("Burst!");
     animate(before, state.last, afterTurn);

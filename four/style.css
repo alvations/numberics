@@ -49,3 +49,9 @@
 @media (prefers-reduced-motion:reduce){
   .disc.fall{ animation:none; }
 }
+/* round 3 (craft #3): at 320px the four pills stay on one row (RECORD no longer sits alone) */
+@media (max-width:360px){
+  .stats{ flex-wrap:nowrap; gap:6px; }
+  .stat{ min-width:0; padding:6px 7px; }
+  .stat > span{ letter-spacing:.03em; font-size:.62rem; }
+}
