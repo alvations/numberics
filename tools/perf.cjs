@@ -157,11 +157,18 @@ async function runOnce(browser, base, page, view) {
   await p.waitForTimeout(300);
   await p.evaluate(() => window.__perf.startFrames());
   const plan = PLAY[page.id] || GENERIC, vs = !!page.vs;
-  const t0 = Date.now(); let actions = 0, navigated = false;
+  const t0 = Date.now(); let actions = 0, navigated = false, lastCpu = -1, idle = 0;
   try { await p.focus("#board"); } catch (e) { /* not every page has a board */ }
   while (Date.now() - t0 < PLAY_MS) {
     if (p.url() !== urlBefore) { navigated = true; break; }
     const nCpu = vs ? await p.evaluate(() => window.__perf.cpu.length) : 0;
+    // Against the computer, a run with no computer move for 20 actions is stuck (an end card, a targeting mode):
+    // cancel with Escape and take the end card's continue button, like a player would.
+    if (vs) { if (nCpu !== lastCpu) { lastCpu = nCpu; idle = 0; } else if (++idle >= 20) {
+      idle = 0; await p.keyboard.press("Escape").catch(() => {});
+      const t = await p.evaluate(pickTarget, { only: ".over:not([hidden]) button.primary, .over:not([hidden]) button, [role=dialog] button.primary" }).catch(() => null);
+      if (t) await p.mouse.click(t.x, t.y).catch(() => {});
+    } }
     if (plan.seq && Math.random() < plan.seqP) {
       // A short tap sequence (pick a tile, then its target), each step a random visible match of its selector.
       for (const only of plan.seq[Math.floor(Math.random() * plan.seq.length)]) {
@@ -227,7 +234,7 @@ function combine(runs) {
   const o = {};
   for (const k of TIMING) o[k] = median(runs.map(r => r[k]));
   for (const k of WORST) o[k] = Math.max(...runs.map(r => r[k] || 0));
-  o.cpuMoves = Math.min(...runs.map(r => r.cpuMoves || 0));
+  o.cpuMoves = median(runs.map(r => r.cpuMoves || 0)); // median, so one unlucky random run is not a failure
   o.actions = median(runs.map(r => r.actions)); o.frames = median(runs.map(r => r.frames));
   o.navigated = runs.some(r => r.navigated);
   o.externalUrls = [...new Set(runs.flatMap(r => r.externalUrls))]; o.errors = [...new Set(runs.flatMap(r => r.errors))];

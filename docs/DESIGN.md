@@ -53,22 +53,27 @@ the round histories below and in `docs/reviews/` (four reviews and a triage per 
 measurement, reproducible with the tools named.
 
 ## Shared
-- `shared/theme.css` (the Endless look), `kit.js` (seeded rng, storage with fallback, toast, two-step, swipe),
-  `power.js` (stock, award with cap 9, tray that explains itself), `nav.js` (games row; the home page shows each game
-  with its description and a "vs computer" tag). Endless and Sudoku keep their own CSS and mirror shared changes.
+- `shared/theme.css` (the family look, first drawn for Two), `kit.js` (seeded rng, storage with fallback, toast, two-step, swipe),
+  `power.js` (stock, award with cap 9, tray that explains itself), `nav.js` (the games list in `games.json` order: the text
+  row on game pages, the cards with CSS previews, progress tags and the Today card on the root, and the Games sheet).
+  Order (O-7): Fibonacci, Two, Three, Four, Five, Six, Seven, Nine, Fifteen, Sudoku, the owner's proposal; the panel
+  evaluates it each cycle (`docs/reviews/ORDER-BRIEF.md`) and a change is a one-line move in `games.json` plus the mirror.
+  Two and Sudoku keep their own CSS and mirror shared changes.
 - Family rules R1-R17 (`docs/reviews/TRIAGE1-3.md`): Undo never crosses a decided result; a power-up never earns one;
   information power-ups (Peek, Hint, Reveal, Check) stay spent and count as help; solved-game opponents lose to perfect
   play; quitting a live game counts as a loss; the result shows on the board for 1.5 s before the card, which offers
   "See the board"; one end-card pattern; the toast never covers an end card, a warning or a status-line change.
-- R2 depth: tile games mark the tiles a power-up touched (Endless, Fibonacci); drop games make the next move unpaid
+- R2 depth: tile games mark the tiles a power-up touched (Two, Fibonacci); drop games make the next move unpaid
   (Seven, Four); round games pay nothing for a round won after a power-up, Peek included (Five, Fifteen, Nine); Sudoku
   and Six treat any help on the current line or cell as help.
 
-## Endless and Fibonacci
-- Rule-set engine (`engine.js`, `make(rules)`); Endless behaviour is pinned by `tests/fixtures/endless-replay.json`.
+## Two and Fibonacci
+- Two was called Endless (renamed for O-6: every tile is a power of two, and the family names games by number). The
+  save key `numberics_endless_v1`, the `ENDLESS` rule set and the replay fixture keep the old name so saved games load.
+- Rule-set engine (`engine.js`, `make(rules)`); Two's behaviour is pinned by `tests/fixtures/endless-replay.json`.
 - Swapped and boosted tiles carry a mark through merges and never earn; Smash makes the next move unpaid.
 - Fibonacci (2584 rules: merge consecutive numbers or 1 + 1; equal tiles do not merge): award floor 55; greedy bot
-  149 moves per reward vs Endless 66; 111-degree hue step so neighbours differ. Merge rule confirmed by a published
+  149 moves per reward vs Two 66; 111-degree hue step so neighbours differ. Merge rule confirmed by a published
   write-up; spawn odds (1: 90%, 2: 10%) assumed.
 
 ## Sudoku
@@ -140,7 +145,7 @@ Reviews and decisions: `docs/reviews/REVIEW*1.md`, `TRIAGE1.md` (family rules R1
 - **Sudoku:** earn by progress (each new multiple of 9 filled cells on a high-water mark): 4 / 5 / 6 charges per
   Easy / Medium / Hard puzzle, revealing nothing about correctness; clock survives reloads.
 - **Fibonacci:** 111-degree hue step so merge neighbours differ; merge rule confirmed by a published write-up (spawn
-  odds still assumed). Award floor stays 34 (per move it already pays half as often as Endless).
+  odds still assumed). Award floor stays 34 (per move it already pays half as often as Two).
 - **Seven:** overflow leaves the last well and rings the discs pushed out; Crack arms before firing; Undo counted.
 - **Three:** first-run explainer; a run made by a power-up collapses without paying, and so does the swipe after
   Smash/Swap/Third; flush spacing unchanged (29.5 moves greedy, `tools/sim-three.js`).
@@ -163,7 +168,7 @@ Reviews and decisions: `docs/reviews/REVIEW*1.md`, `TRIAGE1.md` (family rules R1
 
 Reviews and decisions: `docs/reviews/REVIEW*2.md`, `TRIAGE2.md` (R2 everywhere with a property test per game, R12-R17).
 
-- **Family:** the move right after a board-changing power-up never pays (Endless/Fibonacci `state.free` after Smash,
+- **Family:** the move right after a board-changing power-up never pays (Two/Fibonacci `state.free` after Smash,
   Swap, Boost; Seven after Smash, Hold, Crack; Four after Pop, Hold, Tune; Five after Shield; Sudoku after a Reveal over a
   digit; Six after any help on a line; Three one swipe deep); round games pay nothing for a round won after Erase/Double
   (Fifteen) or Add/Pass (Nine). Quitting a live game counts as a loss (R12). The result shows on the board for 1.5 s
@@ -171,7 +176,7 @@ Reviews and decisions: `docs/reviews/REVIEW*2.md`, `TRIAGE2.md` (R2 everywhere w
   line (R14). A full stock says "Power-ups full" (R15). Opponent games share You / Computer / Record pills (R16). Keys on
   a focused link, button or field belong to that control (R17). The home page lists every game with a description; the
   toast is compact, centred on the hint line, and never shows on an end card or over a "Sure?" warning.
-- **Fibonacci:** award floor 55 (greedy bot 149 moves per reward, Endless 66). Endless replay fixture re-recorded for R2
+- **Fibonacci:** award floor 55 (greedy bot 149 moves per reward, Two 66). Two's replay fixture re-recorded for R2
   (200 seeds: only withheld post-power-up awards differ).
 - **Sudoku:** progress counts only clash-free player cells (typing 1 everywhere earns 0; an honest solve 4/5/6); revealed
   cells never count; clue ladder exactly 40/32/26.

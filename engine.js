@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 alvations (Melon Lab)
  *
- * Numberics Endless: the pure game engine. No DOM, no storage, no clock.
+ * Numberics Two: the pure game engine. No DOM, no storage, no clock.
+ * Two was called Endless; the global `Numberics`, make(rules) and the ENDLESS rule-set name are kept
+ * so saved games load and the replay fixture (tests/fixtures/endless-replay.json) still pins it.
  * Tiles are stored as LEVELS (level n shows 2^n), so there is no overflow and
  * no ceiling: the game has no winning tile, it only ends when the board locks.
  * All randomness comes from state.seed (mulberry32), so a game is a pure
@@ -30,7 +32,7 @@
   var AWARD_FROM_LEVEL = 5; // first milestone that pays out is 32
   var POWER_CAP = 9;
 
-  // Endless: equal levels merge one level up, a merge scores 2^level.
+  // Two (the rule set keeps its old name, ENDLESS): equal levels merge one level up, a merge scores 2^level.
   var ENDLESS = {
     canMerge: function (a, b) { return a === b; },
     mergeResult: function (a) { return a + 1; },

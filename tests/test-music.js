@@ -106,6 +106,16 @@ t("scheduler constants: lookahead covers a slipped timer tick, fades are sane", 
   ok(M.DEF.musicVolume > 0 && M.DEF.musicVolume <= 1 && M.DEF.musicStyle === "auto" && typeof M.DEF.music === "boolean");
 });
 
+t("sfxKey moves the C pentatonic SFX ladder into each style's key", () => {
+  const PENT = [0, 2, 4, 7, 9];
+  IDS.forEach(id => {
+    const st = M.STYLES[id], k = M.sfxKey(st), scale = M.MODES[st.mode].map(x => (x + st.root) % 12);
+    ok(k >= -6 && k <= 5, id + " fold");
+    const out = PENT.filter(p => !scale.includes(((p + k) % 12 + 12) % 12));
+    ok(out.length <= 1, id + " ladder notes outside the key: " + out.length); // harmonic minor keeps one (its lowered 7th)
+  });
+});
+
 // ---- the per-game map ----
 t("per-game map covers every live game in games.json (and Two by both ids) with a real style", () => {
   const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).filter(g => g.status === "live");
@@ -178,6 +188,7 @@ t("live: no AudioContext before a gesture; untrusted events do not unlock", () =
   ok(m.play("chill") === false && F.AC.n === 0, "context before gesture");
   F.fire = null; F.w.fire("pointerdown", { isTrusted: false }); ok(F.AC.n === 0, "untrusted");
   F.w.fire("pointerdown", { isTrusted: true }); ok(F.AC.n === 1, "gesture creates one context");
+  ok(!m.state().playing, "buffers and the player are built in the next task, not inside the tap"); F.run(1);
   F.w.fire("keydown", { isTrusted: true }); ok(F.AC.n === 1, "only one");
   const s = m.state(); ok(s.playing && s.style === "chill" && s.contexts === 1, JSON.stringify(s));
 });
@@ -186,14 +197,15 @@ t("live: no context at all when nobody asked for music", () => {
 });
 t("live: books notes ahead, crossfades, ducks, follows settings, pauses when hidden, stops", () => {
   const F = fakeWorld(), m = M.make(F.w, F.opt); m.start("seven");
-  F.w.fire("click", { isTrusted: true });
+  F.w.fire("click", { isTrusted: true }); F.run(1);
   ok(m.state().style === "blocks", "per-game default " + m.state().style);
   F.run(3000); const n1 = m.state().notes; ok(n1 > 20, "notes booked " + n1);
   ok(near(m.state().mix, M.DEF.musicVolume * M.SCALE, 1e-9), "mix level");
   m.setStyle("pulse"); ok(m.state().style === "pulse" && m.state().fading === 1, "crossfade starts");
   F.run(500); ok(m.state().fading === 1, "old style keeps playing through the fade");
   F.run(M.LEVELS.XFADE * 1000 + 3000); ok(m.state().fading === 0, "old style freed");
-  m.duck(true); ok(m.state().ducked); m.duck(false);
+  ok(m.key() === M.sfxKey(M.STYLES.pulse) && m.dip() === true, "key and dip");
+  m.duck(true); ok(m.state().ducked && m.dip() === false, "no dip while ducked"); m.duck(false);
   m.volume(1); ok(near(m.state().mix, M.SCALE), "volume");
   F.w.fire("numberics:settings", { detail: { music: false } }); ok(!m.state().playing && m.state().mix === 0, "music off");
   F.w.fire("numberics:settings", { detail: { music: true, musicStyle: "epic" } }); ok(m.state().playing && m.state().style === "epic", "music back, fixed style");

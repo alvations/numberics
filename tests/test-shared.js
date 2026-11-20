@@ -24,6 +24,30 @@ t("nav LIVE list matches the live games in games.json, in order", () => {
   const live = JSON.parse(src.match(/var LIVE = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"'));
   ok(JSON.stringify(live) === JSON.stringify(games.map(g => [g.id, g.name, g.path, g.blurb].concat(g.vs ? [1] : []))), "nav: " + JSON.stringify(live));
 });
+t("O-7 order: every games list runs Fibonacci, Two, Three, Four, Five, Six, Seven, Nine, Fifteen, Sudoku (games.json drives it)", () => {
+  const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).filter(g => g.status === "live");
+  const O7 = ["fibonacci", "two", "three", "four", "five", "six", "seven", "nine", "fifteen", "sudoku"];
+  ok(JSON.stringify(games.map(g => g.id)) === JSON.stringify(O7), "games.json: " + games.map(g => g.id).join());
+  ok(JSON.stringify(require("../shared/nav.js").map(g => g[0])) === JSON.stringify(O7), "nav.js mirror");
+  ok(games.find(g => g.id === "two").path === "", "Two is the root page");
+  ok(!games.some(g => g.id === "endless"), "the old id is gone from games.json (saves and trophies still accept it)");
+});
+t("C1 card copy (REDESIGN.md 3.3): names, blurbs and vs-computer flags as specified", () => {
+  const want = { fibonacci: ["Fibonacci", "Join neighbours in the Fibonacci run."], two: ["Two", "2048 with no top tile."],
+    three: ["Three", "Count in threes, make rainbow rows."], four: ["Four", "Four in a row, or four that make ten.", 1],
+    five: ["Five", "Add tile onto tile; at five it bursts.", 1], six: ["Six", "Put signs between numbers to make six."],
+    seven: ["Seven", "Drop discs; a number pops when it fits."], nine: ["Nine", "Take from the heaps. Take the last to win.", 1],
+    fifteen: ["Fifteen", "Pick three numbers that make fifteen.", 1], sudoku: ["Sudoku", "The classic 9 by 9. One answer only."] };
+  JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).forEach(g => {
+    const w = want[g.id]; ok(w && g.name === w[0] && g.blurb === w[1] && !!g.vs === !!w[2], g.id);
+  });
+});
+t("nav.js draws a CSS-only preview for every game (no images, no requests)", () => {
+  const src = fs.readFileSync(path.join(root, "shared/nav.js"), "utf8");
+  const pv = src.slice(src.indexOf("var PV = {"), src.indexOf("function progress"));
+  require("../shared/nav.js").forEach(g => ok(new RegExp("\\n    " + g[0] + ": ").test(pv), "preview " + g[0]));
+  ok(!/<img|url\(|https?:/.test(pv), "CSS only");
+});
 t("every games.json entry is well formed and paths are unique", () => {
   const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8"));
   const seen = new Set();

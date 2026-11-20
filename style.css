@@ -72,6 +72,19 @@ a:hover{ color:var(--ink); }
 .tb-dot{ position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--panel); }
 .tb-dot[hidden]{ display:none; }
 
+/* ===== root layout (REDESIGN.md 3.1): phones stack the board, then Today and the games; from 960 px they sit beside it ===== */
+.layout{ width:100%; max-width:1100px; margin:0 auto; display:grid; gap:28px; }
+.layout > #app{ margin:0 auto; }
+.side{ min-width:0; }
+.side h2{ font-size:var(--fs-lg); margin:0 0 4px; }
+.side .lede{ margin:0 0 14px; color:var(--mute); font-size:var(--fs-sm); }
+@media (min-width:960px){
+  .layout{ grid-template-columns:480px minmax(0,1fr); align-items:start; gap:48px; }
+  .layout > #app{ margin:0; } .side{ padding-top:6px; }
+  .side .cards{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media (min-width:1180px){ .side .cards{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
 /* ===== header and stats ===== */
 header{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
 h1{ margin:0; font-size:var(--fs-2xl); line-height:1.05; letter-spacing:-.01em; color:var(--accent-text); font-weight:850; }
@@ -149,16 +162,10 @@ details.how{ margin:6px 0 0; background:var(--panel); border:1px solid var(--lin
 details.how summary{ min-height:var(--tap); display:flex; align-items:center; padding:0 14px; cursor:pointer; font-weight:650; font-size:var(--fs-sm); color:var(--mute); }
 details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 
-/* ===== the games row (until the cards replace it, C1) ===== */
+/* ===== the games row on each game page (the root shows the cards below; each D package moves its page to them) ===== */
 .games{ display:flex; flex-wrap:wrap; justify-content:center; gap:0 4px; margin:10px 0 4px; font-size:var(--fs-sm); }
 .games a{ color:var(--mute); display:inline-flex; align-items:center; min-height:var(--tap); padding:0 6px; }
 .games a[aria-current="page"]{ color:var(--accent-text); text-decoration:none; }
-.games.detail{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin:14px 0 4px; }
-.games.detail a{ display:block; text-decoration:none; background:var(--panel); border:1px solid var(--line); border-radius:var(--r-sm); box-shadow:var(--sh-1);
-  padding:8px 10px; color:var(--mute); line-height:1.3; }
-.games.detail a b{ display:block; color:var(--ink); font-size:.95rem; } .games.detail a:hover{ border-color:var(--line-2); }
-.games.detail a b .vs{ font-style:normal; font-weight:650; font-size:.66rem; letter-spacing:.06em; text-transform:uppercase; color:var(--cool); margin-left:6px; vertical-align:1px; }
-@media (max-width:340px){ .games.detail{ grid-template-columns:1fr; } }
 
 /* ===== toast: gold reward; .bad a warning or loss (neutral, red edge); .info a plain note; .trophy gold with a glyph ===== */
 .toast{ position:fixed; left:50%; top:max(12px,env(safe-area-inset-top)); transform:translateX(-50%); background:var(--accent);

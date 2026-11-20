@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 alvations (Melon Lab)
- * Numberics Endless: browser client. The engine (engine.js) owns every rule;
+ * Numberics Two: browser client. The engine (engine.js) owns every rule;
  * this file only draws, listens, and remembers. */
 (function () {
   "use strict";
   var N = window.Numberics, K = window.NumbericsKit, P = window.NumbericsPower;
   // storage goes through NumbericsKit.store: every localStorage call is in try/catch, memory fallback
+  // Two was called Endless; the key is kept so saved games load (REDESIGN.md 4.2). Never rename it.
   var store = K.store("numberics_endless_v1");
   var ANIM = K.reducedMotion() ? 0 : 110;
   var freshSeed = K.freshSeed;
@@ -44,6 +45,10 @@
   function persist() {
     best.score = Math.max(best.score, state.score); best.top = Math.max(best.top, state.top);
     store.save({ state: state, bestScore: best.score, bestTop: best.top, bestBefore: bestBefore });
+    // the card summary (shared/progress.js): what the Games list and the cards on other pages show for Two
+    var NP = window.NumbericsProgress;
+    if (NP) NP.put("two", { best: best.score > 0 ? "Best " + K.fmt(best.score) : "", live: !state.over && state.moves > 0,
+      liveText: "Score " + K.fmt(state.score) });
   }
   var fmt = K.fmt;
 

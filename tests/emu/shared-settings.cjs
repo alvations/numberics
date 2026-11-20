@@ -211,7 +211,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     if (g.id !== "sudoku") ck(g.id + ": the sheet sits on screen over the page", await p.evaluate(() => {
       const s = document.querySelector("#sh-settings"), r = s.querySelector(".sheet").getBoundingClientRect();
       return getComputedStyle(s).position === "fixed" && r.top >= 0 && r.bottom <= innerHeight + 1; }));
-    if (g.id === "endless") await shot(p, "root-desktop");
+    if (!g.path) await shot(p, "root-desktop");
     await p.keyboard.press("Escape");
     ck(g.id + ": Esc closes it, no page errors", !(await p.isVisible("#sh-settings")) && e5.length === 0, e5.join(" | "));
     await p.evaluate(() => { try { localStorage.removeItem("numberics_settings_v1"); } catch (e) { /* none */ } });

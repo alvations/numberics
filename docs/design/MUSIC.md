@@ -1,1 +1,228 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- Copyright 2026 alvations (Melon Lab) -->
+
+# Music: the background music (O-8)
+
+All background music is **synthesised live** by `shared/music.js` (global `NumbericsMusic`) with the Web Audio API.
+There are no audio files, no samples and no network requests. Every melody, chord progression and arrangement is
+original to this repo. The styles evoke genres, never particular works, and no player-visible text, code or doc
+names another game, franchise or composer (a test checks the text against a hashed list). The panel that chose
+what ships, and why, is in [MUSIC-PANEL.md](MUSIC-PANEL.md).
+
+## The styles (all seven ship)
+
+| Id | Name | Feel | Tempo | Key | Form (bars) | One pass | Instruments |
+|---|---|---|---|---|---|---|---|
+| `chill` | Chill | warm, lazy, late evening | 84, swung 8ths (0.2) | F major, maj7/m7 chords | I4 A8 B8 C4 A2 8 B8 = 40 | 114 s | triangle keys with a soft 2nd partial and a dotted-8th echo, sine bass, triangle pad, rim, soft kick, ghosted hats |
+| `drift` | Drift | still, floating, no drums | 66 | A lydian | A8 B8 A2 8 = 24 | 87 s | sine bells (3rd partial), long echo, slow triangle pad, sine bass, quiet arp |
+| `pocket` | Pocket | bright little town tune on a pocket console | 116, light swing (0.1) | D major, with a V/V | A8 B8 A2 8 C4 B8 A8 = 44 | 91 s | 25% pulse lead, 12.5% pulse harmony, triangle bass, triangle arp, chip kick, noise snare and hats |
+| `quest` | Quest | a march over open country | 132 | Bb major, borrowed bVII | I4 A8 B8 A2 8 C8 B8 = 44 | 80 s | square lead, 25% pulse harmony a third under, triangle bass, triangle pad, march snare with ghosts, toms |
+| `blocks` | Blocks | a quick folk dance on an old handheld chip | 150 | G harmonic minor | A8 A2 8 B8 A8 C4 B8 A3 8 = 52 | 83 s | square lead, 25% pulse duet in thirds, oom-pah triangle bass, pulse chord stabs on the off-beats, chip drums |
+| `pulse` | Pulse | club, four on the floor | 124 | A minor (iv VI i VII) | intro 8, build 8, drop 16, break 8, drop 16 = 56 | 108 s | detuned-saw lead and pad, the pad pumps on every beat, square offbeat bass, 16th square arp, kick, clap, open hats |
+| `epic` | Epic | big drums and a long climb | 88 | D minor, harmonic V | I4 A8 B8 C8 A2 8 = 36 | 98 s | filtered-saw brass lead and horn line, wide supersaw pad, triangle bass, taiko toms, snare, cymbal swells |
+
+Each pass is 60 to 120 s (a test enforces it). The loop is not exact: **odd passes** swap in each section's `alt`
+(a harmony line, another arp, other drums), so two passes in a row differ on 29 to 80 % of their bars (`pass2` in the
+render report). After the second pass the first returns, so a full cycle is 2.5 to 4 minutes before anything repeats.
+
+### Writing rules every style follows
+- **Original lines only.** Written note by note for this repo. `tests/test-music.js` also holds the interval shapes
+  of a few very well-known openings (folk and game), as numbers only, and fails if any 5-interval window of any lead or
+  harmony line, in any key, matches one. That guard caught three of our own lines during writing (a derived harmony in
+  Epic, a hook in Pulse, a run in Pocket); each was rewritten, not excused.
+- **No shrill top.** No pitched note above F#6 (MIDI 90, about 1.5 kHz). An octave-up repeat in Blocks reached A6
+  and was removed after the panel (MUSIC-PANEL.md).
+- **The key you write is the key you hear.** A pitch-class profile (Krumhansl) of every compiled pass must find the
+  declared tonic and mode for the major and minor styles (Drift's lydian reads as a major key, as lydian does).
+- **A and B at least**, a fill on the last bar of most sections, a breakdown or bridge somewhere.
+
+## Notation (how a style is written)
+
+A style is plain data in `STYLES` in `shared/music.js`:
+
+```js
+pocket: {
+  name: "Pocket", blurb: "A bright little town tune on a pocket console.",
+  bpm: 116, swing: 0.1, beats: 4, root: 74, mode: "major", level: 0.55, verb: 0.1,
+  echo: { beats: 0.5, fb: 0.22, mix: 0.14 },
+  voices: { lead: { wave: "pulse25", gain: 0.075, a: 0.003, d: 0.15, s: 0.6, r: 0.05, echo: 1 }, ... },
+  kit: { k: 0.38, s: 0.11, h: 0.03, chip: 1 },
+  drums: { main: { k: "x.......x.......", s: "....x.......x...", h: "x.x.x.x.x.x.x.x." }, ... },
+  sections: { A: { bars: 8, chords: "1 4 5 1 6 2 5 1", bass: "R - 5 - 8 - 5 -", arp: "- 0 - 1 - 2 - 1",
+                   drums: "main", fill: "fill", lead: "1 . 3 5 . 3 6 5 | 4 . 6 1' . 6 5 4 | ...", alt: { harm: 1 } }, ... },
+  form: ["A", "B", "A2", "C", "B", "A"],
+}
+```
+
+- **A bar** is space-separated tokens that split it evenly (1, 2, 3, 4, 6, 8, 12 or 16 tokens); `|` ends a bar. A line
+  shorter than its section repeats.
+- **Lead / lead2**: scale degree `1`-`7`, prefix `#` or `b`, suffix `'` (octave up) or `,` (octave down); `.` holds the
+  previous note; `-` rests. `harm: 1` adds a harmony line a diatonic third under the lead on the `lead2` voice.
+  `leadOct: 12` moves the lead up an octave.
+- **Chords**, one per bar (`4/5` splits a bar): a degree builds the diatonic triad of the mode; `M`, `m`, `d` force
+  major, minor, diminished; `7` adds the seventh (with `M`, a dominant seventh); `b7`, `b6` are borrowed major chords.
+- **Bass** (relative to the chord): `R` root, `3`, `5`, `8` octave, `7` seventh. **Arp**: chord-tone index `0`-`6`
+  (counting up through octaves), `c` the whole chord as a stab. **Pad**: `pad: 1` holds each chord.
+- **Drums**: 16 steps a bar, `x` hit, `X` accent, `g` ghost. Rows: `k` kick, `s` snare (`kit.snare` "rim" or "clap"
+  changes it), `h` hat, `o` open hat, `t` tom, `c` cymbal. `crash: 1` hits the cymbal on a section's first beat.
+  `kit.chip` makes the kit a chip kit (triangle kick, short noise).
+- **Voices**: `wave` sine, triangle, square, sawtooth, supersaw (two saws, +-9 cents), pulse25, pulse12 (PeriodicWave);
+  `gain` peak; `a d s r` envelope (seconds, sustain as a fraction); `lp` a lowpass; `oct` octaves from `root`;
+  `partial` and `pg` an extra sine at that ratio; `echo: 1` sends to the style's feedback echo.
+- `pump` (0..1) ducks the pad on every beat (the club pump). `verb` is the reverb send.
+
+`compile(style, variant)` turns this into one sorted list of `{ t, d, v, m, g, s, e }` events (tick, length, voice,
+MIDI note, velocity, start and end seconds) for one pass. It is pure and tested in Node.
+
+## How it plays (engine)
+
+- **Clock.** 12 ticks a beat (16ths, 8ths and 8th triplets all land on whole ticks). Swing stretches the first half of
+  each beat and squeezes the second, so whole beats never move (`tickTime`, tested).
+- **Lookahead scheduler.** A 50 ms timer books every event due in the next 0.35 s on the audio clock, then sleeps. There
+  is no per-frame work and no `requestAnimationFrame`. A late timer skips stale events instead of bunching them.
+- **Voices.** Each note is one or two oscillators (plus a lowpass where the voice has one) into an envelope gain; each
+  drum hit is a pitch-drop oscillator or a burst of a shared, seeded noise buffer through a filter. Every node is
+  disconnected when its source ends. A busy style (Pulse) books about 11 notes and 8 drum hits a second.
+- **Graph.** note -> style bus (`level`, fades) -> mix (`musicVolume * SCALE`, 0 when Music is off) -> duck -> output.
+  The style bus also feeds one shared convolver (a seeded 2.2 s stereo impulse) and, per style, a feedback echo.
+- **Crossfade.** A new style starts on its own bus at the next 60 ms and fades in over 2.0 s while the old bus fades
+  out; the old style keeps booking until its fade ends, then is freed. The first start fades in over 2.5 s; `stop()`
+  fades out over 0.8 s.
+- **Gesture.** The music makes its own AudioContext only inside a trusted `pointerdown`, `keydown`, `touchend` or
+  `click` (capture listeners, registered once), and only if a page asked for music and Music is on. Nothing is created
+  on load or by untrusted events. Only the context is made inside the tap (that is what iOS needs); the impulse,
+  the noise buffer and the first player are built in the next task.
+- **Hidden tab.** On `visibilitychange` to hidden the music fades in 120 ms, stops booking and suspends its context
+  200 ms later; on return it resumes, rewinds its cursor to where it paused and fades back in.
+- **Duck.** `duck(true)` lowers the music to 35 % over 0.4 s (for end cards); `duck(false)` brings it back over 1.2 s.
+  `dip()` is a 0.7 s, 6 dB dip for a big SFX.
+
+### Performance (measured)
+On headless Chromium (`tests/emu/shared-music.cjs`): no long task (over 50 ms) while the music starts, plays and
+switches through every style. Compiling a style costs 0.3 to 5 ms, once per style and variant (cached). The one big cost on the first tap
+is the browser's own `new AudioContext()` (about 21 ms here); `shared/audio.js` makes a second one on the same tap,
+which is why a shared context (below) is worth doing.
+
+### Merge with `shared/audio.js` (one context)
+If `NumbericsAudio.musicBus()` exists and returns `{ context, input }`, the music uses that context and connects its
+output to `input` instead of making its own. The proposal for `audio.js`: make the context in the gesture as today;
+`musicBus()` returns the context and a gain node that feeds the compressor directly (not through the SFX master, so the
+SFX volume does not move the music). With a shared context the music never suspends it on a hidden tab (it only stops
+booking and fades), because the SFX own it.
+
+## Levels (keep it this way)
+
+| Stage | Target | How it is kept |
+|---|---|---|
+| Each style at unity (mix 1) | **-20 LUFS integrated** (BS.1770, K-weighted, gated), within +-1 LU of each other | the per-style `level`, derived by `node tools/render-music.cjs --raw` (it prints the level that hits the target), checked by the render report |
+| Peaks at unity | **<= -1 dBFS sample peak, no clipped samples** | render report |
+| Shipped music | `unity * musicVolume * SCALE`, `SCALE = 0.016` | at the default sliders (music 0.5, SFX 0.5) the loudest music peak sits **at least 6 dB under the SFX `merge` peak** (the most frequent reward sound); the render report measures both and fails otherwise |
+
+The rule comes from melon-eight's AUDIO.md lesson: SFX are transients that must peak clearly above a steady bed; never
+RMS-match an SFX to the music. The SFX are the reference; the music is set under them.
+
+LEVELS_TABLE
+
+**The SFX are quiet today.** At the default volume the `merge` SFX peaks at -39 dBFS and `tick` at -45 dBFS (sound
+in most web games peaks around -12 to -18 dBFS). The music is set under that, so at defaults it plays at about
+-60 LUFS: the right balance, but faint on a phone speaker. The SFX notes below propose lifting the SFX by 12 dB. When
+that lands, multiply `SCALE` by the same factor (12 dB: x 3.98, so 0.064), re-run the render report and check the
+headroom line stays at 6 dB or more.
+
+Reproduce:
+```bash
+NODE_PATH=$(npm root -g) node tools/render-music.cjs                 # all styles -> <tmp>/numberics-music/*.wav + report
+NODE_PATH=$(npm root -g) node tools/render-music.cjs out --styles pulse,epic --seconds 30
+NODE_PATH=$(npm root -g) node tools/render-music.cjs out --raw        # calibrate: prints the level per style
+```
+The WAVs go to the folder given (default under the OS temp dir), never into the repo. Rendering runs at roughly 2x
+real time on four cores because the reverb is a real convolution.
+
+## The per-game map ("Auto (per game)")
+
+| Game | Style | Why (panel, MUSIC-PANEL.md) |
+|---|---|---|
+| Two | Chill | the flagship, long sessions; warm and unhurried |
+| Fibonacci | Quest | a spiral that keeps going; the journey feel |
+| Three | Pocket | bright, playful, rainbow flushes |
+| Four | Pulse | a quick duel with a beat |
+| Five | Epic | tiles stack and burst; the build-up suits it |
+| Six | Drift | a thinking puzzle; nothing on the beat to rush you |
+| Seven | Blocks | discs drop into a well; the falling-block dance |
+| Nine | Epic | a duel of heaps; weight and tension |
+| Fifteen | Pocket | a light duel; friendly |
+| Sudoku | Drift | long thinking sessions; no drums |
+
+`GAMES` in `music.js` holds it (Two under both `two` and `endless`, the id before the rename). A test fails if a live
+game in `games.json` has no style.
+
+## API (`window.NumbericsMusic`)
+
+| Call | Does |
+|---|---|
+| `start(gameId)` | the page entry point: remember the game, ask for music; it starts at the first tap (if Music is on) |
+| `play(style)` | ask for music; `style` is an id, or `"auto"`/nothing for the saved choice, then the game's default |
+| `setStyle(style)` | switch (crossfade) to a style, or `"auto"` |
+| `stop()` | fade out and stop asking |
+| `styles()` | `[{ id, name, blurb, bpm, seconds }]` in menu order (for the Settings list) |
+| `forGame(id)` | the game's default style |
+| `volume(v)` | set (0..1) or read the music volume; ramps over 80 ms |
+| `enable(on)` | Music on or off for this page (Settings does this through its event) |
+| `duck(on)` | lower to 35 % under an end card, or restore |
+| `dip()` | a short 6 dB dip under a big SFX |
+| `key()` | the semitone shift (-6..5) that puts the C pentatonic SFX ladder in the playing style's key |
+| `state()` | `{ contexts, ctx, playing, style, resolved, fading, paused, ducked, on, volume, cycle, notes, live, mix }` for tests |
+| `render(style, { seconds, raw, gain })` | the same synth in an OfflineAudioContext; resolves an AudioBuffer |
+
+Events: it listens for `numberics:settings` (fields `music`, `musicVolume`, `musicStyle`; a missing field keeps its
+value) and fires `numberics:music` (`{ style, key }`) whenever a style starts.
+
+### Wiring a page
+After `shared/audio.js`: `<script src="../shared/music.js"></script>`, then once on load `NumbericsMusic.start("seven")`
+(or `start()` to read `data-current`). When an end card shows: `NumbericsMusic.duck(true)`; when it closes or a new
+game starts: `duck(false)`.
+
+## Settings fields (for `shared/settings.js`)
+
+Add to `DEF`, `FIELDS` and `normalize()` in `numberics_settings_v1`:
+
+| Field | Type, default | Normalise | Sheet control ("Sound and feel", after Volume) |
+|---|---|---|---|
+| `music` | boolean, `true` | boolean else default | **Music** switch, sub line "Quiet tunes while you play" |
+| `musicVolume` | number 0..1, `0.5` | clamp to 0..1, round to 0.01 | **Music volume** slider 0 to 100, step 5; disabled while Music is off; no preview tick (the music itself is the preview) |
+| `musicStyle` | `"auto"` or a style id, `"auto"` | one of `auto chill drift pocket quest blocks pulse epic`, else `"auto"` | **Style**: "Auto (per game)" first, then the seven names in that order as `button[aria-pressed]` segments in two rows (each with its blurb as `title`), hidden while Music is off |
+
+Keep the list of ids in `settings.js` itself (do not read it from `music.js`, which may load later). The **Sound**
+switch stays the SFX switch; Music has its own. Erase keeps these (they live in the settings key).
+
+## SFX notes (for `shared/audio.js`)
+
+1. **Lift the SFX about 12 dB.** Measured with `NumbericsAudio.render` at volume 0.5: merge -39.3, place -44.4, tick
+   -44.6, land -38.7, best -28.2, win -27.2 dBFS. Master `volume * 0.5` with recipe peaks of 0.035 to 0.1 leaves them
+   20 dB under typical web audio. Proposal: master `volume * 2` (merge about -27, win about -15 dBFS; the -18 dB
+   compressor then only touches wins and trophies). Then `SCALE` here goes up by the same factor (see Levels).
+2. **Close the spread.** The everyday sounds (tick, place, pip) sit 16 dB under win; under music they vanish first.
+   Proposal: tick .05 -> .07, place .05 -> .08, pip .035 -> .05, merge .08 -> .11; leave best, win, trophy.
+3. **Play in the music's key.** The ladder is C pentatonic; most styles are not in C, so a merge over Blocks (G
+   harmonic minor) or Quest (Bb) clashes. Listen for `numberics:music` and shift the ladder: `note(k) * 2 ** (key / 12)`
+   (key -6..5, from `NumbericsMusic.key()`; minor styles use the relative major, whose pentatonic is the minor
+   pentatonic). Shift the fixed chords (best, win, trophy, lose) by the same amount. With no music, key 0 (as today).
+   A test checks the shifted ladder sits in every style's scale (one note off in harmonic minor at most).
+4. **Never quantise SFX to the beat.** Feedback must land on the action; the music adapts, the SFX do not wait.
+5. **Dip under the big ones.** In `best`, `power` and `trophy`, call `window.NumbericsMusic && NumbericsMusic.dip()`;
+   end cards (`win`, `lose`) use `duck(true)` from the page instead.
+6. **One context.** Add `musicBus()` (see Merge) so the first tap pays for one `new AudioContext()`, not two.
+7. **Two small additions** that fit the same synth: `whoosh(dir)` (filtered noise sweep, up when a sheet opens, down
+   when it closes or on Undo, peak .03) and `deal()` (two soft rising triangle notes, a fifth apart, on a new game,
+   peak .05). Both stay under the music's dip rule (no dip).
+
+## Adding a style
+
+1. Write it in `STYLES` (notation above): a new id, a one-word `name`, a `blurb` under 70 characters with no
+   reference to another work, a form of 60 to 120 s with at least an A and a B, and `alt`s for the odd passes.
+   Write every line yourself; do not transcribe or adapt a tune you know.
+2. Add the id to `ORDER` (menu order), and to the `musicStyle` list in `settings.js`.
+3. `node tests/test-music.js`: well formed, range, key, variation, originality guard, names.
+4. `NODE_PATH=$(npm root -g) node tools/render-music.cjs out --styles <id> --raw`, set `level` to the printed value,
+   re-run without `--raw` (within 1 LU, peak <= -1 dBFS, 6 dB under the SFX). Listen to the WAV.
+5. Run the panel for it (MUSIC-PANEL.md, How to re-run) and record the verdicts before it ships.

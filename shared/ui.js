@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * NumbericsUI (docs/design/REDESIGN.md 3.2, 3.6). Builds the top bar into <div id="topbar" data-root="../"></div>:
  * the family mark (a link home) and the Games, Trophies and Settings buttons; and the one sheet primitive (3.6) that
- * Games, Trophies, Settings and How to play open in. Until the Games sheet exists (C1), Games scrolls to the games row
- * at the bottom of the page. Loaded last, after nav.js.
+ * Games, Trophies, Settings and How to play open in. Games opens NumbericsNav.openSheet() (shared/nav.js: Today and
+ * every game card in games.json order); without nav.js it scrolls to the games list. Loaded last, after nav.js.
  *
  * Sheets: sheet(id, build, opts) opens the sheet `id` (one at a time; opening another replaces it), empties its body
  * and calls build(body) to fill it; opts.title (default from the id) and opts.onClose. Focus moves to the close button

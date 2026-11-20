@@ -2,7 +2,7 @@
   "_license": "SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)",
   "_doc": "Budgets for tools/perf.cjs (read tools/PERF.md). Each metric: max for both views, or phone/desktop. A game entry overrides the default for that metric only. Measured 2026-11-20, median of 3 runs, 20 s play; the measured values are in each why.",
   "defaults": {
-    "weightKB": { "max": 200, "why": "No build step, so every byte is hand-written. Games weigh 97 to 131 KB with the new shared modules (52 KB before them); 200 KB leaves room for the redesign in progress and still catches a stray image, font or vendored library." },
+    "weightKB": { "max": 250, "why": "No build step, so every byte is hand-written. Games weighed 52 to 74 KB before the redesign's shared modules and 153 to 184 KB with them (20 Nov, mid-redesign; Six is higher, see its override). 250 KB leaves room to finish the redesign and still catches a stray image, font, audio file or vendored library." },
     "requests": { "max": 24, "why": "15 to 16 same-origin files per game now (7 before the shared modules). 24 allows a few more shared modules but catches per-tile or per-frame fetching." },
     "external": { "max": 0, "why": "Owner rule: zero external requests, content never depends on a CDN." },
     "pageErrors": { "max": 0, "why": "An uncaught error during load or play is a broken game, whatever the timings say." },
@@ -17,15 +17,18 @@
     "cpuMs": { "phone": 250, "desktop": 80, "why": "The engine call that chooses the computer's move, worst in play. Four is the heaviest search: 106 to 121 ms phone, 24 to 33 ms desktop; the others take under 6 ms. Past 250 ms it eats into the designed thinking pause." },
     "cpuLongTaskMs": { "phone": 250, "desktop": 80, "why": "The longest long task overlapping the computer's move (the frame the move freezes). Same reasoning as cpuMs." },
     "replyMs": { "max": 600, "why": "Player's move to the computer's move on screen, designed pause included. 600 ms is the default for a new game against the computer; games with a longer designed pause override it." },
-    "cpuMovesMin": { "max": 3, "why": "At least this many computer moves must be seen in each run, so the reply budgets never pass by measuring nothing (3 to 21 seen per run today)." }
+    "cpuMovesMin": { "max": 3, "why": "The median run must see at least this many computer moves, so the reply budgets never pass by measuring nothing (medians 7 to 20 today)." }
   },
   "games": {
+    "six": {
+      "weightKB": { "max": 300, "why": "Six ships its verified line bank (six/bank.js, 13 KB) and the largest engine and client (34 + 26 KB): 102 KB before the shared modules, 211 KB with them. 300 KB, the same headroom as the default." }
+    },
     "four": {
       "replyMs": { "max": 600, "why": "Designed pause THINK = 380 ms; measured 415 to 444 ms phone, 408 desktop." }
     },
     "five": {
       "replyMs": { "max": 1400, "why": "Designed pause THINK = 520 ms, plus 500 ms more when the computer opens a round, plus the tile flight; measured medians 750 to 1050 ms (it depends how many openers a run sees)." },
-      "cpuMovesMin": { "max": 1, "why": "Five's moves need two taps (own tile, then a target), so scripted play lands fewer: 2 to 9 per run." }
+      "cpuMovesMin": { "max": 2, "why": "Five's moves need two taps (own tile, then a target), so scripted play lands fewer: medians 6 to 8, single runs as low as 1." }
     },
     "fifteen": {
       "replyMs": { "max": 700, "why": "Designed pause THINK = 520 ms; measured 546 to 556 ms." }

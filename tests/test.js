@@ -358,10 +358,34 @@ t("the content does not depend on a CDN", () => files.forEach(([f, s]) => ok(!/h
 
 // ---- round 1 fixes (docs/reviews/TRIAGE1.md): static guards for the page shell ----
 const src = Object.fromEntries(files);
-t("R6: H1 stays Numberics and the subtitle links to the games row", () => {
-  ok(/<h1>Numberics<\/h1>/.test(src["index.html"]), "H1");
-  ok(/<p class="sub">Endless\. There is no top tile\. <a href="#games">Nine more games below\.<\/a><\/p>/.test(src["index.html"]), "subtitle");
-  ok(/<nav id="games"/.test(src["index.html"]), "#games target");
+t("C1 rename (REDESIGN.md 3.1, 4.2): the root is Two: title, H1, sub line, meta, favicon; no Endless left on the page", () => {
+  const h = src["index.html"];
+  ok(/<title>Numberics Two<\/title>/.test(h), "title");
+  ok(/<h1>Two<\/h1>/.test(h), "H1");
+  ok(/<p class="sub">Every tile is a power of two\. No top tile\.<\/p>/.test(h), "sub line");
+  ok(/<meta name="description" content="Two: 2048 with no top tile\. Every tile is a power of two;/.test(h), "meta description");
+  ok(/%3E2%3C\/text%3E/.test(h) && !/%E2%88%9E/.test(h), "favicon is a 2, not the infinity sign");
+  ok(!/endless/i.test(h), "no Endless in the root page");
+  ok(!/Endless/.test(fs.readFileSync(path.join(root, "README.md"), "utf8").replace("Two was called Endless", "")), "README: Endless only in the one line on the old name");
+});
+t("C1 back-compat: Two keeps the numberics_endless_v1 save key and the replay fixture name, with the reason beside them", () => {
+  ok(/K\.store\("numberics_endless_v1"\)/.test(src["game.js"]), "save key");
+  ok(/Two was called Endless; the key is kept so saved games load/.test(src["game.js"]), "the comment at the key");
+  ok(fs.existsSync(path.join(__dirname, "fixtures", "endless-replay.json")), "replay fixture name");
+});
+t("C1 root layout (REDESIGN.md 3.1, 3.3, 3.4): Today and the game cards beside the board, then the footer line", () => {
+  const h = src["index.html"];
+  ok(/<div class="layout">\s*<main id="app">/.test(h), "layout wraps the game");
+  ok(/<aside class="side"[^>]*>\s*<section id="today" class="today"[^>]*><\/section>\s*<h2 id="more">Ten number games<\/h2>\s*<p class="lede">From the smallest number to the biggest\. Free, no ads, saved on this device\.<\/p>\s*<div id="games" class="cards" data-root="" data-current="two"/.test(h), "side: Today, heading, lede, cards");
+  ok(/<p class="foot-note">Your scores and trophies stay on this device\. Nothing is sent anywhere\.<\/p>/.test(h), "footer line");
+  ok(h.indexOf('id="games"') > h.indexOf("</main>"), "the cards sit after the game");
+  ok(/\.layout\{[^}]*max-width:1100px[^}]*display:grid[^}]*gap:28px/.test(src["style.css"]), "layout grid");
+  ok(/@media \(min-width:960px\)\{\s*\.layout\{ grid-template-columns:480px minmax\(0,1fr\);[^}]*gap:48px/.test(src["style.css"]), "beside the board from 960");
+});
+t("C1 alias: two/ sends the player to the root (meta refresh and a visible link, no script)", () => {
+  const a = fs.readFileSync(path.join(root, "two", "index.html"), "utf8");
+  ok(/<meta http-equiv="refresh" content="0; url=\.\.\/">/.test(a) && /<a href="\.\.\/">Go to Two<\/a>/.test(a), "refresh + link");
+  ok(/SPDX-License-Identifier: Apache-2\.0/.test(a) && /href="\.\.\/shared\/theme\.css"/.test(a) && !/<script/.test(a) && !/document\.write|\u2014/.test(a), "header, theme, no script");
 });
 t("R5: the tray is the shared one (descriptions, aria-disabled, tap explains) and loads before game.js", () => {
   const h = src["index.html"];

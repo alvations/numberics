@@ -115,7 +115,7 @@
         pad: { wave: "supersaw", gain: 0.04, a: 0.3, d: 0.6, s: 0.85, r: 0.5, oct: -1, lp: 1700 },
         arp: { wave: "square", gain: 0.035, a: 0.002, d: 0.09, s: 0, r: 0.03, lp: 2600, echo: 1, oct: -1 },
       },
-      kit: { k: 0.8, s: 0.26, h: 0.035, o: 0.05, c: 0.06, snare: "clap" },
+      kit: { k: 0.62, s: 0.26, h: 0.035, o: 0.05, c: 0.06, snare: "clap" },
       drums: {
         intro: { k: "x...x...x...x...", o: "..x...x...x...x." },
         build: { k: "x...x...x...x...", s: "....x.......x...", h: "xgxgxgxgxgxgxgxg" },
@@ -376,6 +376,12 @@
     return { events: ev, ticks: bar0 * B, bars: bar0, seconds: tickTime(bar0 * B, st.bpm, st.swing) };
   }
 
+  // semitones (-6..5) that move a C-major-pentatonic SFX ladder into this style's key (minor modes: the relative
+  // major, whose pentatonic is the minor pentatonic). shared/audio.js can follow it (MUSIC.md, SFX notes).
+  function sfxKey(st) {
+    var pc = /^(minor|harmonic|dorian)$/.test(st.mode) ? (st.root + 3) % 12 : st.root % 12;
+    return pc > 5 ? pc - 12 : pc;
+  }
   function styleFor(game, choice) {
     if (choice && choice !== "auto" && STYLES[choice]) return choice;
     return GAMES[game] || "chill";
@@ -391,7 +397,7 @@
     var sr = c.sampleRate, len = Math.floor(sr * 2.2), ir = c.createBuffer(2, len, sr), s = 0x2545f491;
     for (var ch = 0; ch < 2; ch++) {
       var d = ir.getChannelData(ch);
-      for (var i = 0; i < len; i++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; d[i] = ((s >>> 0) / 4294967296 * 2 - 1) * Math.pow(1 - i / len, 3); }
+      for (var i = 0; i < len; i++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; var u = 1 - i / len; d[i] = ((s >>> 0) / 4294967296 * 2 - 1) * u * u * u; }
     }
     e.verb.buffer = ir; e.verb.connect(e.mix);
     var nb = c.createBuffer(1, sr, sr), nd = nb.getChannelData(0);
@@ -548,21 +554,27 @@
     }
 
     // Create (once) and resume the context: only from a gesture, or after one has happened (sticky activation).
+    // Only the context is made inside the gesture (that is what iOS needs); the buffers (reverb, noise) and the first
+    // player are built in the next task, so the tap itself stays short (MUSIC.md, Performance).
+    var ctx = null, dest = null, building = false;
     function ensure() {
-      if (eng) { if (own && eng.c.state === "suspended" && !paused) { try { var p = eng.c.resume(); if (p && p.catch) p.catch(function () {}); } catch (x) { /* blocked */ } } return true; }
+      if (ctx) { if (own && ctx.state === "suspended" && !paused) { try { var p = ctx.resume(); if (p && p.catch) p.catch(function () {}); } catch (x) { /* blocked */ } } return true; }
       var sh = null;
       try { sh = w.NumbericsAudio && typeof w.NumbericsAudio.musicBus === "function" ? w.NumbericsAudio.musicBus() : null; } catch (x) { sh = null; }
       try {
-        if (sh && sh.context && sh.input) { eng = engine(sh.context, sh.input); own = false; }
+        if (sh && sh.context && sh.input) { ctx = sh.context; dest = sh.input; own = false; }
         else {
           if (!AC) return false;
-          var c = new AC(); made++; own = true;
-          eng = engine(c, c.destination);
-          if (c.state !== "running" && c.resume) { var q = c.resume(); if (q && q.catch) q.catch(function () {}); }
+          ctx = new AC(); made++; own = true; dest = ctx.destination;
+          if (ctx.state !== "running" && ctx.resume) { var q = ctx.resume(); if (q && q.catch) q.catch(function () {}); }
         }
-        eng.mix.gain.value = 0; eng.duck.gain.value = ducked ? DUCK : 1;
-      } catch (x) { eng = null; return false; }
+      } catch (x) { ctx = null; return false; }
       return true;
+    }
+    function build() {
+      if (eng || !ctx) return !!eng;
+      try { eng = engine(ctx, dest); eng.mix.gain.value = 0; eng.duck.gain.value = ducked ? DUCK : 1; } catch (x) { eng = null; }
+      return !!eng;
     }
     function loop() {
       timer = null;
@@ -578,6 +590,10 @@
     function go() {
       if (!wanted || !cfg.on || !activated() || hidden()) return false;
       if (!ensure()) return false;
+      if (!eng) {
+        if (!building) { building = true; setT(function () { building = false; if (build()) go(); }, 0); }
+        return true;
+      }
       var id = resolve();
       ramp(eng.mix.gain, mixTarget(), 0.08);
       if (cur && cur.id === id) { startLoop(); return true; }
@@ -585,6 +601,7 @@
       if (cur) { var prev = cur; cur = null; retire(prev, XFADE); }
       cur = player(eng, id, t0, old.length ? XFADE : FADE_IN);
       startLoop();
+      try { w.dispatchEvent(new w.CustomEvent("numberics:music", { detail: { style: id, key: sfxKey(STYLES[id]) } })); } catch (x) { /* no events */ }
       return true;
     }
     // stop booking; fade out what plays (wanted stays as it was)
@@ -594,10 +611,9 @@
 
     function onGesture(e) { if (e && e.isTrusted === false) return; gestured = true; if (wanted && !cur) go(); else if (eng && own && eng.c.state === "suspended" && !paused) ensure(); }
     try { ["pointerdown", "keydown", "touchend", "click"].forEach(function (n) { w.addEventListener(n, onGesture, { capture: true }); }); } catch (x) { /* no events */ }
-    function activated() {
-      if (gestured) return true;
-      try { return !!(w.navigator && w.navigator.userActivation && w.navigator.userActivation.hasBeenActive); } catch (x) { return false; }
-    }
+    // Only a trusted gesture this module saw counts (the capture listener runs before any page handler, so a click on
+    // the Settings "Music" switch has already set it by the time the settings event arrives).
+    function activated() { return gestured; }
 
     function pause() {
       if (paused || !eng) return; paused = true; pausedAt = eng.c.currentTime;
@@ -647,11 +663,18 @@
         return cfg.vol;
       },
       enable: function (on) { cfg.on = !!on; if (!cfg.on) { if (eng) ramp(eng.mix.gain, 0, 0.3); halt(0.3); } else if (wanted) go(); return cfg.on; },
+      // dip(): a short 6 dB dip (0.7 s) under a big SFX (a new best, a trophy, a power-up)
+      dip: function () {
+        if (!eng || paused || ducked) return false;
+        try { var g = eng.duck.gain, t = eng.c.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(1, t); g.linearRampToValueAtTime(0.5, t + 0.03); g.linearRampToValueAtTime(1, t + 0.7); } catch (x) { return false; }
+        return true;
+      },
+      key: function () { return cur ? sfxKey(cur.st) : sfxKey(STYLES[resolve()]); },
       duck: function (on) { ducked = !!on; if (eng && !paused) ramp(eng.duck.gain, ducked ? DUCK : 1, ducked ? 0.4 : 1.2); return ducked; },
       unlock: function () { gestured = true; return wanted ? go() : ensure(); },
       state: function () {
-        return { contexts: made, ctx: eng ? eng.c.state : "none", shared: !!(eng && !own), playing: !!cur, style: cur ? cur.id : null,
-          resolved: resolve(), fading: old.length, paused: paused, ducked: ducked, on: cfg.on, volume: cfg.vol, cycle: cur ? cur.cycle : 0,
+        return { contexts: made, ctx: ctx ? ctx.state : "none", shared: !!(ctx && !own), playing: !!cur, style: cur ? cur.id : null,
+          resolved: resolve(), fading: old.filter(function (p) { return p.endAt > eng.c.currentTime; }).length, paused: paused, ducked: ducked, on: cfg.on, volume: cfg.vol, cycle: cur ? cur.cycle : 0,
           notes: eng ? eng.n : 0, live: eng ? eng.live : 0, mix: eng ? eng.mix.gain.value : 0 };
       },
       // render(style, o): the style through the same synth in an OfflineAudioContext. o.seconds (default one full
@@ -673,7 +696,7 @@
 
   var API = { STYLES: STYLES, GAMES: GAMES, MODES: MODES, ORDER: ORDER, TPB: TPB, DEF: DEF, SCALE: SCALE, TARGET_LUFS: TARGET_LUFS,
     compile: compile, tickTime: tickTime, cycleSeconds: cycleSeconds, formBars: formBars, degree: degree, chord: chord, bars: bars,
-    mtof: mtof, styleFor: styleFor, make: make, LEVELS: { FADE_IN: FADE_IN, XFADE: XFADE, STOP_FADE: STOP_FADE, DUCK: DUCK, LOOKAHEAD: LOOKAHEAD, TICK_MS: TICK_MS } };
+    mtof: mtof, styleFor: styleFor, sfxKey: sfxKey, make: make, LEVELS: { FADE_IN: FADE_IN, XFADE: XFADE, STOP_FADE: STOP_FADE, DUCK: DUCK, LOOKAHEAD: LOOKAHEAD, TICK_MS: TICK_MS } };
   if (typeof module === "object" && module.exports) module.exports = API;
   if (typeof window !== "undefined" && root === window) window.NumbericsMusic = make(window);
 })(typeof window !== "undefined" ? window : this);

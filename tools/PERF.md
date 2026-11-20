@@ -36,12 +36,12 @@ external requests and page errors are the **worst run**.
 | `cls` | layout shift during play, not counting shifts right after the player's input (the CLS rule) |
 | `cpuMs`, `cpuLongTaskMs` | games against the computer: the worst engine call for the computer's move, and the longest long task overlapping one |
 | `replyMs` | games against the computer: median time from the player's move to the computer's move on screen (two frames after the engine call returns). It includes each game's designed thinking pause |
-| `cpuMovesMin` | games against the computer: the fewest computer moves seen in a run must be at least this, so the reply budgets cannot pass by measuring nothing |
+| `cpuMovesMin` | games against the computer: the median run's count of computer moves must be at least this, so the reply budgets cannot pass by measuring nothing |
 
 **Play.** After load the page's `window.__demo()` runs (the representative state the screenshots use), then
 `PERF_PLAY_MS` of scripted input, one action every 140 to 260 ms: keys, and clicks on whatever is clickable outside
 the header, the games row, the difficulty row, settings and New game (targets below the fold are scrolled into
-view). End-card buttons are preferred when shown, so play continues across game ends. Small per-game hints live in
+view). End-card buttons are preferred when shown, so play continues across game ends; against the computer, 20 actions with no computer move count as stuck, and the script presses Escape and takes the end card's button. Small per-game hints live in
 the `PLAY` map at the top of `tools/perf.cjs` (keys, click share, tap sequences such as Five's own tile then a
 target); a game without an entry plays generically. Against the computer, the script waits while the hint line says
 "thinking", like a player would, so each reply is timed from the move that caused it.

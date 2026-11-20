@@ -76,8 +76,8 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ctx = await b.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
   p = await ctx.newPage(); const e5 = []; p.on("pageerror", x => e5.push(x.message));
   await p.goto(url);
-  ck("H1 stays Numberics (home page)", (await p.textContent("h1")) === "Numberics");
-  ck("subtitle links to the games row", await p.evaluate(() => { const a = document.querySelector(".sub a"); return !!a && a.getAttribute("href") === "#games" && a.textContent === "Nine more games below."; }));
+  ck("H1 is Two on the home page (C1 rename)", (await p.textContent("h1")) === "Two");
+  ck("the sub line says what Two is (C1)", (await p.textContent(".sub")) === "Every tile is a power of two. No top tile.");
   ck("tray buttons are never disabled; empty ones are aria-disabled", await p.evaluate(() => { const bs = [...document.querySelectorAll("#tray .pw")]; return bs.length === 4 && bs.every(x => !x.disabled) && bs.slice(1).every(x => x.getAttribute("aria-disabled") === "true"); }));
   ck("tray tooltip voice: 2: Smash. Remove one tile.", (await p.getAttribute("#tray .pw:nth-child(2)", "title")) === "2: Smash. Remove one tile.");
   ck("tray aria-label carries the count", /^Smash, 0 left\./.test(await p.getAttribute("#tray .pw:nth-child(2)", "aria-label")));

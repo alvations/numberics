@@ -1,7 +1,7 @@
 {
   "name": "numberics",
   "version": "0.1.0",
-  "description": "Numberics: ten number games (Endless, Sudoku, Fibonacci, Seven, Three, Four, Five, Six, Fifteen, Nine). No build step.",
+  "description": "Numberics: ten number games (Fibonacci, Two, Three, Four, Five, Six, Seven, Nine, Fifteen, Sudoku). No build step.",
   "license": "Apache-2.0",
   "private": true,
   "scripts": {

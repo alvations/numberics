@@ -55,8 +55,8 @@ const root = path.join(__dirname, "..");
     rows.push(row);
     const fails = [];
     if (!raw && Math.abs(L.lufs - M.TARGET_LUFS) > 1) fails.push("level " + L.lufs + " LUFS (target " + M.TARGET_LUFS + ")");
-    if (L.peakDb > -1) fails.push("peak " + L.peakDb + " dBFS > -1");
-    if (res.clip) fails.push(res.clip + " clipped samples");
+    if (!raw && L.peakDb > -1) fails.push("peak " + L.peakDb + " dBFS > -1");
+    if (!raw && res.clip) fails.push(res.clip + " clipped samples");
     if (fails.length) { bad++; row.fail = fails; }
   }
   await browser.close();

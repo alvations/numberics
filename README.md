@@ -2,38 +2,37 @@
 
 **Play: https://alvations.github.io/numberics/**
 
-Ten number games, no build step, no tracking. Open `index.html` (Endless) and use the games row to switch.
+Ten number games, no build step, no tracking. Open `index.html` to play **Two**; the **Games** button (and the cards
+beside the board) lead to the other nine.
 
-**Numberics Endless** is 2048 with the ceiling removed. Merge past 2048 and keep going: there is no winning
-tile, only how far you get before the board locks.
+**Two** is 2048 with the ceiling removed. Every tile is a power of two: join them past 2048 and keep going; there is no
+winning tile, only how far you get before the board locks. (Two was called Endless; saved games carry over.)
 
 Every new highest tile from 32 up earns a **power-up**: **Undo**, **Smash** (delete a tile), **Swap**
 (exchange two cells), **Boost** (double a tile). Use them to dig out of a jam and stay alive.
 
 ## The games
 
-- **Endless** (`/`): 2048 with no ceiling, plus earned power-ups.
-- **Sudoku** (`/sudoku/`): Classic 9x9, every puzzle has exactly one solution.
+From the smallest number to the biggest:
+
 - **Fibonacci** (`/fibonacci/`): 2584 with no ceiling: merge neighbours in the Fibonacci sequence.
-- **Seven** (`/seven/`): Drop numbered discs; pop seven in one chain for luck.
+- **Two** (`/`, also `/two/`): 2048 with no top tile, plus earned power-ups.
 - **Three** (`/three/`): Count in threes: step merges and rainbow Flush runs.
 - **Four** (`/four/`): Four in a row, or any four that sum to ten.
 - **Five** (`/five/`): Add one tile onto another; at five it bursts. Beat the computer.
 - **Six** (`/six/`): Make every line equal six, then 66, 6.6, 666.
-- **Fifteen** (`/fifteen/`): Tic-tac-toe in disguise: first to hold three numbers that sum to 15.
+- **Seven** (`/seven/`): Drop numbered discs; pop seven in one chain for luck.
 - **Nine** (`/nine/`): Nim with number tiles up to nine: take from one, last take wins.
+- **Fifteen** (`/fifteen/`): Tic-tac-toe in disguise: first to hold three numbers that sum to 15.
+- **Sudoku** (`/sudoku/`): Classic 9x9, every puzzle has exactly one solution.
 
 Every game shares one look, one power-up system (earned by play, never bought) and plays on phone and desktop.
 
 ## Screenshots
 
-| **Endless** | **Sudoku** |
+| **Fibonacci** | **Two** |
 |---|---|
-| <img src="screenshots/endless-mobile.png" width="260" alt="Endless on a phone"> | <img src="screenshots/sudoku-mobile.png" width="260" alt="Sudoku on a phone"> |
-
-| **Fibonacci** | **Seven** |
-|---|---|
-| <img src="screenshots/fibonacci-mobile.png" width="260" alt="Fibonacci on a phone"> | <img src="screenshots/seven-mobile.png" width="260" alt="Seven on a phone"> |
+| <img src="screenshots/fibonacci-mobile.png" width="260" alt="Fibonacci on a phone"> | <img src="screenshots/two-mobile.png" width="260" alt="Two on a phone"> |
 
 | **Three** | **Four** |
 |---|---|
@@ -43,9 +42,13 @@ Every game shares one look, one power-up system (earned by play, never bought) a
 |---|---|
 | <img src="screenshots/five-mobile.png" width="260" alt="Five on a phone"> | <img src="screenshots/six-mobile.png" width="260" alt="Six on a phone"> |
 
-| **Fifteen** | **Nine** |
+| **Seven** | **Nine** |
 |---|---|
-| <img src="screenshots/fifteen-mobile.png" width="260" alt="Fifteen on a phone"> | <img src="screenshots/nine-mobile.png" width="260" alt="Nine on a phone"> |
+| <img src="screenshots/seven-mobile.png" width="260" alt="Seven on a phone"> | <img src="screenshots/nine-mobile.png" width="260" alt="Nine on a phone"> |
+
+| **Fifteen** | **Sudoku** |
+|---|---|
+| <img src="screenshots/fifteen-mobile.png" width="260" alt="Fifteen on a phone"> | <img src="screenshots/sudoku-mobile.png" width="260" alt="Sudoku on a phone"> |
 
 Desktop shots are in `screenshots/`. Regenerate with `npm run shots` (needs Playwright).
 

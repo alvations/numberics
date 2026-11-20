@@ -31,7 +31,7 @@ jobs:
       - name: Assemble the site (only what the pages load; live games from games.json)
         run: |
           mkdir -p _site
-          cp -r index.html engine.js game.js style.css games.json .nojekyll shared screenshots LICENSE NOTICE _site/
+          cp -r index.html engine.js game.js style.css games.json .nojekyll shared two screenshots LICENSE NOTICE _site/   # two/: the alias page for Two (REDESIGN.md 3.1)
           for p in $(node -e 'require("./games.json").filter(g => g.status === "live" && g.path).forEach(g => console.log(g.path))'); do
             cp -r "$p" _site/
           done

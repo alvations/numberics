@@ -1,38 +1,24 @@
 [
   {
-    "id": "endless",
-    "name": "Endless",
-    "path": "",
-    "status": "live",
-    "blurb": "2048 with no top tile."
-  },
-  {
-    "id": "sudoku",
-    "name": "Sudoku",
-    "path": "sudoku/",
-    "status": "live",
-    "blurb": "Classic 9x9, one answer only."
-  },
-  {
     "id": "fibonacci",
     "name": "Fibonacci",
     "path": "fibonacci/",
     "status": "live",
-    "blurb": "Merge neighbours in the Fibonacci run."
+    "blurb": "Join neighbours in the Fibonacci run."
   },
   {
-    "id": "seven",
-    "name": "Seven",
-    "path": "seven/",
+    "id": "two",
+    "name": "Two",
+    "path": "",
     "status": "live",
-    "blurb": "Drop discs; a number pops when it fits its line."
+    "blurb": "2048 with no top tile."
   },
   {
     "id": "three",
     "name": "Three",
     "path": "three/",
     "status": "live",
-    "blurb": "Count in threes, line up rainbow flushes."
+    "blurb": "Count in threes, make rainbow rows."
   },
   {
     "id": "four",
@@ -47,7 +33,7 @@
     "name": "Five",
     "path": "five/",
     "status": "live",
-    "blurb": "Add tiles onto tiles; at five they burst.",
+    "blurb": "Add tile onto tile; at five it bursts.",
     "vs": true
   },
   {
@@ -55,22 +41,36 @@
     "name": "Six",
     "path": "six/",
     "status": "live",
-    "blurb": "Signs between numbers until they make six."
+    "blurb": "Put signs between numbers to make six."
   },
   {
-    "id": "fifteen",
-    "name": "Fifteen",
-    "path": "fifteen/",
+    "id": "seven",
+    "name": "Seven",
+    "path": "seven/",
     "status": "live",
-    "blurb": "Claim three numbers that make fifteen.",
-    "vs": true
+    "blurb": "Drop discs; a number pops when it fits."
   },
   {
     "id": "nine",
     "name": "Nine",
     "path": "nine/",
     "status": "live",
-    "blurb": "Take from the heaps; take the last to win.",
+    "blurb": "Take from the heaps. Take the last to win.",
     "vs": true
+  },
+  {
+    "id": "fifteen",
+    "name": "Fifteen",
+    "path": "fifteen/",
+    "status": "live",
+    "blurb": "Pick three numbers that make fifteen.",
+    "vs": true
+  },
+  {
+    "id": "sudoku",
+    "name": "Sudoku",
+    "path": "sudoku/",
+    "status": "live",
+    "blurb": "The classic 9 by 9. One answer only."
   }
 ]

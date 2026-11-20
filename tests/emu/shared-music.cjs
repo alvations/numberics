@@ -5,7 +5,8 @@
  * Run: NODE_PATH=$(npm root -g) node tests/emu/run.cjs shared-music */
 "use strict";
 const SPY = () => {
-  window.__ac = 0; window.__long = [];
+  window.__ac = 0; window.__long = []; window.__mus = [];
+  window.addEventListener("numberics:music", e => window.__mus.push(e.detail));
   const AC = window.AudioContext;
   if (AC) window.AudioContext = class extends AC { constructor(...a) { super(...a); window.__ac++; } };
   try { new PerformanceObserver(l => l.getEntries().forEach(e => window.__long.push(Math.round(e.duration)))).observe({ entryTypes: ["longtask"] }); } catch (e) { /* no observer */ }
@@ -31,6 +32,7 @@ module.exports = async function ({ browser, url, ck }) {
   let s = await S();
   ck("the first tap starts the music in its own running context", s.contexts === 1 && s.playing && s.ctx === "running" && s.style === s.resolved, JSON.stringify(s));
   await p.waitForTimeout(1500);
+  ck("a style start announces its SFX key on numberics:music", await p.evaluate(() => window.__mus.length === 1 && window.__mus[0].style === NumbericsMusic.state().style && window.__mus[0].key === NumbericsMusic.key()));
   s = await S();
   ck("notes are booked ahead on the audio clock", s.notes > 5 && s.live > 0, JSON.stringify(s));
   ck("the mix sits at musicVolume * SCALE", Math.abs(s.mix - s.volume * (await p.evaluate(() => 0.016))) < 1e-6 || s.mix > 0, String(s.mix));
