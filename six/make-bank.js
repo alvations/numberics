@@ -21,8 +21,8 @@ for (const t of [1, 2, 3, 4, 5]) {
   for (const [n, g] of C[t]) {
     if (E.trivial(n, g)) continue;
     const m = E.measure(n, g, t); if (!m) continue;
-    // Tier 3 with four copies: drop lines whose only answers are the one generic pattern ((x+x+x)/x)!
-    if (t === 3 && n.length === 4 && m.count <= 2) continue;
+    // Tier 3 with four copies: keep only lines with at least 10 answers, so the one generic pattern ((x+x+x)/x)! does not crowd the tier
+    if (t === 3 && n.length === 4 && m.count < 10) continue;
     const v = E.value(n, m.sol).v;
     if (!v || !E.same(v, E.literal(g))) throw new Error("witness does not evaluate: " + n.join(" ") + " = " + g);
     kept.push({ t, n: n.join(" "), g, c: m.cost, k: m.count, d: m.d, s: m.sol });

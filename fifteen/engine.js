@@ -19,7 +19,9 @@
  * - A round won on a turn that used Erase or Double earns nothing (a power-up never earns a power-up).
  * - Undo (you only) rewinds to the start of your last turn, the computer's reply included, restoring the
  *   whole snapshot (stock, score, round) minus the Undo charge spent. It never crosses into a new round.
- * - The computer earns power-ups only on Hard, by the same rule, and uses Erase and Double only when they
+ * - On Hard you start each match with one Undo AND one Erase (perfect play is a draw; this breaks it).
+ * - The computer earns power-ups only on Hard, by the same rule, only Erase or Double (the two it
+ *   uses), starts with none, and uses Erase and Double only when they
  *   turn its solved result strictly better (a draw into a win, or a loss into a draw or win).
  */
 (function (root, factory) {
@@ -32,6 +34,7 @@
   var ROUNDS = 5, CAP = 9;
   var POWERS = ["undo", "erase", "peek", "double"];
   var DIFFS = ["easy", "medium", "hard"];
+  var CPU_POWERS = ["erase", "double"];
 
   // the 8 magic lines, as number triples (rows, columns, diagonals of MAGIC)
   var CELL_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
@@ -132,7 +135,8 @@
       rounds: [],                // winner of each finished round (0 draw)
       result: null,              // {winner: 0|1|2, line: [a,b,c] | null, earned: name|null}
       match: null,               // {winner: 0|1|2} once the match is decided
-      power: stock({ undo: 1 }), cpuPower: stock({ undo: 1 }),
+      // Hard is a solved draw, so on Hard you start with one Erase to break it (the computer does not)
+      power: stock(diff === "hard" ? { undo: 1, erase: 1 } : { undo: 1 }), cpuPower: stock({}),
       prev: null, moves: 0, last: [],
     };
   }
@@ -141,7 +145,8 @@
   function earns(s, side) { return side === 1 || s.diff === "hard"; }
 
   function award(s, side) {
-    var st = stockOf(s, side), open = POWERS.filter(function (p) { return st[p] < CAP; });
+    // the computer only earns what it can use (Erase, Double), so no charge is wasted
+    var st = stockOf(s, side), open = (side === 1 ? POWERS : CPU_POWERS).filter(function (p) { return st[p] < CAP; });
     if (!open.length) return null;
     var p = pickOne(s, open); st[p]++; return p;
   }
@@ -224,7 +229,7 @@
   // ---- the computer ----
   // Plans one whole turn for side 2. Returns a list of actions [{type:"erase"|"double"|"claim", n}].
   function plan(s) {
-    var side = s.turn, owner = s.owner, f = free(owner), r, i, j;
+    var side = s.turn, owner = s.owner, f = free(owner), i, j;
     var win = threats(owner, side);
     if (s.diff === "easy") return [{ type: "claim", n: win.length ? pickOne(s, win) : pickOne(s, f) }];
     if (s.diff === "medium") {
@@ -300,7 +305,7 @@
 
   return {
     MAGIC: MAGIC, LINES: LINES, CELL_LINES: CELL_LINES, CELL_OF: CELL_OF, TRIPLES: TRIPLES, ROUNDS: ROUNDS, CAP: CAP,
-    POWERS: POWERS, DIFFS: DIFFS, triples15: triples15, held: held, free: free, sumWin: sumWin, gridWin: gridWin,
+    POWERS: POWERS, CPU_POWERS: CPU_POWERS, DIFFS: DIFFS, triples15: triples15, held: held, free: free, sumWin: sumWin, gridWin: gridWin,
     threats: threats, solve: solve, bestMoves: bestMoves, peekInfo: peekInfo,
     newMatch: newMatch, claim: claim, use: use, canUse: canUse, plan: plan, cpuTurn: cpuTurn,
     nextRound: nextRound, setDiff: setDiff, valid: valid, playing: playing,

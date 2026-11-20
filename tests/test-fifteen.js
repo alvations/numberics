@@ -116,8 +116,8 @@ t("Undo rewinds your last turn and the reply, paid for with one charge, nothing 
 t("Undo cannot farm a round win: the award and the score rewind too", () => {
   let s = at(B([2, 6], [1, 3]), 1, "medium"); s.power.undo = 2;
   s = must(F.claim(s, 4)); s = F.cpuTurn(s).state;      // a quiet move first so a snapshot exists
-  if (s.result) return;
-  const w = F.threats(s.owner, 1); if (!w.length) return;
+  ok(!s.result, "fixture: the round goes on");
+  const w = F.threats(s.owner, 1); ok(w.length, "fixture: claiming 4 made threats the computer cannot all block");
   const s1 = must(F.claim(s, w[0])); ok(s1.result.winner === 1 && s1.result.earned);
   const s2 = must(F.use(s1, "undo"));
   eq(s2.wins, s.wins); eq(F.held(s2.owner, 1), F.held(s.owner, 1));
@@ -229,7 +229,6 @@ t("starting side alternates each round", () => {
 });
 t("best of five: the match ends early once a side cannot be caught, and scores add up", () => {
   let s = F.newMatch(1, "medium");
-  const win = (st, side) => { st = Object.assign(F.nextRound(st.result ? st : st), {}); return st; };
   s.wins = [0, 2, 0]; s.rounds = [1, 1]; s.round = 3; s.owner = B([2, 6], [1, 3]);
   s = must(F.claim(s, 7)); eq(s.wins, [0, 3, 0]); eq(s.match, { winner: 1 }, "3-0 with two to play is decided");
   ok(F.nextRound(s) === s, "no round after the match");
@@ -237,7 +236,6 @@ t("best of five: the match ends early once a side cannot be caught, and scores a
   d = must(F.claim(d, 8)); eq(d.match, { winner: 0 }, "level after five is a drawn match");
   let c = F.newMatch(1, "medium"); c.wins = [1, 1, 1]; c.rounds = [0, 1, 2]; c.round = 4; c.owner = B([1, 2, 4, 7], [3, 5, 6, 9]);
   c = must(F.claim(c, 8)); eq(c.match, null, "1-1 with one to play is open");
-  void win;
 });
 t("deterministic: same seed and inputs give the same match", () => {
   const run = () => { let s = F.newMatch(77, "easy"); const log = []; while (!s.match) { if (s.result) { s = F.nextRound(s); continue; }

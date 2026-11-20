@@ -1,0 +1,47 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Six: only what shared/theme.css does not cover. */
+.six{ display:flex; flex-direction:column; justify-content:space-between; gap:6px; padding:14px; }
+.six .top{ display:flex; justify-content:space-between; align-items:center; color:var(--mute); font-size:.78rem;
+  text-transform:uppercase; letter-spacing:.08em; }
+.pips{ display:flex; gap:6px; }
+.pips i{ width:10px; height:10px; border-radius:99px; background:var(--cell); border:1px solid var(--line); }
+.pips i.on{ background:var(--accent); border-color:var(--accent); }
+.pips i.cur{ border-color:var(--accent); }
+.goal{ display:flex; justify-content:center; align-items:center; gap:10px; }
+.goal .eq{ color:var(--mute); font-size:.85rem; }
+.tile.goldt{ background:var(--accent); color:#1b1b22; padding:4px 16px; min-width:64px; height:52px; font-size:1.7rem; }
+/* the line: numbers (Endless tiles) with tappable gaps between them; columns are set by game.js */
+.line{ display:grid; align-items:center; width:100%; margin:0 auto; }
+.num{ position:relative; aspect-ratio:1; width:100%; cursor:pointer; touch-action:none; font-size:1.5rem; }
+.line.n4 .num{ font-size:1.3rem; } .line.n5 .num{ font-size:1.15rem; }
+.line.long .num{ font-size:1rem; }
+.num .sg{ position:absolute; top:-9px; left:50%; translate:-50% 0; background:var(--ink); color:#15151d; border-radius:99px;
+  padding:0 6px; font-size:.72rem; line-height:1.35; font-weight:800; white-space:nowrap; pointer-events:none; }
+.num.cur,.gp.cur,.bar.cur{ outline:2px solid var(--accent); outline-offset:2px; }
+.num.pk{ box-shadow:0 0 0 2px var(--bg), 0 0 0 4px var(--cool); }
+.num.anchor{ outline:2px dashed var(--accent); outline-offset:3px; }
+.num.jl{ border-top-left-radius:2px; border-bottom-left-radius:2px; }
+.num.jr{ border-top-right-radius:2px; border-bottom-right-radius:2px; }
+.gp{ height:100%; min-height:44px; display:flex; align-items:center; justify-content:center; background:none; border:0; padding:0;
+  color:var(--ink); font:inherit; font-size:1.2rem; font-weight:700; cursor:pointer; }
+.gp b{ display:flex; align-items:center; justify-content:center; width:min(28px,100%); aspect-ratio:1; border-radius:99px;
+  background:var(--cell); border:1px solid var(--line); }
+.gp.empty b{ border-style:dashed; color:var(--mute); font-weight:400; }
+.gp.j b{ background:none; border:0; color:var(--mute); }
+.gp.dot b{ background:none; border:0; font-size:1.6rem; line-height:0; padding-bottom:.4em; }
+/* brackets: a bar under the numbers it groups, stacked by depth; its sign sits in a chip */
+.bars{ display:grid; width:100%; margin:-2px auto 0; row-gap:4px; min-height:14px; }
+.bar{ position:relative; height:14px; border:2px solid var(--cool); border-top:0; border-radius:0 0 10px 10px; background:none;
+  padding:0; cursor:pointer; margin:0 4%; }
+.bar.ghost{ border-style:dashed; border-color:var(--accent); pointer-events:none; }
+.bar i{ position:absolute; left:50%; bottom:-9px; translate:-50% 0; background:var(--cool); color:#15151d; border-radius:99px;
+  padding:0 6px; font-style:normal; font-size:.72rem; font-weight:800; line-height:1.35; }
+.expr{ margin:0; text-align:center; font-size:1rem; color:var(--ink); min-height:1.4em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.val{ margin:0; text-align:center; font-size:1.25rem; font-weight:800; color:var(--mute); min-height:1.4em; font-variant-numeric:tabular-nums; }
+.val small{ font-size:.75rem; font-weight:400; }
+.six.gold .num{ background:var(--accent); }
+.six.gold .expr,.six.gold .val{ color:var(--accent); }
+.six .tools{ display:flex; justify-content:center; gap:8px; }
+.six .tools .btn{ padding:7px 14px; font-size:.85rem; }
+.six .tools .btn[hidden]{ display:none; }
+@media (max-width:380px){ .tile.goldt{ height:46px; font-size:1.5rem; } .six{ padding:10px; } }

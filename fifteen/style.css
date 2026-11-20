@@ -20,8 +20,8 @@
 @keyframes ft-in{ from{ opacity:.25; } }
 .ft.dim{ opacity:.32; }
 .ft.win{ z-index:1; animation:ft-win 900ms ease-in-out 2; }
-.ft.win.mine{ box-shadow:0 0 0 3px var(--accent), 0 0 18px 2px var(--accent), inset 0 0 0 2px var(--bg); }
-.ft.win.theirs{ box-shadow:0 0 0 3px var(--cool), 0 0 18px 2px var(--cool), inset 0 0 0 2px var(--bg); }
+.ft.win.mine{ box-shadow:0 0 0 3px var(--accent), 0 0 12px 1px var(--accent), inset 0 0 0 2px var(--bg); }
+.ft.win.theirs{ box-shadow:0 0 0 3px var(--cool), 0 0 12px 1px var(--cool), inset 0 0 0 2px var(--bg); }
 @keyframes ft-win{ 50%{ filter:brightness(1.15); } }
 .ft.peek{ box-shadow:inset 0 0 0 3px var(--accent); }
 .ft.mine.peek,.ft.theirs.peek{ box-shadow:0 0 0 3px var(--accent), inset 0 0 0 4px var(--bg); }

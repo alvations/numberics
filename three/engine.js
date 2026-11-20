@@ -16,21 +16,29 @@
  * - Power-ups: Undo, Smash (remove a tile), Swap (two neighbouring tiles), Third (a 1 or 2 becomes a 3).
  *   Start with one Undo, cap 9, earned only by a Flush; Undo restores the whole snapshot.
  *
- * TUNING (tools: a Node sim in tests/test-three.js style, 10,000 games per variant, run 20 Nov 2026).
- * Bot = greedy 1-ply (score gained + 6 per empty cell + 40 per flush + 2 per mergeable pair), uses
- * Smash/Swap/Third only when stuck, never Undo. Cap 3000 moves. "mpf" = moves per flush.
- *   variant                               mean moves  median  mpf (mean)  flush/game  games w/ 0 flush
- *   A step=off flush>=3 bag 1,2,3              74        66      51.7         1.4          41%
- *   B step=on  flush>=3 bag 1,2,3             197       168      21.4         9.2           3%
- *   C step=on  flush>=4 bag 1,2,3              88        78     117.6         0.7          55%
- *   D step=on  flush>=3 bag 1,2 + few 3s      248       209      18.9        13.1           1%
- *   E step=on  flush>=3 bag 1,2,3 + 6 bonus   206       176      19.3        10.7           2%
- *   F step=off flush>=3 bag 1,2 + few 3s       61        55      58.0         1.0          48%
- * (random-move bot on B: 41 moves, mpf 33.)
- * Shipped: B (step merge on, flush from 3, Threes bag of four 1s, four 2s, four 3s). Flushes land
- * every ~21 moves (inside the 15-30 target), almost every run sees one, and a greedy run lasts ~200
- * swipes. D is longer but the hand-dealt 3s are what make early flushes readable; B keeps Threes' bag.
- * Without step merge (A, F) flushes are too rare (one every 50+ moves); flush>=4 (C) almost never fires.
+ * TUNING (Node bots, 10,000 seeded games per variant per bot, 20 Nov 2026; run cap 3000 moves, never hit).
+ * greedy = 1-ply: score gained + 6/empty cell + 40/flush + 2/mergeable pair; seeker = greedy with 120/flush
+ * and +8 per adjacent consecutive-multiple pair; random = any legal swipe. Bots use Smash/Swap/Third only
+ * when stuck, never Undo. mpf = moves per flush. Bags: b123 = four each of 1,2,3 (Threes); b12 = four 1s,
+ * four 2s, two 3s; b33 = three 1s, three 2s, six 3s; b3x = three 1s, three 2s, eight 3s; b36/b369 add a 6/9.
+ *   variant (greedy bot)                    mean moves  median  mpf    flushes/game  runs with 0 flush
+ *   A step off, flush>=3, b123                  183       181     none    0.0          100%
+ *   F step off, flush>=3, b12                   201       199     none    0.0          100%
+ *   C step on,  flush>=4, b123                  178       172     43333   0.0          100%
+ *   B step on,  flush>=3, b123                  280       271     40.9    6.9            2%
+ *   D step on,  flush>=3, b12                   285       276     55.1    5.2            4%
+ *   E step on,  flush>=3, b123 + bonus tiles    191       189     42.8    4.5            4%
+ *   G step on,  flush>=3, b123, 6 start tiles   285       276     41.1    6.9            2%
+ *   I step on,  flush>=3, b36                   209       203     45.9    4.6            5%
+ *   J step on,  flush>=3, b369                  179       175     45.4    4.0            6%
+ *   H step on,  flush>=3, b33   (SHIPPED)       289       278     29.4    9.8            1%
+ *   K step on,  flush>=3, b3x                   293       283     25.9   11.3            0%
+ *   seeker bot: B 297 moves / mpf 35.7, H 313 / 26.0, K 321 / 23.2.  random bot: B 67 / 65.9, H 70 / 48.6, K 73 / 42.2.
+ * Findings: without step merge a flush is impossible (values stay 3 x 2^n, so 9 never exists); runs of 4
+ * are practically unreachable, so flush>=4 never fires. Dealing more 3s is what brings flushes into the
+ * 15-30 move window. H puts a deliberate player at one flush every 26-29 swipes over ~290-310 swipe runs
+ * (median top tile 141 to 180) while keeping half the deal as 1s and 2s, so 1 + 2 = 3 still matters.
+ * K is slightly more generous (23-26) but only 6 of 14 dealt tiles are 1s or 2s. Shipped: H.
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -49,7 +57,7 @@
     b369: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 6, 9],
     b3x: [1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3],
   };
-  var DEFAULT = { step: true, flushMin: 3, bag: "b123", bonus: false, start: 9 };
+  var DEFAULT = { step: true, flushMin: 3, bag: "b33", bonus: false, start: 9 }; // variant H, see TUNING
 
   function rand(seed) {
     var a = (seed + 0x6d2b79f5) >>> 0, t = a;
@@ -164,7 +172,7 @@
         runs.sort(function (x, y) { return (y.length - x.length) || (sum(y) - sum(x)); });
         var run = runs[0], total = sum(run), at = run[0];
         run.forEach(function (c) { if (s.grid[c] > s.grid[at]) at = c; });
-        var values = run.map(function (c) { return s.grid[c]; });
+        var values = run.map(function (c) { return s.grid[c]; }), before = s.grid.slice();
         run.forEach(function (c) { s.grid[c] = 0; });
         s.grid[at] = total;
         var pts = total * run.length;
@@ -172,7 +180,7 @@
         if (pts > s.best) s.best = pts;
         if (total > s.top) s.top = total;
         var got = award(s);
-        out.push({ cells: run, values: values, at: at, value: total, points: pts, power: got });
+        out.push({ cells: run, values: values, at: at, value: total, points: pts, power: got, before: before });
       }
     }
 

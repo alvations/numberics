@@ -264,7 +264,7 @@
   Search.prototype.single = function (m) { return m === 2 ? 1 : m === 4 ? 2 : m === 8 ? 3 : m === 16 ? 4 : 0; };
   // Chance that the side to move, holding a disc of unknown number, can complete an open ten-line now:
   // the bag share of every number that some playable hole needs.
-  Search.prototype.chance = function () {
+  Search.prototype.chance = function (p) {
     var own = this.own, num = this.num, need = 0;
     for (var c = 0; c < COLS; c++) {
       if (this.h[c] >= ROWS) continue;
@@ -276,7 +276,7 @@
       }
     }
     if (!need) return 0;
-    var pr = 0; for (var n = 1; n <= 4; n++) if (need & (1 << n)) pr += PBAG[n];
+    var pr = 0, pb = this.pbag[p]; for (var n = 1; n <= 4; n++) if (need & (1 << n)) pr += pb[n];
     return pr;
   };
   var LUCK = 4000; // value of a ten-line that only lands if the right number is dealt (times its chance)
@@ -285,7 +285,7 @@
     var m = ply < this.masks.length ? this.masks[ply] : 0, c, i;
     for (i = 0; i < 7; i++) { c = ORDER[i]; if (this.h[c] < ROWS && this.wins(this.h[c] * COLS + c, p, m)) return WINF - ply; }
     if (this.count >= N - 1) return 0; // the last disc cannot win (checked above), so a draw
-    var pr = m ? 0 : this.chance();
+    var pr = m ? 0 : this.chance(p);
     if (pr >= 1) return LUCK;
     if (pr > 0) { // expectation: pr * LUCK + (1 - pr) * (the game if the number does not fit)
       var g = pr * LUCK, q = 1 - pr;
@@ -348,6 +348,10 @@
     return done;
   };
 
+  function dist(bag) {
+    if (!bag.length) return PBAG;
+    var d = [0, 0, 0, 0, 0]; bag.forEach(function (n) { d[n] += 1 / bag.length; }); return d;
+  }
   function bit(n) { return n ? 1 << n : 0; }
   // what the side to move after `side` could drop next (Hard models the opponent's Hold and Tune too)
   function oppMask(s, side, smart) {
@@ -362,6 +366,7 @@
     var own = opts.own || s.own, num = opts.num || s.num;
     var masks = [bit(opts.n || s.next[side]), oppMask(s, side, (opts.level || s.level) === "hard")];
     var se = new Search(own, num, s.turn, masks, opts.nodes || lv.nodes);
+    se.pbag = [null, dist(s.bag[0]), dist(s.bag[1])]; // the public odds of each side's following number
     var r = se.rootScores(opts.depth || lv.depth);
     if (r) r.nodes = se.nodes;
     return r;

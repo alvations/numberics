@@ -33,6 +33,7 @@
     var num = document.createElement("b"); num.textContent = n; b.appendChild(num);
     var tag = document.createElement("small"); b.appendChild(tag);
     b.addEventListener("click", onTile);
+    b.addEventListener("focus", function (e) { cur = cellOf(+e.currentTarget.dataset.n); });
     tilesEl.appendChild(b); tiles.push(b);
   }
 
@@ -90,7 +91,7 @@
     if (cpuPending()) return "The computer is thinking.";
     if (armed === "erase") return "Tap one of the computer's numbers to erase it (Esc cancels).";
     if (armed === "double") return "Double: pick your first number (Esc cancels).";
-    if (state.claimsLeft === 2) return "Double: pick your second number.";
+    if (state.acted && state.last.some(function (a) { return a.type === "double"; })) return "Double: pick your second number.";
     if (peek) return peek.text;
     if (state.blocked) return "Now claim a number (not the one you erased).";
     return state.owner.every(function (o) { return !o; }) ? "Your turn. Claim any number." : "Your turn.";
@@ -164,7 +165,7 @@
   function setView(v, quiet) {
     if (v === view) return;
     var keep = numAt(cur); view = v; cur = cellOf(keep);   // the cursor stays on the same number
-    if (v === "grid" && !seen && !quiet) { seen = true; K.toast("Same board. Every line here adds up to 15."); }
+    if (v === "grid" && !seen && !quiet) { seen = true; K.toast("Same board: every line adds up to 15."); }
     persist(); render();
   }
 

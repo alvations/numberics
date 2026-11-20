@@ -377,6 +377,7 @@
       } else {
         var a = at(Math.min(act.i, act.j)), b = at(Math.max(act.i, act.j));
         if (!a || !b) return { ok: false, state: state, why: "range" };
+        if (a === b) return { ok: false, state: state, why: "one" }; // one number needs no brackets
         var nb = [a.i, b.j, 0];
         var ex = m.b.findIndex(function (x) { return x[0] === nb[0] && x[1] === nb[1]; });
         if (ex >= 0) m.b.splice(ex, 1);
@@ -442,14 +443,16 @@
     if (name === "peek") return s.peeks.length < parts(line(s).n, line(s).sol).length;
     return true;
   }
-  // use(state, name) -> {ok, state, ...}: hint {step}, peek {part}, skip, undo
+  // use(state, name) -> {ok, state, ...}: hint {step}, peek {part}, skip, undo.
+  // Undo rewinds the last edit and restores that whole snapshot (stock included), so a reward earned by the
+  // edit goes away with it.
   function use(state, name) {
     if (!useable(state, name)) return { ok: false, state: state };
     if (name === "undo") {
       var r = clone(state.prev); r.power.undo = Math.max(0, r.power.undo - 1); r.prev = null; r.used = state.used + 1;
       return { ok: true, state: r };
     }
-    var s = clone(state), snap = snapshot(state), out = { ok: true, state: s };
+    var s = clone(state), out = { ok: true, state: s };
     s.power[name]--; s.used++;
     if (name === "hint") {
       var L = line(s), st = hintStep(L.n, s.cur, L.sol);
@@ -472,7 +475,8 @@
       s.lines[s.idx] = entry(id); s.recent = s.recent.concat([id]).slice(-24); s.streak = 0;
       startLine(s);
     }
-    s.prev = snap;
+    // a spent Hint, Peek or Skip stays spent: they cannot be undone (else Hint + Undo reveals for free)
+    s.prev = null;
     return out;
   }
   // after a solved line: move on (or finish the round)
