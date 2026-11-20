@@ -6,7 +6,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const W = 7, at = (r, c) => r * W + c;
   // rows top to bottom: '.' empty, 1-7, 'e' egg
   const grid = (rows) => { while (rows.length < 7) rows.unshift("......."); return rows.join("").split("").map(ch => ch === "." ? 0 : ch === "e" ? 8 : +ch); };
-  const setup = (p, rows, extra) => p.evaluate(([g, x]) => { const s = window.__seven.state; s.grid = g; s.left = 99; s.over = false; Object.assign(s, x); window.__seven.state = s; }, [grid(rows), extra || {}]);
+  const setup = (p, rows, extra) => p.evaluate(([g, x]) => { const s = window.__seven.state; s.grid = g; s.left = 99; s.over = false; s.overflow = null; Object.assign(s, x); window.__seven.state = s; }, [grid(rows), extra || {}]);
   const st = (p) => p.evaluate(() => window.__seven.state);
   const idle = (p) => p.waitForFunction(() => !window.__seven.busy, null, { timeout: 5000 });
 
@@ -19,6 +19,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("level is in the hint line", /^Level 1 · /.test(await p.textContent("#hint")));
   ck("discs drawn", await p.locator(".disc:not(.ghost)").count() > 0);
   ck("next disc preview", await p.locator("#next .mini").count() === 1);
+  ck("a fresh Best reads none in the shared empty style (R11, craft #5)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
+  // the preview in the aimed column is a dashed outline, never a filled disc (cold #14)
+  ck("the preview disc is an outline, not a disc", await p.evaluate(() => { const g = document.querySelector(".disc.ghost"); if (!g) return false; const cs = getComputedStyle(g);
+    return cs.backgroundColor === "rgba(0, 0, 0, 0)" && cs.backgroundImage === "none" && cs.borderTopStyle === "dashed"; }));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await setup(p, ["e......"], { next: 5 });
   await p.focus("#board");
@@ -27,6 +31,16 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("Enter"); await idle(p);
   let s = await st(p);
   ck("Enter drops into the cursor column", s.grid[at(6, 5)] === 5 && s.drops >= 1);
+  // a new disc appears in its own cell: the appear scale never shifts it toward the top left (craft nit 5)
+  await setup(p, ["e......"], { next: 5 });
+  ck("a new disc is centred on its column while it appears", await p.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    const d = document.querySelector(".disc.new"), s = window.__seven.state; if (!d) return false;
+    const cell = document.querySelectorAll(".cells div")[s.grid.findIndex((v, i) => v === 5 && i >= 42 && i % 7 === 5)];
+    const a = d.getBoundingClientRect(), b = cell.getBoundingClientRect();
+    return Math.abs((a.left + a.right) / 2 - (b.left + b.right) / 2) < 2 && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) < 2;
+  }));
+  await idle(p);
   // a row pop animates wave by wave and lands on the engine's grid
   await setup(p, ["e22...."], { next: 1 });
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft");
@@ -126,8 +140,42 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("2"); await p.mouse.click(box.x + box.width * (6.5 / 7), box.y + box.height * (6.5 / 7)); await idle(p);
   ck("Smash marks the next drop as unpaid", (await st(p)).free === true && (await st(p)).power.smash === 0);
 
-  // 4. rising row and the end screen: no Undo (R1), an honest final board (cold #10), a new best (R8)
-  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 9000, used: 2, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  // 4a. stuck is not over while Undo is in stock (TRIAGE3): the overflow card offers Undo the last drop or End the run
+  const brinkRows = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
+  await setup(p, brinkRows, { left: 1, next: 4, score: 100, prev: null, power: { undo: 1, smash: 1, hold: 0, crack: 0 } });
+  let pre = await st(p);
+  await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
+  s = await st(p);
+  ck("brink: an overflow with Undo in stock is not over", !s.over && Array.isArray(s.overflow) && s.overflow[0] === 0);
+  ck("brink: the overflow is held in view first (R13)", !(await p.isVisible("#over")) && /^Overflowed: /.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("brink: the hold hint fits one line at 375px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 24));
+  await p.waitForSelector("#over", { state: "visible", timeout: 2500 });
+  ck("brink card: title and the two choices", (await p.textContent("#over-title")) === "The well overflowed" &&
+    (await p.textContent("#over-text")) === "Undo the last drop to keep going, or end the run." &&
+    await p.isVisible("#over-undo") && await p.isVisible("#over-end") && !(await p.isVisible("#again")) && !(await p.isVisible("#over-view")) && !(await p.isVisible("#over-best")));
+  ck("brink card: focus is on its primary button (Undo)", await p.evaluate(() => document.activeElement && document.activeElement.id === "over-undo"));
+  ck("brink card: the page's New game is hidden with its space kept", await p.evaluate(() => { const b = document.getElementById("new"); return getComputedStyle(b).visibility === "hidden" && b.getBoundingClientRect().height > 20; }));
+  ck("brink: the discs that would go are ringed", await p.locator(".disc.out").count() === 1);
+  await shot(p, "brink");
+  ck("brink: Smash cannot act, a drop does nothing", await (async () => { await p.keyboard.press("2"); const x = await st(p); return x.power.smash === 1 && !(await p.evaluate(() => window.__seven.targeting)) && /Undo the last drop, or end the run/.test(await p.textContent("#hint")); })());
+  await p.keyboard.press("Enter"); // focus is on the Undo button: Enter is that button's own action (R17)
+  s = await st(p);
+  ck("brink: Undo the last drop takes it back and play goes on", !s.over && !s.overflow && s.power.undo === 0 && JSON.stringify(s.grid) === JSON.stringify(pre.grid) && !(await p.isVisible("#over")));
+  ck("brink: after Undo the page's New game is back", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "visible"));
+  // the same overflow again, now ended by the player
+  await setup(p, brinkRows, { left: 1, next: 4, score: 9000, used: 2, prev: null, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
+  await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5); // a tap skips the hold
+  ck("brink: a tap during the hold shows the card at once", await p.isVisible("#over-end"));
+  await p.click("#over-end");
+  s = await st(p);
+  ck("End the run: over, no brink, R1 card", s.over && !s.overflow && await p.isVisible("#again") && await p.isVisible("#over-view") && !(await p.isVisible("#over-undo")));
+  ck("End the run: focus moves to New game", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  ck("End the run: the summary and a new best", (await p.textContent("#over-text")) === "Level 1 · 2 power-ups · score 9,000" && await p.isVisible("#over-best"), await p.textContent("#over-text"));
+  ck("End the run: Undo is refused now (R1)", await (async () => { await p.keyboard.press("1"); const x = await st(p); return x.over && x.power.undo === 1; })());
+
+  // 4. rising row and the end screen with no Undo in stock: the run ends (R1), an honest final board (cold #10), a new best (R8)
+  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 9000, used: 2, power: { undo: 0, smash: 0, hold: 0, crack: 0 } });
   ck("near-full warning names the column at the top and nudges Smash or a power-up (cold #9)",
     /^Column 1 is at the top: (a power-up may help|the next rise ends the run)\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   const before = (await st(p)).grid;
@@ -141,9 +189,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R13: the hold hint fits one line at 375px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 24));
   await p.waitForSelector("#over", { state: "visible", timeout: 2000 });
   ck("overflow ends the run", s.over && await p.isVisible("#over"));
-  ck("the end screen offers no Undo (R1)", await p.locator("#over button").count() === 2 && !(await p.locator("#over").textContent()).includes("Undo"));
-  ck("Undo key after the end does nothing but explain", await (async () => { await p.keyboard.press("1"); const x = await st(p); return x.over && x.power.undo === 1 && /run is over/.test(await p.textContent("#hint")); })());
-  ck("summary is one line: score, level, power-ups", (await p.textContent("#over-text")) === "Score 9,000 · level 1 · power-ups 2", await p.textContent("#over-text"));
+  ck("the end screen offers no Undo (R1)", await p.locator("#over button:visible").count() === 2 && !(await p.locator("#over-undo").isVisible()) && !(await p.locator("#over-text").textContent()).includes("Undo"));
+  ck("the end card focuses New game, and the page's New game is hidden with its space kept", await p.evaluate(() => document.activeElement.id === "again" && getComputedStyle(document.getElementById("new")).visibility === "hidden"));
+  ck("Undo key after the end does nothing but explain", await (async () => { await p.keyboard.press("1"); const x = await st(p); return x.over && x.power.undo === 0 && /run is over/.test(await p.textContent("#hint")); })());
+  ck("summary is one line: detail, then score (one card pattern)", (await p.textContent("#over-text")) === "Level 1 · 2 power-ups · score 9,000", await p.textContent("#over-text"));
   ck("a new best says so", await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
   ck("final well is the well the player saw (no shift up)", s.grid.every((v, i) => i === at(6, 3) ? v === 4 : v === before[i]));
   ck("the pushed-out disc is ringed", await p.locator(".disc.out").count() === 1);
@@ -212,7 +261,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // the Daily best is per day (critic #2)
   await p.evaluate(() => localStorage.setItem("numberics_seven_v1", JSON.stringify({ mode: "daily", runs: {}, best: { classic: 50, blitz: 0, daily: 999 }, day: 1 })));
   await p.reload();
-  ck("yesterday's Daily best does not carry over", (await p.textContent("#best")) === "0" && (await st(p)).mode === "daily");
+  ck("yesterday's Daily best does not carry over", (await p.textContent("#best")) === "none" && (await st(p)).mode === "daily");
   await ctx.close();
   ctx = await browser.newContext(); p = await ctx.newPage(); await p.goto(page);
   await p.click('#modes [data-mode="daily"]');

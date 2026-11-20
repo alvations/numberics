@@ -192,7 +192,7 @@
     } else if (state.over) {
       $("over-title").textContent = N.hasRoom(state.grid) ? "The well overflowed" : "No room left";
       var u = state.used;
-      $("over-text").textContent = "Level " + state.level + (u ? " · " + u + (u === 1 ? " power-up" : " power-ups") + " used" : "") +
+      $("over-text").textContent = "Level " + state.level + (u ? " · " + u + (u === 1 ? " power-up" : " power-ups") : "") +
         " · score " + K.fmt(state.score);
       $("over-best").hidden = !(state.score > start[mode]);
     }
