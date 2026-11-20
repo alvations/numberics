@@ -28,7 +28,18 @@ h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
 .c:nth-child(n+19):nth-child(-n+27),.c:nth-child(n+46):nth-child(-n+54){ border-bottom:2px solid var(--line); }
 .notes{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,1fr); font-size:2.3cqw; color:var(--mute); line-height:1; }
 .notes i{ font-style:normal; display:flex; align-items:center; justify-content:center; }
-.tools{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0 8px; }
+/* power-up tray: the Endless tray (shared/theme.css), sitting where the old tools row was */
+.tray{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:12px 0 8px; }
+.pw{ position:relative; background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:10px;
+  padding:9px 4px; font:inherit; font-size:.85rem; cursor:pointer; white-space:nowrap; }
+.pw:disabled{ opacity:.35; cursor:default; }
+.pw.armed{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
+.pw i{ font-style:normal; margin-left:6px; background:var(--accent); color:#1b1b22; border-radius:99px;
+  padding:0 7px; font-weight:700; font-size:.78rem; }
+@media (max-width:440px){ .pw{ font-size:.78rem; } .pw i{ margin-left:3px; padding:0 5px; } }
+.board.targeting{ box-shadow:0 0 0 2px var(--accent); cursor:crosshair; }
+.c.wrong{ background:#6a2632; }
+.tools{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:0 0 8px; }
 .pad{ display:grid; grid-template-columns:repeat(9,1fr); gap:6px; }
 .pad button{ position:relative; background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:8px; padding:10px 0 12px;
   font:inherit; font-size:1.15rem; font-weight:700; cursor:pointer; }
@@ -37,12 +48,12 @@ h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
 .btn{ background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:10px; padding:9px 6px; font:inherit; font-size:.85rem; cursor:pointer; }
 .btn[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent); }
 .btn.primary{ background:var(--accent); color:#1b1b22; border-color:var(--accent); font-weight:700; padding:9px 18px; }
-.btn:focus-visible,.pad button:focus-visible,.levels button:focus-visible,.c:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.btn:focus-visible,.pw:focus-visible,.pad button:focus-visible,.levels button:focus-visible,.c:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .row{ display:flex; justify-content:center; margin:14px 0 6px; } .row .btn{ padding:9px 18px; }
 .how{ color:var(--mute); font-size:.82rem; text-align:center; margin:8px 0; }
 .win{ position:absolute; left:0; right:0; top:25%; margin:auto; width:min(88%,340px); background:rgba(20,21,28,.96); border:1px solid var(--accent);
   border-radius:14px; padding:22px; text-align:center; display:flex; flex-direction:column; gap:10px; align-items:center; z-index:2; }
 .win[hidden]{ display:none; } .win h2{ margin:0; color:var(--accent); } .win p{ margin:0; color:var(--mute); }
 .toast{ position:fixed; left:50%; bottom:max(18px,env(safe-area-inset-bottom)); transform:translateX(-50%); background:var(--accent); color:#1b1b22;
-  padding:8px 16px; border-radius:99px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 200ms; max-width:90vw; }
+  padding:8px 16px; border-radius:99px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 200ms; max-width:90vw; width:max-content; text-align:center; }
 .toast.on{ opacity:1; }

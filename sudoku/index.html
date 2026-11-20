@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Numberics Sudoku</title>
-<meta name="description" content="Classic Sudoku with pencil notes, undo, hints and three difficulties. Every puzzle has exactly one solution.">
+<meta name="description" content="Classic Sudoku with pencil notes, free undo, earned power-ups and three difficulties. Every puzzle has exactly one solution.">
 <meta name="theme-color" content="#14151c">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E9%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
@@ -27,17 +27,16 @@
 
   <div id="board" class="board" role="grid" aria-label="Sudoku board"></div>
 
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
   <div class="tools">
     <button id="notes" class="btn" type="button" aria-pressed="false">Notes: off</button>
-    <button id="undo" class="btn" type="button">Undo</button>
     <button id="erase" class="btn" type="button">Erase</button>
-    <button id="hint" class="btn" type="button">Hint</button>
   </div>
   <div id="pad" class="pad" role="group" aria-label="Number pad"></div>
 
   <div class="row"><button id="new" class="btn" type="button">New puzzle</button></div>
   <p class="how">Fill every row, column and 3x3 box with 1 to 9. Keys: 1-9 place, Backspace erase, N notes,
-     U undo, H hint, arrows move. Every puzzle has exactly one solution.</p>
+     U undo, H reveal, C check, F candidates, arrows move. Finish a correct row, column or box to earn a power-up.</p>
 
   <div id="win" class="win" hidden role="dialog" aria-label="Solved">
     <h2>Solved</h2>
@@ -46,6 +45,8 @@
   </div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/power.js"></script>
 <script src="engine.js"></script>
 <script src="game.js"></script>
 </body>

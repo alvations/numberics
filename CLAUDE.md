@@ -58,7 +58,10 @@ same commit as any visible change. `npm test` fails if a live game has no screen
   tests check this on many seeds and all three difficulties.
 - Difficulty is clue count (easy 40, medium 32, hard 26 or fewer). Puzzles are a pure function of seed + difficulty.
 - Conflicts (a digit repeated in a row/column/box) are painted red, but the game never says which digit is
-  *correct* except through the counted **Hint**. Best times count only hint-free solves.
+  *correct* except through the **Reveal** power-up. Power-ups (Undo free; Reveal, Check, Candidates earned by
+  completing a correct row/column/box, one charge per move at most) follow docs/ROADMAP.md 0a, except that a
+  spent charge stays spent after Undo (else Reveal + Undo shows answers free). Best times: pure (no power-ups)
+  and assisted (with the count) are kept apart.
 - A solved board locks. The timer pauses in a background tab. Notes are bitmasks; placing a digit clears it from peers.
 - The two games share conventions, not code, so each folder works on its own. Games link to each other quietly.
 

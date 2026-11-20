@@ -102,30 +102,104 @@
   }
   function isComplete(grid) { return grid.every(Boolean) && conflicts(grid).length === 0; }
 
-  // ---- game state: { puzzle, solution, grid, notes[81] (bitmask), given[81], moves, hints, history[] } ----
+  // ---- units: 0-8 rows, 9-17 columns, 18-26 boxes. UNIT[u] = its 9 cells; UNITS_OF[c] = the 3 units of cell c ----
+  var UNIT = [], UNITS_OF = [];
+  for (var u = 0; u < 27; u++) UNIT[u] = [];
+  for (i = 0; i < 81; i++) {
+    UNITS_OF[i] = [ROW[i], 9 + COL[i], 18 + BOX[i]];
+    UNITS_OF[i].forEach(function (uu) { UNIT[uu].push(i); });
+  }
+
+  // ---- power-ups (docs/ROADMAP.md section 0a, Sudoku row) ----
+  // Undo is free and unlimited, so it has no stock. The three charged power-ups:
+  //   reveal: the true digit for one cell (the old Hint), check: marks wrong digits once,
+  //   cands: fills the pencil notes of one 3x3 box from the digits already on the board.
+  // Earned by completing a CORRECT row, column or box; each unit pays once per puzzle; a unit finished by
+  // Reveal does not pay. Spending is permanent: Undo rewinds the board and every reward the rewound moves
+  // earned, but never refunds a spent charge (a refund would leak a revealed digit for free).
+  var KINDS = ["reveal", "check", "cands"], CAP = 9;
+  var START = { reveal: 1, check: 0, cands: 0 };
+  // Reveal is the strongest (it hands over an answer), so it is the rarest reward (weights measured by a bot).
+  var WEIGHT = { reveal: 1, check: 2, cands: 3 };
+
+  function unitMask(grid, solution) { // units already complete and correct
+    var m = 0;
+    for (var uu = 0; uu < 27; uu++) if (UNIT[uu].every(function (c) { return grid[c] && grid[c] === solution[c]; })) m |= (1 << uu);
+    return m;
+  }
+  // Which power-up a unit pays: a pure function of the puzzle seed and the unit, so a unit re-completed after
+  // an Undo pays the same kind. Full kinds (at CAP) are skipped.
+  function awardKind(seed, uu, stock) {
+    var open = KINDS.filter(function (k) { return stock[k] < CAP; });
+    if (!open.length) return null;
+    var w = open.reduce(function (a, k) { return a + WEIGHT[k]; }, 0);
+    var r = rng(((seed >>> 0) ^ Math.imul(uu + 1, 0x9e3779b1)) >>> 0)() * w;
+    for (var x = 0; x < open.length; x++) { r -= WEIGHT[open[x]]; if (r < 0) return open[x]; }
+    return open[open.length - 1];
+  }
+  function total(o) { return KINDS.reduce(function (a, k) { return a + (o[k] || 0); }, 0); }
+
+  // ---- game state: { puzzle, solution, grid, notes[81] (bitmask), moves, hints, stock, used, paid, history[] } ----
   function newState(gen) {
-    return { puzzle: gen.puzzle.slice(), solution: gen.solution.slice(), grid: gen.puzzle.slice(),
-             notes: new Array(81).fill(0), difficulty: gen.difficulty, seed: gen.seed,
-             moves: 0, hints: 0, history: [], solved: false };
+    var s = { puzzle: gen.puzzle.slice(), solution: gen.solution.slice(), grid: gen.puzzle.slice(),
+              notes: new Array(81).fill(0), difficulty: gen.difficulty, seed: gen.seed,
+              moves: 0, hints: 0, history: [], solved: false,
+              stock: Object.assign({}, START), used: { reveal: 0, check: 0, cands: 0 }, paid: 0, gain: [] };
+    s.paid = unitMask(s.grid, s.solution); // a unit that is all givens never pays
+    return s;
+  }
+  // Brings a state saved before power-ups existed (or a damaged one) up to date. Old saves keep loading.
+  function upgrade(s) {
+    var n = cloneState(s), ok = function (o) { return o && KINDS.every(function (k) { return Number.isInteger(o[k]); }); };
+    if (!ok(n.stock)) n.stock = Object.assign({}, START); else n.stock = Object.assign({}, n.stock);
+    if (!ok(n.used)) n.used = { reveal: s.hints || 0, check: 0, cands: 0 }; else n.used = Object.assign({}, n.used);
+    KINDS.forEach(function (k) { n.stock[k] = Math.min(CAP, n.stock[k]); n.used[k] = Math.max(0, n.used[k]); });
+    if (!Number.isInteger(n.paid)) n.paid = unitMask(n.grid, n.solution); // already-finished units never pay
+    if (!Number.isInteger(n.hints)) n.hints = n.used.reveal;
+    n.gain = [];
+    return n;
   }
   function isGiven(s, c) { return s.puzzle[c] !== 0; }
   function cloneState(s) {
     var n = Object.assign({}, s);
     n.grid = s.grid.slice(); n.notes = s.notes.slice(); n.history = s.history.slice();
+    if (s.stock) n.stock = Object.assign({}, s.stock);
+    if (s.used) n.used = Object.assign({}, s.used);
+    n.gain = [];
     return n;
   }
-  function remember(n, s) { n.history.push({ grid: s.grid.slice(), notes: s.notes.slice() }); if (n.history.length > 500) n.history.shift(); }
+  function remember(n, s) {
+    n.history.push({ grid: s.grid.slice(), notes: s.notes.slice(), stock: Object.assign({}, s.stock), used: Object.assign({}, s.used), paid: s.paid });
+    if (n.history.length > 500) n.history.shift();
+  }
+  // After a digit lands on c: mark newly finished correct units paid, and pay them unless `pays` is false.
+  function settle(n, c, pays) {
+    var paidNow = false; // one move pays at most one charge, even when it finishes two or three units
+    UNITS_OF[c].forEach(function (uu) {
+      var bit = 1 << uu;
+      if (n.paid & bit) return;
+      if (!UNIT[uu].every(function (k) { return n.grid[k] && n.grid[k] === n.solution[k]; })) return;
+      n.paid |= bit;
+      if (!pays || paidNow) return;
+      var k = awardKind(n.seed, uu, n.stock);
+      if (k) { n.stock[k]++; n.gain.push(k); paidNow = true; }
+    });
+  }
 
-  // Returns a NEW state; an illegal action returns the same object (callers can compare by identity).
-  function place(s, c, d) { // d: 1..9 sets, 0 clears
-    if (s.solved || isGiven(s, c) || d < 0 || d > 9 || s.grid[c] === d) return s;
+  function put(s, c, d, pays) {
     var n = cloneState(s); remember(n, s);
     n.grid[c] = d; n.notes[c] = 0; n.moves++;
     if (d) { // a placed digit removes that pencil mark from every peer
       PEERS[c].forEach(function (p) { n.notes[p] &= ~(1 << d); });
+      settle(n, c, pays);
     }
     n.solved = isComplete(n.grid);
     return n;
+  }
+  // Returns a NEW state; an illegal action returns the same object (callers can compare by identity).
+  function place(s, c, d) { // d: 1..9 sets, 0 clears
+    if (s.solved || isGiven(s, c) || d < 0 || d > 9 || s.grid[c] === d) return s;
+    return put(s, c, d, true);
   }
   function toggleNote(s, c, d) {
     if (s.solved || isGiven(s, c) || s.grid[c] || d < 1 || d > 9) return s;
@@ -134,14 +208,51 @@
   function undo(s) {
     if (!s.history.length) return s;
     var n = cloneState(s), h = n.history.pop();
-    n.grid = h.grid; n.notes = h.notes; n.solved = false; return n;
+    n.grid = h.grid; n.notes = h.notes; n.solved = false;
+    if (h.stock && h.used && Number.isInteger(h.paid)) {
+      // rewind rewards (stock + paid units), keep spends: stock = then - (spent since then). It can dip
+      // below zero when a spent charge came from a rewound reward; that debt is repaid by the next reward.
+      n.paid = h.paid;
+      KINDS.forEach(function (k) { n.stock[k] = h.stock[k] - (s.used[k] - h.used[k]); });
+    }
+    return n;
   }
-  function hint(s, c) { // reveals the true digit for cell c; counted
-    if (s.solved || isGiven(s, c) || s.grid[c] === s.solution[c]) return s;
-    var n = place(s, c, s.solution[c]); n.hints = s.hints + 1; return n;
+  function has(s, k) { return !s.solved && s.stock && s.stock[k] > 0; }
+  function spend(n, k) { n.stock[k]--; n.used[k]++; }
+
+  // Reveal: the true digit for cell c. Costs one reveal; a unit it finishes does not pay.
+  function reveal(s, c) {
+    if (!has(s, "reveal") || isGiven(s, c) || s.grid[c] === s.solution[c]) return s;
+    var n = put(s, c, s.solution[c], false); spend(n, "reveal"); n.hints = s.hints + 1; return n;
   }
+  // Check: which placed digits are wrong (compared with the one solution). Returns { state, wrong }.
+  // The board is unchanged, so it is not an Undo step; the charge is spent even when nothing is wrong.
+  function check(s) {
+    var mine = s.grid.some(function (v, c) { return v && !isGiven(s, c); });
+    if (!has(s, "check") || !mine) return { state: s, wrong: [] };
+    var n = cloneState(s); spend(n, "check");
+    var wrong = []; s.grid.forEach(function (v, c) { if (v && v !== s.solution[c]) wrong.push(c); });
+    return { state: n, wrong: wrong };
+  }
+  // Pencil candidates the board allows for an empty cell (digits not already in its row, column or box).
+  function candidates(grid, c) {
+    if (grid[c]) return 0;
+    var m = 0x3fe; PEERS[c].forEach(function (p) { if (grid[p]) m &= ~(1 << grid[p]); }); return m;
+  }
+  // Candidates: fill the notes of every empty cell in the box of c. Uses only the board, never the solution.
+  function fillBox(s, c) {
+    if (!has(s, "cands")) return s;
+    var cells = UNIT[18 + BOX[c]].filter(function (k) { return !s.grid[k]; });
+    if (!cells.length || cells.every(function (k) { return s.notes[k] === candidates(s.grid, k); })) return s;
+    var n = cloneState(s); remember(n, s);
+    cells.forEach(function (k) { n.notes[k] = candidates(s.grid, k); });
+    spend(n, "cands"); return n;
+  }
+  function hint(s, c) { return reveal(s, c); } // the old name, kept for callers of the pre-power-up engine
 
   return { CLUES: CLUES, generate: generate, solve: solve, countSolutions: countSolutions, conflicts: conflicts,
            isComplete: isComplete, newState: newState, place: place, toggleNote: toggleNote, undo: undo,
-           hint: hint, isGiven: isGiven, PEERS: PEERS, ROW: ROW, COL: COL, BOX: BOX };
+           hint: hint, reveal: reveal, check: check, fillBox: fillBox, candidates: candidates, upgrade: upgrade,
+           unitMask: unitMask, total: total, KINDS: KINDS, START: START, CAP: CAP,
+           isGiven: isGiven, PEERS: PEERS, ROW: ROW, COL: COL, BOX: BOX, UNIT: UNIT, UNITS_OF: UNITS_OF };
 });
