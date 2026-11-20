@@ -10,6 +10,7 @@
     ["fibonacci", "Fibonacci", "fibonacci/"],
     ["seven", "Seven", "seven/"],
     ["five", "Five", "five/"],
+    ["fifteen", "Fifteen", "fifteen/"],
     ["nine", "Nine", "nine/"]
   ];
   var el = document.getElementById("games"); if (!el) return;

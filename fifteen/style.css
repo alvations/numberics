@@ -42,6 +42,9 @@
 .views .btn:first-child{ border-radius:10px 0 0 10px; } .views .btn:last-child{ border-radius:0 10px 10px 0; margin-left:-1px; }
 .views .btn[aria-pressed="true"]{ position:relative; z-index:1; }
 #next[hidden]{ display:none; }
+/* phones: Numbers|Grid, Next round and New match fit on one line while a round result shows */
+@media (min-width:360px) and (max-width:440px){ .row:has(#next:not([hidden])){ flex-wrap:nowrap; gap:6px; }
+  .row:has(#next:not([hidden])) .btn{ padding:8px 9px; font-size:.85rem; white-space:nowrap; } }
 @media (max-width:380px){ .stat{ min-width:52px; padding:6px 8px; } .views .btn{ padding:9px 10px; } }
 @media (prefers-reduced-motion:reduce){
   .ft{ transition:opacity 200ms, box-shadow 200ms, background-color 200ms; } /* no sliding between views */

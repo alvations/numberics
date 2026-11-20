@@ -104,6 +104,22 @@ t("Medium can be beaten by a fork; Hard cannot", () => {
 t("a match starts with exactly one Undo", () => {
   const s = F.newMatch(1, "medium"); eq(s.power, { undo: 1, erase: 0, peek: 0, double: 0 });
 });
+t("on Hard you start with one Undo and one Erase; the computer starts with nothing", () => {
+  eq(F.newMatch(1, "hard").power, { undo: 1, erase: 1, peek: 0, double: 0 });
+  eq(F.newMatch(1, "hard").cpuPower, { undo: 0, erase: 0, peek: 0, double: 0 });
+  eq(F.newMatch(1, "easy").power, { undo: 1, erase: 0, peek: 0, double: 0 });
+  eq(F.setDiff(F.newMatch(1, "easy"), "hard").power.erase, 1, "switching to Hard starts a match with the Erase");
+});
+t("the computer only earns power-ups it uses (Erase, Double)", () => {
+  const seen = new Set();
+  for (let seed = 1; seed <= 300; seed++) {
+    const s = F.cpuTurn(at(B([3, 4], [8, 1]), 2, "hard", { seed, cpuPower: { undo: 0, erase: 0, peek: 0, double: 0 } })).state;
+    seen.add(s.result.earned);
+  }
+  eq([...seen].sort(), ["double", "erase"]);
+  const full = at(B([3, 4], [8, 1]), 2, "hard"); full.cpuPower = { undo: 0, erase: 9, peek: 0, double: 9 };
+  eq(F.cpuTurn(full).state.result.earned, null, "capped: nothing else is handed out instead");
+});
 t("Undo rewinds your last turn and the reply, paid for with one charge, nothing else returns", () => {
   let s = F.newMatch(3, "medium"); s.power.peek = 1;
   s = must(F.claim(s, 5)); s = F.cpuTurn(s).state;

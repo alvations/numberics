@@ -59,7 +59,7 @@
     "id": "fifteen",
     "name": "Fifteen",
     "path": "fifteen/",
-    "status": "planned",
+    "status": "live",
     "blurb": "Tic-tac-toe in disguise: first to hold three numbers that sum to 15."
   },
   {
