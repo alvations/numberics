@@ -31,7 +31,7 @@
     "id": "three",
     "name": "Three",
     "path": "three/",
-    "status": "planned",
+    "status": "live",
     "blurb": "Count in threes: step merges and rainbow Flush runs."
   },
   {

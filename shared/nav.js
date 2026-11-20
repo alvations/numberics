@@ -9,6 +9,7 @@
     ["sudoku", "Sudoku", "sudoku/"],
     ["fibonacci", "Fibonacci", "fibonacci/"],
     ["seven", "Seven", "seven/"],
+    ["three", "Three", "three/"],
     ["five", "Five", "five/"],
     ["fifteen", "Fifteen", "fifteen/"],
     ["nine", "Nine", "nine/"]
