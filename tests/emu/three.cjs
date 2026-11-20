@@ -18,13 +18,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("first visit shows the explainer", await p.isVisible("#help"));
   ck("explainer teaches 1+2, equal, step, flush and rings", await p.locator("#help li").count() === 5 &&
     /1 and 2/.test(await p.textContent("#help")) && /Equal/.test(await p.textContent("#help")) &&
-    /6 and 9 make 15/.test(await p.textContent("#help")) && /Flush/.test(await p.textContent("#help")) && /ring/.test(await p.textContent("#help")));
-  ck("explainer example tiles are drawn like the board", await p.locator("#help .tile.three[data-oct='1']").count() === 1);
+    /3 and 6 make 9/.test(await p.textContent("#help")) && /Flush/.test(await p.textContent("#help")) && /ring/.test(await p.textContent("#help")));
+  ck("explainer example tiles are drawn like the board", await p.locator("#help .tile.three[data-band='7']").count() === 1);
+  ck("explainer's big tiles 24, 48, 96 wear three different colours", await p.evaluate(() => new Set([...document.querySelectorAll("#help .tile")].filter(t => +t.textContent >= 24).map(t => getComputedStyle(t).backgroundColor)).size === 3));
+  ck("BEST is a dimmed none before any play (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
   ck("explainer fits at 375px", await p.evaluate(() => { const r = document.querySelector("#help .card").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth; }));
   await shot(p, "help");
   await p.keyboard.press("ArrowLeft");
   ck("arrows do not play under the explainer", (await st(p)).moves === 0);
-  ck("Play has focus", await p.evaluate(() => document.activeElement.id === "help-play"));
+  ck("the card has focus, not the Play button (no double outline, craft #4)", await p.evaluate(() => document.activeElement.id === "help-card"));
+  await p.keyboard.press("Tab");
+  ck("Tab reaches Play", await p.evaluate(() => document.activeElement.id === "help-play"));
   await p.keyboard.press("Enter");
   ck("Enter on Play closes the explainer", !(await p.isVisible("#help")));
   ck("fresh board hint fills the empty band", /Swipe to start/.test(await p.textContent("#hint")));
@@ -35,6 +39,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("How it works re-opens it", await p.isVisible("#help"));
   await p.keyboard.press("Escape");
   ck("Esc closes it", !(await p.isVisible("#help")));
+  await p.click("#help-open"); await p.keyboard.press("Enter");
+  ck("Enter on the open card closes it", !(await p.isVisible("#help")));
   ck("nine starting tiles", await p.locator("#tiles .tile").count() === 9);
   ck("starting tiles are 1, 2 or 3", await p.evaluate(() => [...document.querySelectorAll("#tiles .tile")].every(t => /^[123]$/.test(t.textContent))));
   ck("starts with one Undo", JSON.stringify((await st(p)).power) === '{"undo":1,"smash":0,"swap":0,"third":0}');
@@ -67,10 +73,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "flush");
   await p.waitForTimeout(800);
   s = await st(p);
-  ck("the run collapsed into 18 on its highest tile", s.grid[8] === 18 && !s.grid[0] && !s.grid[4]);
+  ck("the run cleared from the board", !s.grid[8] && !s.grid[0] && !s.grid[4]);
   ck("flush scored sum x length = 54", s.score === 54);
   ck("flush earned one power-up", s.power.undo + s.power.smash + s.power.swap + s.power.third === 2);
-  ck("toast announces the flush", /Flush 3-6-9 = 18/.test(await p.textContent("#toast")));
+  ck("toast announces the flush", /^Flush 3-6-9, \+54\s+\+(Undo|Smash|Swap|Third)$/.test(await p.textContent("#toast")), await p.textContent("#toast"));
   ck("a flush toast is a reward (gold)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("bad"))));
   ck("the run marks are gone after the collapse", await p.locator("#tiles .tile.run").count() === 0);
   ck("score pill updated", (await p.textContent("#score")) === "54");
@@ -98,7 +104,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("a run made by Swap shows the flush rainbow", await p.locator("#tiles .tile.run").count() === 3);
   await p.waitForTimeout(800);
   s = await st(p);
-  ck("swap-made run collapsed and scored", s.grid[2] === 18 && s.score === 54, JSON.stringify(s.grid));
+  ck("swap-made run cleared and scored", !s.grid[0] && !s.grid[1] && !s.grid[2] && s.score === 54, JSON.stringify(s.grid));
   ck("swap-made flush paid no power-up", s.power.undo + s.power.smash + s.power.swap + s.power.third === 0);
   ck("toast says a power-up set it up", /\(no power-up\)/.test(await p.textContent("#toast")), await p.textContent("#toast"));
   await p.keyboard.press("ArrowDown"); await p.waitForTimeout(400); s = await st(p);
@@ -164,10 +170,27 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R8: headline and summary each fit on one line at 375px", await p.evaluate(() => [["#over h2", 1], ["#over-text", 1]].every(([q]) => {
     const e = document.querySelector(q), lh = parseFloat(getComputedStyle(e).lineHeight) || 24; return e.getBoundingClientRect().height < lh * 1.6; })));
   ck("no win text anywhere", !/you win|victory|congrat/i.test(await p.textContent("body")));
+  ck("craft #2: the end card takes focus, so no gold ring frames the finished board", await p.evaluate(() => document.activeElement.id === "again") &&
+    await p.locator("#board.targeting").count() === 0);
   await shot(p, "over");
   await p.click("#again");
   ck("New game from the overlay starts fresh", !(await st(p)).over && await p.locator("#tiles .tile").count() === 9);
   ck("no page errors", errs.length === 0, errs.join("|"));
+  await ctx.close();
+
+  // 5b. craft #4: at 320x568 the explainer starts at its title and scrolls to Play; R17: Enter on a games-row link navigates
+  ctx = await browser.newContext({ viewport: { width: 320, height: 568 } });
+  p = await ctx.newPage();
+  await p.goto(page);
+  ck("320x568: the explainer title is on screen at the top", await p.evaluate(() => { const r = document.getElementById("help-title").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
+  ck("320x568: the explainer scrolls to Play", await p.evaluate(() => { const h = document.getElementById("help"), b = document.getElementById("help-play");
+    h.scrollTop = h.scrollHeight; const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
+  ck("320x568: no sideways scroll", await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  await p.click("#help-play");
+  await p.focus("#games a[href]:not([aria-current])");
+  const href = await p.evaluate(() => document.activeElement.href);
+  await Promise.all([p.waitForURL(u => String(u) === href, { timeout: 3000 }).catch(() => {}), p.keyboard.press("Enter")]);
+  ck("R17: Enter on a focused games-row link navigates", p.url() === href, p.url() + " vs " + href);
   await ctx.close();
 
   // 6. storage that throws: still runs and plays
@@ -191,7 +214,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("reduced motion: still outline on the run", await p.locator("#tiles .tile.run.still").count() === 3);
   ck("reduced motion: no transition on tiles", await p.evaluate(() => getComputedStyle(document.querySelector("#tiles .tile")).transitionDuration.split(",").every(d => parseFloat(d) === 0)));
   await p.waitForTimeout(700);
-  ck("reduced motion: the run collapses", (await st(p)).grid[8] === 18 && await p.locator("#tiles .tile.run").count() === 0);
+  ck("reduced motion: the run clears", !(await st(p)).grid[8] && !(await st(p)).grid[0] && await p.locator("#tiles .tile.run").count() === 0);
   // a swipe during the outline finishes the flush at once (no stale timer redraws an old board)
   await set(p, FLUSH, { score: 0 });
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp"); await p.waitForTimeout(700);

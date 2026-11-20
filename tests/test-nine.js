@@ -332,6 +332,11 @@ t("R12: started() is false before the first move of a match and true after it", 
   let m = forge({ heaps: [0, 0, 1] }); m.score = { you: 2, cpu: 0 }; m = N.take(m, 2, 1).state; ok(!N.started(m), "a decided match is not live");
   ok(!N.started(N.nextMatch(m)), "the next match before its first move");
 });
+t("R14: the computer's Add is recorded on its move (which tile, from what), so the hint line can announce it", () => {
+  const c = N.cpuTurn(forge({ heaps: [1, 2, 3], turn: "cpu", cpu: { add: 1 } }));
+  ok(c.last.added && c.last.addAt && Number.isInteger(c.last.addAt.tile), JSON.stringify(c.last));
+  eq(c.power.cpu.add, 0); ok(!N.winning(c.heaps, false), "the Add turned the position round");
+});
 t("R15: a full stock skips the reward and says so (noAward: full)", () => {
   const s = N.take(forge({ heaps: [0, 1, 0], you: { undo: 9, add: 9, pass: 9, peek: 9 } }), 1, 1).state;
   eq(s.award, null); eq(s.noAward, "full");

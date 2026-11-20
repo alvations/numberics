@@ -61,8 +61,8 @@ t("move: Flush clears the run, scores sum x length, awards one power-up", () => 
   const s = at(g); const before = T.POWERS.reduce((a, p) => a + s.power[p], 0);
   const r = T.move(s, "left");
   ok(r.moved); eq(r.flushes.length, 1);
-  const f = r.flushes[0]; eq(f.values, [3, 6, 9]); eq(f.value, 18); eq(f.points, 54); eq(f.at, 8);
-  eq(r.state.grid[8], 0, "the run clears (round 2)"); eq(r.state.grid[0], 0); eq(r.state.grid[4], 0); eq(f.value, 18);
+  const f = r.flushes[0]; eq(f.values, [3, 6, 9]); eq(f.sum, 18); eq(f.points, 54); eq(f.at, 8);
+  eq(r.state.grid[8], 0, "the run clears (round 2)"); eq(r.state.grid[0], 0); eq(r.state.grid[4], 0); eq(f.value, 0, "no tile is left behind");
   eq(r.state.score, 54); eq(r.state.flushes, 1); eq(r.state.best, 54);
   eq(T.POWERS.reduce((a, p) => a + r.state.power[p], 0), before + 1, "exactly one charge");
   ok(T.POWERS.includes(f.power)); eq(f.before[9 - 1], 9, "before shows the run in place");

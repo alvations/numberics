@@ -119,7 +119,7 @@
     var wasOver = !$("over").hidden;
     $("over").hidden = !state.over;
     // the end card takes focus, so the board's focus ring never frames a finished run
-    if (state.over && !wasOver && document.activeElement === boardEl) $("again").focus();
+    if (state.over && !wasOver && !helpOpen()) $("again").focus({ preventScroll: true });
     if (state.over) {
       $("over-text").textContent = "Score " + K.fmt(state.score) + " · " + state.flushes + (state.flushes === 1 ? " flush" : " flushes") +
         " · " + (state.used ? state.used + " power-up" + (state.used === 1 ? "" : "s") : "pure run");

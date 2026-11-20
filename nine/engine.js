@@ -154,7 +154,8 @@
     var s = clone(s0);
     if (s.turn === "you" && !s.acted) { s.prev = snapshot(s0); s.acted = true; }
     s.heaps[tile] = v - amount;
-    s.last = { who: s.turn, kind: "take", tile: tile, from: v, to: v - amount, added: s.added, addAt: s.added ? s.addAt || null : null };
+    s.last = { who: s.turn, kind: "take", tile: tile, from: v, to: v - amount, added: s.added };
+    if (s.added && s.addAt) s.last.addAt = s.addAt; // which tile the Add raised, for the hint line
     var taker = s.turn;
     endTurn(s, "take");
     if (total(s.heaps) === 0) finishRound(s, taker);

@@ -188,7 +188,7 @@
         if (pts > s.best) s.best = pts;
         if (keep > s.top) s.top = keep;
         var got = pay ? award(s) : null;
-        out.push({ cells: run, values: values, at: at, value: total, points: pts, power: got, paid: !!pay, before: before });
+        out.push({ cells: run, values: values, at: at, value: keep, sum: total, points: pts, power: got, paid: !!pay, before: before });
       }
     }
 

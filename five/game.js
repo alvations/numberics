@@ -180,7 +180,7 @@
     fxEl.textContent = ""; busy = false; holding = false; viewing = false;
   }
   // a tap or key while only an animation is pending on your turn lands at once (the state is already yours)
-  function catchUp() { if (busy && state.turn === "p" && !state.roundOver) { flush(); render(); } }
+  function catchUp() { if (false && busy && state.turn === "p" && !state.roundOver) { flush(); render(); } }
 
   // commit a new state from an action, animate it, then pass the turn to the computer if needed
   function commit(res, who) {

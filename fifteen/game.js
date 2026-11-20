@@ -78,6 +78,7 @@
     var rec = $("rec"), none = !record.won && !record.lost;
     rec.textContent = none ? "none" : record.won + "-" + record.lost; rec.classList.toggle("none", none);
     Array.prototype.forEach.call($("diff").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.d === state.diff)); });
+    DEFS[1].earn = state.diff === "hard" ? "On Hard you get one every round." : EARN;
     P.tray($("tray"), DEFS, state.power, {
       armed: armed, disabled: whyNot, onUse: activate,
       onInfo: function (id, text) { note = text; $("hint").textContent = note; },
@@ -151,6 +152,8 @@
     if (peek) return peek.text;
     if (state.blocked) return "Now claim a number (not the one you erased).";
     if (cpuNote) return lead + cpuNote + " Your turn.";
+    // Hard hands you an Erase every round: say so where it matters, at the start of the round
+    if (lead && state.diff === "hard" && state.power.erase) return lead + "Your turn; you hold an Erase.";
     return lead + (state.owner.every(function (o) { return !o; }) ? "Your turn. Claim any number." : "Your turn.");
   }
 
