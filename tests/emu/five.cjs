@@ -34,6 +34,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await idle(p);
   s = await st(p);
   ck("the computer replied", s.turn === "p" && s.moves >= 2);
+  // cold #23: on your turn the computer's last move is ringed and said in one line
+  ck("cold #23: the tile the computer just hit is marked", s.last.side !== "c" || s.last.kind !== "add" || await p.locator('.slot.last[data-i="' + s.last.to + '"]').count() === 1, JSON.stringify(s.last));
+  ck("cold #23: the hint says what it did, on one line", /^(It added \d onto (your|its own) \d\.|It burst (your|its own) \d\.) Tap one of your tiles\.$/.test(await p.textContent("#hint")) &&
+    await p.evaluate(() => { const h = document.getElementById("hint"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }), await p.textContent("#hint"));
   ck("the game never says hand or finger", !/\b(hand|finger)s?\b/i.test(await p.textContent("body")));
   await shot(p, "play");
 
@@ -90,12 +94,15 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "hold");
   const t0 = Date.now(); await card(p); const held = Date.now() - t0;
   ck("R13: the card follows after the hold", held > 900 && held < 2500, String(held));
-  ck("round-over overlay shows", await p.isVisible("#over") && /Round to you/.test(await p.textContent("#over-title")));
-  ck("R16: round summary 'You 1 : 0 Computer · first to 3'", (await p.textContent("#over-text")) === "You 1 : 0 Computer · first to 3", await p.textContent("#over-text"));
+  ck("round 3: round won reads 'You win round 1'", await p.isVisible("#over") && (await p.textContent("#over-title")) === "You win round 1", await p.textContent("#over-title"));
+  ck("round 3: subline '<what burst> · You 1 : 0 Computer', plus what the round paid (cold #24)", /^Your 1 onto their 4 made 5 · You 1 : 0 Computer · earned (Undo|Split|Shield|Nudge)(, (Undo|Split|Shield|Nudge))*$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("round 3: focus is on the card's primary button", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  ck("round 3: the lower New game is hidden while the card shows, its space kept", await p.evaluate(() => { const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && n.getBoundingClientRect().height > 30; }));
   await p.click("#over-view");
   ck("R13: See the board hides the card and says how to get it back", !(await p.isVisible("#over")) && (await p.textContent("#hint")) === "Tap the board for the summary." && await p.locator('.slot.hit[data-i="3"]').count() === 1);
   await slot(p, 2).click();
   ck("R13: a tap on the board brings the card back", await p.isVisible("#over"));
+  ck("round 3: See the board shows the lower New game again", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden"));
   ck("R7: no toast for the round result (the overlay says it)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("on") && /^Burst!$/.test(document.getElementById("toast").textContent))));
   await shot(p, "round");
   await p.click("#again");
@@ -105,8 +112,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await forge(p, { tiles: [1, 0, 0, 4], wins: { p: 2, c: 1 } });
   await slot(p, 0).click(); await slot(p, 3).click();
   await card(p);
-  ck("match-over overlay shows", (await p.textContent("#over-title")) === "Match to you" && (await p.textContent("#again")) === "New game");
-  ck("R16: match summary 'Match won 3-1'", (await p.textContent("#over-text")) === "Match won 3-1", await p.textContent("#over-text"));
+  ck("round 3: match won reads 'You win'", (await p.textContent("#over-title")) === "You win" && (await p.textContent("#again")) === "New game", await p.textContent("#over-title"));
+  ck("round 3: match summary 'Match won 3-1 · Medium'", (await p.textContent("#over-text")) === "Match won 3-1 · Medium", await p.textContent("#over-text"));
   ck("R8: the headline is white, not gold", await p.evaluate(() => getComputedStyle(document.getElementById("over-title")).color) === "rgb(236, 235, 241)");
   ck("matches record counts the win", (await p.textContent("#matches")) === "1-0");
   await shot(p, "match");
@@ -141,9 +148,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await undoBtn.click({ force: true }); // aria-disabled: a real tap still lands and explains
   s = await st(p);
   ck("R1: tapping it changes nothing and says why", s.matchOver === "c" && s.power.p.undo === undoLeft && undoLeft >= 2 && /Undo: Take back.*Not once a round is decided\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
-  ck("R8: the lost-match headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.textContent === "Match to the computer" && h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
+  ck("R8: the lost-match headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.textContent === "The computer wins" && h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
   ck("record counts the loss", (await p.textContent("#matches")) === "0-1");
-  ck("R16: match lost summary 'Match lost 0-3'", (await p.textContent("#over-text")) === "Match lost 0-3", await p.textContent("#over-text"));
+  ck("round 3: match lost summary 'Match lost 0-3 · Medium'", (await p.textContent("#over-text")) === "Match lost 0-3 · Medium", await p.textContent("#over-text"));
   await shot(p, "lost-375");
   await p.click("#again"); await idle(p);
   // R5: an empty tray button explains itself in the hint line
@@ -253,6 +260,51 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await Promise.all([p.waitForURL(u => !/\/five\/?$/.test(u.pathname), { timeout: 3000 }).catch(() => {}), p.keyboard.press("Enter")]);
   ck("R17: Enter on a games-row link opens it", !/\/five\/?$/.test(new URL(p.url()).pathname), p.url() + " " + href);
   ck("no page errors (round 2)", e5.length === 0, e5.join("|"));
+  await ctx.close();
+
+  // 4e. round 3 (craft #2): the deciding burst is on the undimmed board for 1.5 s before the card, measured from the
+  // moment the tile bursts, whether you or the computer makes it; the card never flashes up in between
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  p = await ctx.newPage(); const e6 = []; p.on("pageerror", e => e6.push(e.message));
+  await p.goto(page); await idle(p);
+  const watch = (p) => p.evaluate(() => {
+    window.__t = { burst: 0, card: 0, flash: false, ghost: 0, fly: "" };
+    const over = document.getElementById("over");
+    const tick = () => {
+      const now = performance.now(), T = window.__t, s = window.__five.state;
+      const g = document.querySelector(".ghost.final"), f = document.querySelector(".fly");
+      if (f && !T.fly) T.fly = f.textContent;
+      if (!T.burst && g) T.burst = now;
+      if (T.burst && g && !over.hidden) T.flash = true;
+      if (g && !T.card && now - T.burst > 1000 && over.hidden && parseFloat(getComputedStyle(g).opacity) > 0.8) T.ghost = now - T.burst;
+      if (!over.hidden && s.roundOver) { if (!T.card) T.card = now; if (!T.burst) T.flash = true; return; }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  const timing = (p) => p.waitForFunction(() => window.__t.card, null, { timeout: 6000 }).then(() => p.evaluate(() => window.__t));
+  await forge(p, { tiles: [1, 0, 0, 4], wins: { p: 0, c: 0 } });
+  await watch(p);
+  await slot(p, 0).click(); await slot(p, 3).click();
+  let T = await timing(p);
+  ck("craft #2: your deciding burst shows 1.5 s before the card", T.burst > 0 && T.card - T.burst >= 1450 && T.card - T.burst < 2200 && !T.flash, JSON.stringify(T));
+  ck("craft #2: the burst is still lit after 1 s on the undimmed board", T.ghost >= 1000, JSON.stringify(T));
+  ck("craft nit: the flying copy reads +1, not a second numeral", T.fly === "+1", T.fly);
+  await p.click("#again"); await idle(p);
+  // the computer's deciding burst: your 1 onto its 1 leaves 1 . 2 4; Hard's 4 onto your 1 makes 5 and ends the round
+  await forge(p, { level: "hard", tiles: [1, 0, 1, 4], wins: { p: 0, c: 1 } });
+  await watch(p);
+  await slot(p, 0).click(); await slot(p, 2).click();
+  T = await timing(p);
+  s = await st(p);
+  ck("craft #2: the computer won the round with a burst", s.roundOver === "c" && s.last.side === "c" && s.last.burst, JSON.stringify(s.last));
+  ck("craft #2: the computer's deciding burst shows 1.5 s before the card", T.burst > 0 && T.card - T.burst >= 1450 && T.card - T.burst < 2200 && !T.flash, JSON.stringify(T));
+  ck("craft #2: its burst is still lit after 1 s", T.ghost >= 1000, JSON.stringify(T));
+  ck("round 3: round lost reads 'The computer wins round N'", (await p.textContent("#over-title")) === "The computer wins round " + s.round, await p.textContent("#over-title"));
+  ck("round 3: lost-round subline", /^Computer's 4 onto your 1 made 5 · You 0 : 2 Computer/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("round 3: focus moved to Next round", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  await shot(p, "lost-round-375");
+  ck("no page errors (timing)", e6.length === 0, e6.join("|"));
   await ctx.close();
 
   // 4c. page height at 390x844 fits without scrolling

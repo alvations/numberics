@@ -26,10 +26,16 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("next numbers shown for both sides", /^[1-4]$/.test(await p.textContent("#next")) && /^[1-4]$/.test(await p.textContent("#cnext")));
   ck("difficulty row with one level pressed", await p.locator('#levels button[aria-pressed="true"]').count() === 1);
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-  ck("R11: the opponent is 'Computer', never 'CPU'", !/\bCPU\b/.test(await p.textContent("body")) && /Computer/.test(await p.textContent("header")));
+  ck("R11: the opponent is 'the computer', never 'CPU'", !/\bCPU\b/.test(await p.textContent("body")) && /computer/.test(await p.textContent(".how")));
   ck("R11: an empty Held reads 'none'", (await p.textContent("#held")) === "none");
-  ck("R16: pills are You, Held, Computer, Record", JSON.stringify(await p.$$eval(".stat > span", e => e.map(x => x.textContent))) ===
-     JSON.stringify(["You", "Held", "Computer", "Record"]));
+  ck("round 3 (craft #6): pills are Your next, Held, Its next, Record", JSON.stringify(await p.$$eval(".stat > span", e => e.map(x => x.textContent))) ===
+     JSON.stringify(["Your next", "Held", "Its next", "Record"]));
+  ck("round 3 (craft #3): an empty value is the shared .stat .none style, the same size as a value", await p.evaluate(() => {
+    const a = getComputedStyle(document.getElementById("held")), b = getComputedStyle(document.getElementById("rec"));
+    const tmp = document.createElement("b"); document.querySelector(".stat").appendChild(tmp); tmp.textContent = "1-0";
+    const v = getComputedStyle(tmp).fontSize; tmp.remove();
+    return a.fontSize === v && b.fontSize === v && a.fontWeight === "600" && b.fontWeight === "600";
+  }));
   ck("R11/R16: an empty Record is a dimmed 'none'", (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
   ck("R6: H1 is the game name, subtitle is the Numberics link and a tagline", (await p.textContent("h1")) === "Four" &&
      /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a[href='../']").count() === 1);
@@ -225,6 +231,74 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const href = await p.getAttribute("#games a", "href");
   await Promise.all([p.waitForNavigation({ timeout: 5000 }).catch(() => null), p.keyboard.press("Enter")]);
   ck("R17: Enter on a games-row link navigates", !/\/four\/$/.test(p.url()), p.url() + " (" + href + ")");
+  await ctx.close();
+
+  // round 3 (cold blocker, critic #1): marks for what your drop would open, both rings of a double threat
+  const slotOf = cell => (5 - Math.floor(cell / 7)) * 7 + cell % 7;
+  const cls = (cell, c) => p.evaluate(([i, c]) => document.querySelectorAll(".slot")[i].classList.contains(c), [slotOf(cell), c]);
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); await p.goto(page);
+  await myTurn(p);
+  const ambush = [[0, 0, 2, 4], [0, 3, 2, 3]];
+  for (const lv of ["easy", "medium", "hard"]) {
+    await forge(p, ambush, { level: lv, next: [2, 1] });
+    const risky = await p.locator(".slot.risky").count();
+    if (lv === "hard") ck("marks: Hard shows none", risky === 0);
+    else ck("marks: " + lv + " marks the landing cell of the column that opens 4 2 _ 3", await cls(1, "risky") && risky >= 1, risky);
+  }
+  await forge(p, ambush, { level: "medium", next: [2, 1] });
+  await p.focus("#board");
+  for (let k = 0; k < 7 && await p.evaluate(() => [...document.querySelectorAll(".slot")].indexOf(document.querySelector(".slot.aim")) % 7) !== 1; k++) await p.keyboard.press("ArrowLeft");
+  ck("marks: aiming the marked column says why and rings the cell it opens", /^Dropping here lets the computer win\.$/.test(await p.textContent("#hint")) &&
+     await cls(2, "opens") && await p.locator(".disc.ghost").count() === 1, await p.textContent("#hint"));
+  await shot(p, "marks");
+  await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowRight");
+  ck("marks: elsewhere the hint says what the red ring means", /Red dashed ring/.test(await p.textContent("#hint")) && !(await cls(2, "opens")), await p.textContent("#hint"));
+  await forge(p, [[0, 0, 2, 1], [0, 1, 1, 2], [0, 2, 1, 1], [1, 0, 2, 1], [1, 1, 2, 1], [1, 2, 2, 1]], { level: "medium", next: [2, 1] });
+  for (let k = 0; k < 7 && await p.evaluate(() => [...document.querySelectorAll(".slot")].indexOf(document.querySelector(".slot.aim")) % 7) !== 3; k++) await p.keyboard.press("ArrowRight");
+  ck("marks: a drop under the computer's hole says 'on top of it'", /on top of it/.test(await p.textContent("#hint")) && await cls(3, "risky") && await cls(10, "opens"), await p.textContent("#hint"));
+  await forge(p, [[0, 1, 2, 1], [0, 2, 2, 1], [0, 3, 2, 1]], { level: "medium", next: [2, 1] });
+  ck("double threat: both holes ringed and the hint says so", await cls(0, "threat") && await cls(4, "threat") && /Two blue rings/.test(await p.textContent("#hint")));
+  await shot(p, "double");
+  // craft #2: the status band never pushes the board down (two lines reserved), at 375 and 320
+  for (const w of [375, 320]) {
+    await p.setViewportSize({ width: w, height: 760 });
+    const tops = {}, top = async n => { tops[n] = await p.evaluate(() => Math.round(document.getElementById("board").getBoundingClientRect().top)); };
+    await forge(p, [], { level: "medium" }); await top("rule");
+    await forge(p, threatBoard, { level: "medium", next: [1, 3] }); await top("ring");
+    await forge(p, ambush, { level: "medium", next: [2, 1] }); await top("mark");
+    await forge(p, [], { level: "medium", power: stock }); await p.keyboard.press("4"); await top("tune"); await p.keyboard.press("Escape");
+    await p.locator("#tray button").nth(2).click(); await top("info");
+    await forge(p, [], { level: "medium", turn: 2, moves: 3 }); await top("thinking"); await myTurn(p);
+    const v = Object.values(tops);
+    ck("status never pushes the board down at " + w + "px", v.every(x => x === v[0]), JSON.stringify(tops));
+  }
+  await ctx.close();
+
+  // round 3 (craft #2/#4/#7/#8): the finished board is held 1.5 s before the card, even when the computer moves last;
+  // then New game below the board is hidden (its space kept) and the card's New game has the focus
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); await p.goto(page); await myTurn(p);
+  const newBox = await p.locator("#new").boundingBox();
+  await forge(p, [[0, 0, 2, 4], [0, 1, 1, 1], [0, 2, 2, 2]], { next: [3, 1], level: "medium" });
+  [x, y] = await colX(p, 3, 0);
+  let t0 = await p.evaluate(() => performance.now()); await p.mouse.click(x, y);
+  let tCard = await p.evaluate(() => new Promise(res => { const f = () => document.getElementById("over").hidden ? requestAnimationFrame(f) : res(performance.now()); f(); }));
+  ck("your final drop: the board is held at least 1.5 s before the card", tCard - t0 >= 1450, Math.round(tCard - t0) + " ms");
+  ck("end card: the card's New game has the focus", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  const nb = await p.locator("#new").boundingBox();
+  ck("end card: the lower New game is hidden and its space kept", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden") &&
+     nb && Math.abs(nb.y - newBox.y) < 1 && Math.abs(nb.height - newBox.height) < 1, JSON.stringify([newBox, nb]));
+  await p.keyboard.press("Enter");
+  ck("end card: Enter on the focused New game starts a new game", !(await st(p)).over && await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "visible"));
+  await myTurn(p);
+  await forge(p, [[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1], [1, 0, 1, 1], [1, 1, 1, 1]], { next: [1, 1], level: "medium" });
+  [x, y] = await colX(p, 6, 0); await p.mouse.click(x, y);
+  await p.waitForFunction(() => window.__four.state.over, null, { timeout: 4000 });
+  t0 = await p.evaluate(() => performance.now());
+  const lit = await p.locator(".disc.win").count();
+  tCard = await p.evaluate(() => new Promise(res => { const f = () => document.getElementById("over").hidden ? requestAnimationFrame(f) : res(performance.now()); f(); }));
+  ck("the computer's final drop: its line is lit and held about 1.5 s before the card", lit === 4 && tCard - t0 >= 1400, lit + " lit, " + Math.round(tCard - t0) + " ms");
   await ctx.close();
 
   // 320px (craft #5): the pills wrap, no sideways scroll, even with the long "Sure?" armed
