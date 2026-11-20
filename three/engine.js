@@ -43,6 +43,8 @@
  * 15-30 move window. H puts a deliberate player at one flush every 26-29 swipes over ~290-310 swipe runs
  * (median top tile 141 to 180) while keeping half the deal as 1s and 2s, so 1 + 2 = 3 still matters.
  * K is slightly more generous (23-26) but only 6 of 14 dealt tiles are 1s or 2s. Shipped: H.
+ * Round 1 (R2, unpaid power-up flushes), re-measured on 10,000 games: greedy 280 moves (median 270), mpf 29.5;
+ * seeker 304 moves, mpf 26.0. Flush spacing is unchanged; runs are about 3% shorter (fewer charges).
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
