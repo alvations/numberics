@@ -83,8 +83,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("held disc shown on the Hold button", (await p.locator("#tray .pw").nth(2).locator(".mini").count()) === 1);
   await setup(p, ["e3....e", "eee...e"], { power: { undo: 1, smash: 0, hold: 0, crack: 1 } });
   await p.keyboard.press("4"); s = await st(p); await shot(p, "crack-target");
-  ck("Crack first marks the eggs it would crack, spending nothing (cold #16)", s.power.crack === 1 && s.grid[at(5, 0)] === 8 && await p.locator(".disc.aim").count() === 2 && /marked eggs/.test(await p.textContent("#hint")));
+  ck("Crack first marks the eggs it would crack, spending nothing (cold #16)", s.power.crack === 1 && s.grid[at(5, 0)] === 8 && await p.locator(".disc.aim").count() === 2 && /to crack/.test(await p.textContent("#hint")));
   await p.keyboard.press("Escape");
+  ck("targeting hint fits one line at 375px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 24));
   ck("Esc cancels Crack", (await st(p)).power.crack === 1 && await p.locator(".disc.aim").count() === 0);
   await p.keyboard.press("4"); await p.keyboard.press("Enter"); await idle(p); s = await st(p);
   ck("Crack cracks eggs touching a disc", s.power.crack === 0 && s.grid[at(5, 0)] === 9 && s.grid[at(6, 1)] === 9 && s.grid[at(6, 6)] === 8);
@@ -92,7 +93,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await setup(p, ["e......"], { prev: null, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
   ck("unusable tray buttons are aria-disabled, never disabled", await p.locator("#tray .pw[aria-disabled=true]").count() === 4 && await p.locator("#tray .pw:disabled").count() === 0);
   await p.locator("#tray .pw").nth(1).click({ force: true });
-  ck("tapping an empty power-up explains it", /^Smash: Remove one disc\. Earn charges/.test(await p.textContent("#hint")));
+  ck("tapping an empty power-up explains it", /^Smash: Remove one disc\. Earn one with/.test(await p.textContent("#hint")));
   await p.keyboard.press("1");
   ck("its key explains why it cannot act", /^Undo: Take back the last drop\. Nothing to take back yet\./.test(await p.textContent("#hint")));
   ck("tray tooltip voice", await p.locator("#tray .pw").nth(0).getAttribute("title") === "1: Undo. Take back the last drop.");
@@ -119,7 +120,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "over");
   await p.click("#over-view");
   await shot(p, "over-well");
-  ck("See the well hides the summary and explains the loss", !(await p.isVisible("#over")) && /pushed the ringed discs/.test(await p.textContent("#hint")));
+  ck("See the well hides the summary and explains the loss", !(await p.isVisible("#over")) && /Ringed discs were pushed out/.test(await p.textContent("#hint")));
   await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   ck("tapping the well brings the summary back", await p.isVisible("#over") && (await st(p)).over);
   // headline and summary each fit on one line at 375px

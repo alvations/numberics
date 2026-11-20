@@ -96,7 +96,7 @@
   function drawCursor() {
     Array.prototype.forEach.call(cellsEl.children, function (c, i) { c.classList.toggle("col", !targeting && !state.over && i % W === cursor); });
   }
-  var EARN = "Earn charges with a chain of 3 or more waves, or a Lucky Seven.";
+  var EARN = "Earn one with a chain of 3 waves or a Lucky Seven.";
   var DEFS = [
     { id: "undo", label: "Undo", desc: "Take back the last drop.", earn: EARN },
     { id: "smash", label: "Smash", desc: "Remove one disc.", earn: EARN },
@@ -104,8 +104,8 @@
     { id: "crack", label: "Crack", desc: "Crack every egg touching a disc.", earn: EARN },
   ];
   var HINT = {
-    smash: "Tap a disc to smash it, or use the arrows and Enter.",
-    crack: "Tap the well or press Enter to crack the marked eggs.",
+    smash: "Tap a disc, or arrows and Enter.",
+    crack: "Tap the well or Enter to crack.",
   };
   // why a power-up cannot act now (a reason string), or "" when it can (the count is checked by the tray)
   function why(id) {
@@ -130,8 +130,8 @@
   function hintText() {
     if (note) return note;
     if (targeting) return HINT[targeting] + " (Esc cancels)";
-    if (state.over) return !viewing ? "" : N.hasRoom(state.grid) ? "The rising eggs pushed the ringed discs out of the top. Tap the well for the summary."
-      : "The well is full and no power-up can act. Tap the well for the summary.";
+    if (state.over) return !viewing ? "" : N.hasRoom(state.grid) ? "Ringed discs were pushed out. Tap for the summary."
+      : "Full, and no power-up can act. Tap for the summary.";
     if (!N.hasRoom(state.grid)) return "The well is full. Use a power-up to make room.";
     return state.left === 1 ? "Eggs rise after this drop." : state.left + " drops until the eggs rise.";
   }
