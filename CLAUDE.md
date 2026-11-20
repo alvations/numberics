@@ -58,10 +58,10 @@ same commit as any visible change. `npm test` fails if a live game has no screen
 ## Sudoku rules (keep it this way)
 - **Every puzzle has exactly one solution.** The generator digs holes only while `countSolutions == 1`;
   tests check this on many seeds and all three difficulties.
-- Difficulty is clue count (easy 40, medium 32, hard 26 or fewer). Puzzles are a pure function of seed + difficulty.
+- Difficulty is clue count (exactly easy 40, medium 32, hard 26). Puzzles are a pure function of seed + difficulty.
 - Conflicts (a digit repeated in a row/column/box) are painted red, but the game never says which digit is
   *correct* except through the **Reveal** power-up. Power-ups (Undo free; Reveal, Check, Candidates) are earned **by
-  progress, not correctness**: one charge each time the high-water count of player-filled cells passes a new
+  progress, not correctness**: one charge each time the high-water count of player-filled cells showing no conflict passes a new
   multiple of 9 (never lowered by Erase or Undo; Reveal-filled cells and the solving move never pay), so a reward
   reveals nothing. Undo never touches the stock. Undo is refused once the puzzle is solved. Best times: pure (no power-ups)
   and assisted (with the count) are kept apart.
