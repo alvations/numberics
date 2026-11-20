@@ -151,3 +151,31 @@ Reviews and decisions: `docs/reviews/REVIEW*1.md`, `TRIAGE1.md` (family rules R1
 - **Nine:** Hard deals a losing start 1 time in 5 (`HARD_LOSING = 0.2`) and hides the live nim-sum; perfect play with
   power-ups wins ~66-73% of Hard matches; Easy stays the default (beginner wins 75.6% on Easy, 2.5% on Medium); the
   computer earns only Add and Pass.
+
+---
+
+# QA round 2 (20 Nov 2026): what changed
+
+Reviews and decisions: `docs/reviews/REVIEW*2.md`, `TRIAGE2.md` (R2 everywhere with a property test per game, R12-R17).
+
+- **Family:** the move right after a board-changing power-up never pays (Endless/Fibonacci `state.free` after Smash,
+  Swap, Boost; Seven after Smash, Hold, Crack; Four after Pop, Hold, Tune; Five after Shield; Sudoku after a Reveal over a
+  digit; Six after any help on a line; Three one swipe deep); round games pay nothing for a round won after Erase/Double
+  (Fifteen) or Add/Pass (Nine). Quitting a live game counts as a loss (R12). The result shows on the board for 1.5 s
+  before the card, which offers "See the board" (R13). The computer's power-ups are disclosed and announced in the hint
+  line (R14). A full stock says "Power-ups full" (R15). Opponent games share You / Computer / Record pills (R16). Keys on
+  a focused link, button or field belong to that control (R17). The home page lists every game with a description; the
+  toast is compact, centred on the hint line, and never shows on an end card or over a "Sure?" warning.
+- **Fibonacci:** award floor 55 (greedy bot 149 moves per reward, Endless 66). Endless replay fixture re-recorded for R2
+  (200 seeds: only withheld post-power-up awards differ).
+- **Sudoku:** progress counts only clash-free player cells (typing 1 everywhere earns 0; an honest solve 4/5/6); revealed
+  cells never count; clue ladder exactly 40/32/26.
+- **Three:** only 3 + 6 = 9 step-merges and a Flush clears its run; human-like bot median 100 -> 165 swipes, a flush every
+  22.6; colours follow the 14-rung value ladder.
+- **Four:** blue threat rings on Easy and Medium; difficulty unchanged at 68/44/29%.
+- **Five:** greedy player wins Easy 84.9%, Medium 33.6%, Hard 0%; perfect play 100% everywhere.
+- **Six:** tiers banded by measured tools needed (bank 111 lines); Climb deals vary by seed; bracket-drag crash fixed.
+- **Fifteen:** on Hard the player gets an Erase only after a drawn round: perfect play wins every match 2-0; sensible
+  player 28% on Hard vs 46% on Medium; random 0%.
+- **Nine:** Pass once per round per side; deals never repeat; Hard: perfect play with power-ups wins 88.5%, with 15%
+  mistakes about 14%.
