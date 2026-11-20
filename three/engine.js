@@ -3,48 +3,48 @@
  * Numberics Three: the pure game engine (browser global NumbericsThree, or require()).
  * No DOM, no storage, no clock. All randomness is state.seed (mulberry32); state is plain JSON.
  *
- * Rules (docs/ROADMAP.md section 3):
+ * Rules (docs/ROADMAP.md section 3, retuned in round 2):
  * - 4x4. A swipe moves every movable tile ONE step toward the wall (Threes style).
- * - 1 + 2 = 3. From 3 up, equal tiles merge (3+3=6) and so do NEIGHBOURING multiples of 3
- *   (step merge: 3+6=9, 6+9=15), so the sum is always a multiple of 3.
+ * - 1 + 2 = 3. From 3 up, equal tiles merge (3+3=6, 12+12=24), and so do 3 and 6 (step merge, 3+6=9):
+ *   a step merge needs both tiles at or below stepMax (6), so every tile stays on the ladder
+ *   3, 6, 9, 12, 18, 24, 36, 48 ... (3 x 2^n and 9 x 2^n) and big tiles always have an equal to pair with.
  * - FLUSH: after a move, any straight line of FLUSH_MIN or more adjacent tiles in consecutive
- *   multiples of 3 (3-6-9, 12-9-6, either direction) collapses into one tile worth the sum, on the
- *   cell of its highest tile. It scores sum x run length and earns one random power-up. A collapse
- *   that lines up a new run flushes again (a cascade); every flush pays.
+ *   multiples of 3 (3-6-9, 12-9-6, 3-6-9-12, either direction) clears from the board. It scores
+ *   sum x run length and earns one random power-up. Two runs at once both flush; every flush pays.
  * - A power-up never earns one, not even indirectly (family rule R2). A run that Swap or Third lines up
- *   collapses at once inside use(), scoring its points but paying no power-up; and the swipe right after
+ *   flushes at once inside use(), scoring its points but paying no power-up; and the swipe right after
  *   Smash, Swap or Third (state.free) pays no power-up for its flushes either, so a power-up cannot
- *   open the way for a paid Flush. Undo restores the snapshot, flag included.
+ *   open the way for a paid Flush. The line is drawn one swipe deep on purpose: a gap Smash opens that
+ *   only a second swipe turns into a run pays, because by then the player made a real move.
+ *   Undo restores the snapshot, flag included.
  * - The next tile is previewed and enters from the edge swiped away from, in a line that moved.
  * - Endless: the run ends only when no swipe moves anything and no power-up can act.
  * - Power-ups: Undo, Smash (remove a tile), Swap (two neighbouring tiles), Third (a 1 or 2 becomes a 3).
  *   Start with one Undo, cap 9, earned only by a Flush; Undo restores the whole snapshot.
  *
- * TUNING (Node bots, 10,000 seeded games per variant per bot, 20 Nov 2026; run cap 3000 moves, never hit).
- * greedy = 1-ply: score gained + 6/empty cell + 40/flush + 2/mergeable pair; seeker = greedy with 120/flush
- * and +8 per adjacent consecutive-multiple pair; random = any legal swipe. Bots use Smash/Swap/Third only
- * when stuck, never Undo. mpf = moves per flush. Bags: b123 = four each of 1,2,3 (Threes); b12 = four 1s,
- * four 2s, two 3s; b33 = three 1s, three 2s, six 3s; b3x = three 1s, three 2s, eight 3s; b36/b369 add a 6/9.
- *   variant (greedy bot)                    mean moves  median  mpf    flushes/game  runs with 0 flush
- *   A step off, flush>=3, b123                  183       181     none    0.0          100%
- *   F step off, flush>=3, b12                   201       199     none    0.0          100%
- *   C step on,  flush>=4, b123                  178       172     43333   0.0          100%
- *   B step on,  flush>=3, b123                  280       271     40.9    6.9            2%
- *   D step on,  flush>=3, b12                   285       276     55.1    5.2            4%
- *   E step on,  flush>=3, b123 + bonus tiles    191       189     42.8    4.5            4%
- *   G step on,  flush>=3, b123, 6 start tiles   285       276     41.1    6.9            2%
- *   I step on,  flush>=3, b36                   209       203     45.9    4.6            5%
- *   J step on,  flush>=3, b369                  179       175     45.4    4.0            6%
- *   H step on,  flush>=3, b33   (SHIPPED)       289       278     29.4    9.8            1%
- *   K step on,  flush>=3, b3x                   293       283     25.9   11.3            0%
- *   seeker bot: B 297 moves / mpf 35.7, H 313 / 26.0, K 321 / 23.2.  random bot: B 67 / 65.9, H 70 / 48.6, K 73 / 42.2.
- * Findings: without step merge a flush is impossible (values stay 3 x 2^n, so 9 never exists); runs of 4
- * are practically unreachable, so flush>=4 never fires. Dealing more 3s is what brings flushes into the
- * 15-30 move window. H puts a deliberate player at one flush every 26-29 swipes over ~290-310 swipe runs
- * (median top tile 141 to 180) while keeping half the deal as 1s and 2s, so 1 + 2 = 3 still matters.
- * K is slightly more generous (23-26) but only 6 of 14 dealt tiles are 1s or 2s. Shipped: H.
- * Round 1 (R2, unpaid power-up flushes), re-measured on 10,000 games: greedy 280 moves (median 270), mpf 29.5;
- * seeker 304 moves, mpf 26.0. Flush spacing is unchanged; runs are about 3% shorter (fewer charges).
+ * TUNING, round 2 (node tools/sim-three.js, 20 Nov 2026; run cap 3000 moves). Round 1 tuned on a 1-ply
+ * points bot (greedy, median 277 swipes), but people locked the board in 61 to 166 swipes. The bot that
+ * plays like them is "human": one move ahead, 10 per merge + 5 per empty cell + 30 per flush + noise, no
+ * point chasing. Bots use Smash/Swap/Third only when stuck, never Undo. mpf = moves per flush.
+ * Round-1 rules (H): any neighbouring multiples merged (6+9=15, 18+21=39) and a flush left one tile worth
+ * its sum. That fragments big tiles (27, 33, 39, 63 never find a partner), so the board clogs.
+ *   variant (human bot, 1,000 to 2,000 games)              median  p10  mean   mpf
+ *   H  any step merge, flush leaves the sum, b33 (round 1)   100     56   104   27.4
+ *   B  as H with the b123 bag                                 93     53    96   39.1
+ *   K  as H with the b3x bag                                 103     59   107   24.6
+ *   M  step merge 3+6 only, flush leaves the sum, b33        101     54   108   15.8
+ *   N  any step merge, flush clears, b33                     136     65   147   26.8
+ *   O  step merge up to 9, flush clears, b33                 135     59   148   22.2
+ *   P  step merge 3+6 only, flush clears, b33                268     82   320   14.6
+ *   Q  step merge 3+6 only, flush clears, b123               194     69   230   18.2
+ *   L  step merge 3+6 only, flush clears, b12 (SHIPPED)      165     62   196   22.6
+ * Other bots, round 1 (H) -> round 2 (L), 2,000 games: greedy median 277 -> 1790 (mpf 29.4 -> 25.1, 27% hit
+ * the 3000 cap); seeker 299 -> 3000 (mpf 25.9 -> 18.8, 79% capped); random 65 -> 70 (mpf 48.4 -> 37.4).
+ * Findings: both changes are needed. Clearing a flush frees three cells instead of two, and keeping the
+ * step merge to 3+6 keeps every value on a doubling ladder, so tiles stay pairable. Either alone stays
+ * near 100-136. P (b33 bag) runs longest but flushes every 15 swipes, too often for a reward; the b12 bag
+ * (four 1s, four 2s, two 3s) puts the human bot at one flush every 22-23 swipes over a median 165-swipe
+ * run. A strong player can now keep a run going for thousands of swipes; that is Endless, by design.
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();

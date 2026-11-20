@@ -97,7 +97,8 @@
 
   function chrome() {
     $("score").textContent = K.fmt(state.score);
-    $("best").textContent = K.fmt(Math.max(best.score, state.score));
+    var bv = Math.max(best.score, state.score); // R11: an empty best is a dimmed "none", never 0
+    $("best").textContent = bv ? K.fmt(bv) : "none"; $("best").classList.toggle("none", !bv);
     var nx = $("next"); nx.className = "mini"; paint(nx, state.next); nx.setAttribute("aria-label", "next tile " + state.next);
     P.tray($("tray"), DEFS, state.power, {
       armed: targeting && targeting.name,
@@ -115,7 +116,10 @@
       c.classList.toggle("cur", !!(targeting && targeting.kbd && targeting.cur === k));
     });
     boardEl.classList.toggle("targeting", !!targeting);
+    var wasOver = !$("over").hidden;
     $("over").hidden = !state.over;
+    // the end card takes focus, so the board's focus ring never frames a finished run
+    if (state.over && !wasOver && document.activeElement === boardEl) $("again").focus();
     if (state.over) {
       $("over-text").textContent = "Score " + K.fmt(state.score) + " · " + state.flushes + (state.flushes === 1 ? " flush" : " flushes") +
         " · " + (state.used ? state.used + " power-up" + (state.used === 1 ? "" : "s") : "pure run");
@@ -144,7 +148,7 @@
     if (!list.length) return;
     var f = list[0], tail = list.length > 1 ? "  (x" + list.length + " cascade)" : "";
     var pays = f.power ? "  +" + NAME[f.power] : f.paid ? "" : " (no power-up)";
-    K.toast("Flush " + f.values.join("-") + " = " + f.value + ", +" + K.fmt(f.points) + pays + tail);
+    K.toast("Flush " + f.values.join("-") + (f.value ? " = " + f.value : "") + ", +" + K.fmt(f.points) + pays + tail);
   }
   function play(list) {
     if (list.length) runFlushes(list, 0); else { var fx = finalFx; finalFx = null; timers = []; render(fx); }
@@ -232,9 +236,13 @@
   // ---- input ----
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (helpOpen()) { if (e.key === "Escape") { e.preventDefault(); closeHelp(); } return; }
+    // R17: Enter or Space on a focused link, button or field is that control's own action, never a game action
+    var onButton = !!(e.target && /^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName));
+    if (helpOpen()) {
+      if (e.key === "Escape" || ((e.key === "Enter" || e.key === " ") && !onButton)) { e.preventDefault(); closeHelp(); }
+      return;
+    }
     if (e.key === "Escape") { targeting = null; return render(); }
-    var onButton = e.target && (e.target.tagName === "BUTTON" || e.target.tagName === "A");
     if (targeting && (e.key === "Enter" || e.key === " ") && !onButton) {
       e.preventDefault(); if (targeting.cur < 0) { targeting.kbd = true; targeting.cur = firstTarget(targeting.name); return render(); }
       return pickCell(targeting.cur);
@@ -263,8 +271,10 @@
   function helpOpen() { return !helpEl.hidden; }
   function openHelp() {
     settle(); targeting = null; render();
-    helpBack = document.activeElement; helpEl.hidden = false; $("help-play").focus();
+    helpBack = document.activeElement; showHelp();
   }
+  // the card itself takes focus (Enter, Space or Esc closes it; Tab reaches Play), and it opens scrolled to its top
+  function showHelp() { helpEl.hidden = false; helpEl.scrollTop = 0; $("help-card").focus({ preventScroll: true }); }
   function closeHelp() {
     helpEl.hidden = true;
     if (!seen) { seen = true; persist(); }
@@ -277,7 +287,7 @@
   $("again").addEventListener("click", startNew);
 
   render();
-  if (!seen) { helpBack = boardEl; helpEl.hidden = false; $("help-play").focus(); }
+  if (!seen) { helpBack = boardEl; showHelp(); }
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
     settle(); targeting = null; note = ""; helpEl.hidden = true;

@@ -16,7 +16,7 @@
     { id: "check", key: "C", label: "Check", desc: "Mark wrong digits, briefly." },
     { id: "cands", key: "F", label: "Candidates", desc: "Fill the notes of one 3x3 box." },
   ];
-  var EARN = "Earn one for every 9 cells you fill with no clash.";
+  var EARN = "Earn one per 9 cells with no clash.";
   var PW_NAME = { reveal: "Reveal", check: "Check", cands: "Candidates" };
   var PW_TARGET = { reveal: "Tap a cell to reveal", cands: "Tap a cell in the box to fill" };
   function ok81(a) { return Array.isArray(a) && a.length === 81 && a.every(function (v) { return Number.isInteger(v) && v >= 0; }); }

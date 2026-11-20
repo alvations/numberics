@@ -270,47 +270,104 @@ t("stock caps at 9", () => {
   s = must(F.claim(s, 7)); eq(s.result.earned, null); eq(s.power.undo, 9);
 });
 
-// ---- R4: a perfect player can always win a Hard match (the starting Erase), and only once (R2) ----
-// can you force a round win from s (your turn), whichever of its perfect moves the computer picks?
-function forcedWin(s, memo) {
-  const k = s.owner.join("") + s.power.erase;
-  if (memo.has(k)) return memo.get(k);
-  const opts = [];
-  F.free(s.owner).forEach(n => { const r = F.claim(s, n); if (r.ok) opts.push(r.state); });
-  if (F.canUse(s, "erase", 1)) F.held(s.owner, 2).forEach(e => {
-    const a = F.use(s, "erase", e).state; F.free(a.owner).forEach(n => { const r = F.claim(a, n); if (r.ok) opts.push(r.state); });
-  });
-  const v = opts.some(t => t.result ? t.result.winner === 1 : F.bestMoves(t.owner, 2).every(n => {
-    const u = F.claim(t, n).state; return u.result ? u.result.winner === 1 : forcedWin(u, memo);
-  }));
-  memo.set(k, v); return v;
-}
-t("R4: with the starting Erase a perfect player forces a round win on Hard, whoever starts; without it, no", () => {
-  const memo = new Map(), s = F.newMatch(1, "hard");
-  ok(forcedWin(s, memo), "you start");
-  const c = F.newMatch(1, "hard"); c.starter = 2; c.turn = 2;
-  F.bestMoves(c.owner, 2).forEach(n => ok(forcedWin(F.claim(c, n).state, memo), "computer opens " + n));
-  const bare = F.newMatch(1, "hard"); bare.power.erase = 0; ok(!forcedWin(bare, new Map()), "Hard is a draw without it");
-});
-t("R4 + R2: perfect play wins every Hard match 1-0, and the Erase win pays nothing (50 seeds)", () => {
-  const memo = new Map();
-  for (let seed = 1; seed <= 50; seed++) {
-    let s = F.newMatch(seed, "hard");
-    while (!s.match) {
-      if (s.result) { if (s.result.winner === 1) eq(s.result.earned, null, "the Erase round earned"); s = F.nextRound(s); continue; }
-      if (s.turn === 2) { s = F.cpuTurn(s).state; continue; }
-      let next = null;
-      const cands = F.free(s.owner).map(n => [0, n]);
-      if (F.canUse(s, "erase", 1)) F.held(s.owner, 2).forEach(e => F.free(s.owner).forEach(n => { if (n !== e) cands.push([e, n]); }));
-      for (const [e, n] of cands) {
-        const t = must(F.claim(e ? must(F.use(s, "erase", e)) : s, n));
-        const good = t.result ? t.result.winner === 1 : F.bestMoves(t.owner, 2).every(m => { const u = F.claim(t, m).state; return u.result ? u.result.winner === 1 : forcedWin(u, memo); });
-        if (good) { next = t; break; }
-      }
-      s = next || must(F.claim(s, F.bestMoves(s.owner, 1)[0]));
-    }
-    eq(s.match.winner, 1, "seed " + seed); eq(s.wins, [4, 1, 0], "seed " + seed);
+// ---- R4: a perfect player wins every Hard round with that round's Erase, and those wins pay nothing (R2) ----
+// the exact perfect player: the move (claim, or Erase then claim) with the best solved value against ANY reply
+function perfectTurn(s) {
+  let best = null, bv = -1e9;
+  const cands = F.free(s.owner).map(n => [0, n]);
+  if (F.canUse(s, "erase", 1)) F.held(s.owner, 2).forEach(e => F.free(s.owner).forEach(n => cands.push([e, n])));
+  for (const [e, n] of cands) {
+    const r = F.claim(e ? must(F.use(s, "erase", e)) : s, n); if (!r.ok) continue;
+    const t = r.state, v = t.result ? (t.result.winner === 1 ? 100 : 0) : -F.solve(t.owner, 2, t.power.erase);
+    if (v > bv) { bv = v; best = t; }
   }
+  return best;
+}
+t("R4: with one Erase you force a round win against any defence, whoever starts; without it Hard is a draw", () => {
+  const z = () => new Array(9).fill(0);
+  ok(F.solve(z(), 1, 1) > 0, "you start, holding an Erase");
+  ok(F.solve(z(), 2, 1) < 0, "the computer starts, you hold an Erase: every opening loses for it");
+  eq(F.solve(z(), 1, 0), 0); eq(F.solve(z(), 2, 0), 0);
+});
+t("Hard: every round starts you with an Erase (topped up, not stacked); other levels do not", () => {
+  let s = F.newMatch(3, "hard"); eq(s.power.erase, 1);
+  s.owner = B([2, 6], [1, 3]); s.power.erase = 0; s = must(F.claim(s, 7));
+  eq(F.nextRound(s).power.erase, 1, "spent last round: a fresh one");
+  s.power.erase = 3; eq(F.nextRound(s).power.erase, 3, "earned ones are kept, nothing is added on top");
+  let m = F.newMatch(3, "medium"); m.owner = B([2, 6], [1, 3]); m = must(F.claim(m, 7)); eq(F.nextRound(m).power.erase, 0);
+});
+t("R4 + R2: perfect play wins every Hard match 3-0, and no Erase round pays (60 seeds, both starters)", () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    let s = F.newMatch(seed, "hard"); if (seed % 2) { s.starter = 2; s.turn = 2; }
+    while (!s.match) {
+      if (s.result) { eq(s.result.winner, 1, "seed " + seed + " round " + s.round); eq(s.result.earned, null, "the Erase round earned"); s = F.nextRound(s); continue; }
+      s = s.turn === 2 ? F.cpuTurn(s).state : perfectTurn(s);
+    }
+    eq(s.match.winner, 1, "seed " + seed); eq(s.wins, [0, 3, 0], "seed " + seed);
+  }
+});
+t("Hard plays against the Erase you hold: imperfect play still loses most matches (random player, 200 seeds)", () => {
+  let lost = 0, won = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    let s = F.newMatch(seed, "hard"), r = seed * 2654435761 >>> 0;
+    const rnd = (n) => { r = (r * 1103515245 + 12345) >>> 0; return (r >>> 8) % n; };
+    while (!s.match) {
+      if (s.result) { s = F.nextRound(s); continue; }
+      if (s.turn === 2) { s = F.cpuTurn(s).state; continue; }
+      if (F.canUse(s, "erase", 1) && rnd(3) === 0) { const h = F.held(s.owner, 2); s = must(F.use(s, "erase", h[rnd(h.length)])); }
+      const f = F.free(s.owner).filter(n => n !== s.blocked); s = must(F.claim(s, f[rnd(f.length)]));
+    }
+    if (s.match.winner === 2) lost++; if (s.match.winner === 1) won++;
+  }
+  ok(lost >= 180, "random play lost only " + lost + " of 200"); ok(won <= 5, "random play won " + won);
+});
+t("Hard never walks into your Erase: from a position it can hold against the Erase, it holds it", () => {
+  // after you open 5 holding an Erase, the computer's reply keeps the best value it can get against the Erase
+  for (let seed = 1; seed <= 20; seed++) {
+    const s = at(B([5], []), 2, "hard", { seed }); s.power.erase = 1;
+    const vals = F.free(s.owner).map(n => { const o = s.owner.slice(); o[n - 1] = 2; return -F.solve(o, 1, 1); });
+    const a = F.cpuTurn(s).actions[0], o = s.owner.slice(); o[a.n - 1] = 2;
+    ok(-F.solve(o, 1, 1) === Math.max(...vals) || F.solve(o, 1, 0) === 0, "seed " + seed);
+  }
+});
+
+// ---- R2 property and reward bookkeeping ----
+const total = (st) => Object.keys(st).reduce((a, k) => a + st[k], 0);
+t("R2 property: random play mixing power-ups and claims never raises a side's stock in a powered round", () => {
+  let checked = 0, paid = 0;
+  for (let seed = 1; seed <= 1500; seed++) {
+    let s = F.newMatch(seed, F.DIFFS[seed % 3]);
+    s.power = { undo: 2, erase: 2, peek: 1, double: 2 }; s.cpuPower = { undo: 0, erase: 1, peek: 0, double: 1 };
+    let r = seed * 40503, guard = 0;
+    const rnd = (n) => { r = (r * 1103515245 + 12345) >>> 0; return (r >>> 8) % n; };
+    while (!s.match && guard++ < 400) {
+      if (s.result) { s = F.nextRound(s); continue; }
+      const side = s.turn, before = total(side === 1 ? s.power : s.cpuPower), pre = s.powered[side];
+      let next;
+      if (side === 2) next = F.cpuTurn(s).state;
+      else {
+        const p = ["claim", "claim", "erase", "double", "peek", "undo"][rnd(6)];
+        if (p === "erase" && F.canUse(s, "erase", 1)) { const h = F.held(s.owner, 2); next = must(F.use(s, "erase", h[rnd(h.length)])); }
+        else if (p !== "claim" && p !== "erase" && F.canUse(s, p, 1)) next = must(F.use(s, p));
+        else { const f = F.free(s.owner).filter(n => n !== s.blocked); next = must(F.claim(s, f[rnd(f.length)])); }
+      }
+      const after = total(side === 1 ? next.power : next.cpuPower);
+      // a power-up use never raises the stock (Undo only rewinds), and a powered round never pays
+      if (next.powered[side] || pre || (next.result && next.result.why === "powered")) { checked++; ok(after <= before, "seed " + seed + ": stock rose in a powered round " + before + " -> " + after); }
+      if (next.result && next.result.earned) { paid++; ok(!next.powered[next.result.winner], "a powered winner was paid"); }
+      s = next;
+    }
+  }
+  ok(checked > 2000 && paid > 100, "coverage: powered steps " + checked + ", paid rounds " + paid);
+});
+t("the round that decides the match pays nothing (a new match starts a fresh stock)", () => {
+  let s = F.newMatch(1, "medium"); s.wins = [0, 2, 0]; s.rounds = [1, 1]; s.round = 3; s.owner = B([2, 6], [1, 3]);
+  s = must(F.claim(s, 7)); ok(s.match); eq(s.result.earned, null); eq(s.result.why, "match");
+});
+t("R15: a reward skipped because every slot is full says so", () => {
+  let s = at(B([2, 6], [1, 3]), 1, "medium"); s.power = { undo: 9, erase: 9, peek: 9, double: 9 };
+  s = must(F.claim(s, 7)); eq(s.result.earned, null); eq(s.result.why, "full");
+  let c = must(F.claim(at(B([2, 6], [1, 3]), 1, "medium"), 7)); eq(c.result.why, null); ok(c.result.earned);
 });
 
 // ---- best of five ----

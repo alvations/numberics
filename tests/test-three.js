@@ -14,12 +14,20 @@ t("1 + 2 = 3, but 1+1 and 2+2 never merge", () => {
   ok(T.canMerge(1, 2) && T.canMerge(2, 1)); ok(!T.canMerge(1, 1)); ok(!T.canMerge(2, 2));
   ok(!T.canMerge(1, 3) && !T.canMerge(2, 3), "a 1 or 2 never merges with a 3");
 });
-t("equal multiples of 3 merge; step merge joins neighbouring multiples only", () => {
-  ok(T.canMerge(3, 3) && T.canMerge(12, 12)); ok(T.canMerge(3, 6) && T.canMerge(9, 6) && T.canMerge(18, 21));
+t("equal multiples of 3 merge; the only step merge is 3 + 6 = 9 (round 2)", () => {
+  ok(T.canMerge(3, 3) && T.canMerge(12, 12) && T.canMerge(9, 9)); ok(T.canMerge(3, 6) && T.canMerge(6, 3));
+  ok(!T.canMerge(6, 9), "6 + 9 no longer merges"); ok(!T.canMerge(18, 21)); ok(!T.canMerge(9, 12));
   ok(!T.canMerge(3, 9), "3 and 9 are not neighbours"); ok(!T.canMerge(6, 12)); ok(!T.canMerge(0, 3));
 });
-t("a step merge is always a multiple of 3 (3k + 3(k+1))", () => {
-  for (let k = 1; k < 40; k++) { const v = T.stepLine([3 * k, 3 * k + 3, 0, 0]).out[0]; eq(v, 6 * k + 3); ok(v % 3 === 0); }
+t("round-1 bug: big neighbours fragmented into 15, 33, 39 ...; every merge now lands on the ladder", () => {
+  const onLadder = (v) => v === 1 || v === 2 || [3, 9].some(b => { let x = v / b; while (x >= 2 && x % 2 === 0) x /= 2; return x === 1; });
+  for (let a = 3; a <= 768; a += 3) for (let b = 3; b <= 768; b += 3)
+    if (onLadder(a) && onLadder(b) && T.canMerge(a, b)) ok(onLadder(a + b), a + "+" + b + " = " + (a + b) + " is off the ladder");
+  eq(T.stepLine([6, 9, 0, 0]).out, [6, 9, 0, 0], "6 and 9 stay apart"); eq(T.stepLine([18, 21, 0, 0]).moved, false);
+  // random play never leaves the ladder
+  for (let seed = 1; seed <= 40; seed++) { let s = T.newGame(seed), x = seed;
+    for (let i = 0; i < 300 && !s.over; i++) { const r = T.move(s, T.DIRS[(x = (x * 1103515245 + 12345) >>> 0) % 4]); if (r.moved) s = r.state; else if (!T.canMove(s)) break;
+      ok(s.grid.every(v => !v || onLadder(v)), "seed " + seed + " " + s.grid); } }
 });
 t("one step per swipe: tiles move a single cell, gaps close one at a time", () => {
   eq(T.stepLine([0, 3, 0, 3]).out, [3, 0, 3, 0]);
@@ -30,9 +38,9 @@ t("one step per swipe: tiles move a single cell, gaps close one at a time", () =
 t("a line merges once per swipe (Threes rule)", () => {
   eq(T.stepLine([3, 3, 3, 3]).out, [6, 3, 3, 0]);
   eq(T.stepLine([1, 2, 1, 2]).out, [3, 1, 2, 0]);
-  eq(T.stepLine([3, 9, 6, 2]).out, [3, 15, 2, 0]);
+  eq(T.stepLine([3, 9, 6, 3]).out, [3, 9, 9, 0]);
 });
-t("stepLine scores the merged value", () => { eq(T.stepLine([1, 2, 0, 0]).gained, 3); eq(T.stepLine([6, 9, 0, 0]).gained, 15); });
+t("stepLine scores the merged value", () => { eq(T.stepLine([1, 2, 0, 0]).gained, 3); eq(T.stepLine([6, 3, 0, 0]).gained, 9); eq(T.stepLine([24, 24, 0, 0]).gained, 48); });
 
 t("findRuns: straight runs of consecutive multiples in either direction", () => {
   const g = E16(); g[0] = 3; g[1] = 6; g[2] = 9; g[12] = 12; g[13] = 9; g[14] = 6; g[15] = 3;
@@ -48,13 +56,13 @@ t("findRuns: a zigzag splits into its monotonic pieces", () => {
   const g = E16(); g[0] = 3; g[1] = 6; g[2] = 9; g[3] = 6; eq(T.findRuns(g), [[0, 1, 2]]);
 });
 
-t("move: Flush collapses the run onto its highest tile, scores sum x length, awards one power-up", () => {
+t("move: Flush clears the run, scores sum x length, awards one power-up", () => {
   const g = E16(); g[0] = 3; g[4] = 6; g[9] = 9;           // the 9 steps left into column 0
   const s = at(g); const before = T.POWERS.reduce((a, p) => a + s.power[p], 0);
   const r = T.move(s, "left");
   ok(r.moved); eq(r.flushes.length, 1);
   const f = r.flushes[0]; eq(f.values, [3, 6, 9]); eq(f.value, 18); eq(f.points, 54); eq(f.at, 8);
-  eq(r.state.grid[8], 18); eq(r.state.grid[0], 0); eq(r.state.grid[4], 0);
+  eq(r.state.grid[8], 0, "the run clears (round 2)"); eq(r.state.grid[0], 0); eq(r.state.grid[4], 0); eq(f.value, 18);
   eq(r.state.score, 54); eq(r.state.flushes, 1); eq(r.state.best, 54);
   eq(T.POWERS.reduce((a, p) => a + r.state.power[p], 0), before + 1, "exactly one charge");
   ok(T.POWERS.includes(f.power)); eq(f.before[9 - 1], 9, "before shows the run in place");
@@ -76,27 +84,30 @@ t("move: a merge scores and the preview is replaced from the bag", () => {
   const r = T.move(s, "left"); eq(r.state.grid[0], 3); eq(r.state.score, 3); eq(r.state.moves, 1);
   eq(r.state.grid[r.spawned], 3, "the previewed tile is what arrives"); ok([1, 2, 3].includes(r.state.next));
 });
-t("cascade: a collapse that lines up a new run flushes again, and each flush pays", () => {
-  // column 0 reads 3,6,9 once the 9 steps left; it collapses to 18 at cell 8, and row 2 then reads 18,21,24
-  const g = E16(); g[0] = 3; g[4] = 6; g[9] = 9; g[10] = 21; g[11] = 24;
-  const r = T.move(at(g), "left");
-  ok(r.flushes.length >= 2, "flushes " + r.flushes.length);
-  eq(r.flushes[1].values, [18, 21, 24]); eq(r.state.grid[10], 63); eq(r.state.flushes, 2);
+t("a dealt tile can complete a run, and two runs at once both flush and pay", () => {
+  // rows 1 and 2 are packed and cannot move; row 3 (a lone 1) moves left, so the dealt 12 enters at cell 15
+  // and completes 6-9-12 down column 3
+  const g = [0, 0, 0, 0, 12, 3, 12, 6, 3, 12, 3, 9, 0, 1, 0, 0];
+  const r = T.move(at(g, { next: 12, power: { undo: 0, smash: 0, swap: 0, third: 0 } }), "left");
+  eq(r.spawned, 15); eq(r.flushes.length, 1, "the dealt tile completes a run");
+  eq(r.flushes[0].values, [6, 9, 12]); ok(r.flushes[0].power, "it pays"); eq([r.state.grid[7], r.state.grid[11], r.state.grid[15]], [0, 0, 0]);
+  // two runs standing at once both flush, and each pays
+  const q = T.move(at([3, 12, 3, 12, 6, 24, 6, 24, 0, 9, 0, 9, 0, 0, 0, 0], { power: { undo: 0, smash: 0, swap: 0, third: 0 } }), "left");
+  eq(q.flushes.length, 2); ok(q.flushes.every(f => f.power)); eq(T.POWERS.reduce((a, p) => a + q.state.power[p], 0), 2);
 });
-
 t("newGame: nine tiles from the bag, one Undo, deterministic by seed", () => {
   const a = T.newGame(42), b = T.newGame(42), c = T.newGame(43);
   eq(a, b); ok(JSON.stringify(a) !== JSON.stringify(c));
   eq(a.grid.filter(Boolean).length, 9); ok(a.grid.every(v => [0, 1, 2, 3].includes(v)));
   eq(a.power, { undo: 1, smash: 0, swap: 0, third: 0 }); ok(!a.over); ok([1, 2, 3].includes(a.next));
 });
-t("the bag deals three 1s, three 2s and six 3s per twelve tiles", () => {
-  eq(T.RULES.bag, "b33");
+t("the bag deals four 1s, four 2s and two 3s per ten tiles (round 2)", () => {
+  eq(T.RULES.bag, "b12");
   let st = at([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { bag: [] });
   const seq = [];
-  for (let i = 0; i < 12; i++) { seq.push(st.next === undefined ? 0 : 0); const r = T.move(st, "left"); st = at([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { bag: r.state.bag, seed: r.state.seed, next: r.state.next }); seq[i] = r.state.next; }
+  for (let i = 0; i < 10; i++) { seq.push(st.next === undefined ? 0 : 0); const r = T.move(st, "left"); st = at([0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { bag: r.state.bag, seed: r.state.seed, next: r.state.next }); seq[i] = r.state.next; }
   const counts = { 1: 0, 2: 0, 3: 0 }; seq.forEach(v => counts[v]++);
-  eq(counts, { 1: 3, 2: 3, 3: 6 }, "one full bag");
+  eq(counts, { 1: 4, 2: 4, 3: 2 }, "one full bag");
 });
 t("deterministic: same seed and swipes give the same game", () => {
   const play = (seed) => { let s = T.newGame(seed); for (let i = 0; i < 200 && !s.over; i++) { const r = T.move(s, T.DIRS[i % 4]); s = r.moved ? r.state : T.move(s, T.DIRS[(i + 1) % 4]).state; } return s; };
@@ -150,17 +161,17 @@ t("a power-up never earns a power-up, even when it lines up a run", () => {
   const w = T.use(s2, "swap", 1, 5); ok(w.ok); eq(w.state.score, 0); eq(w.state.power, { undo: 0, smash: 0, swap: 0, third: 0 });
 });
 const tot = (s) => T.POWERS.reduce((a, p) => a + s.power[p], 0);
-t("R2 blocker repro: Swap lines up 3-6-9, it collapses at once, scores, and pays no power-up", () => {
-  const g = E16(); g[0] = 3; g[1] = 9; g[2] = 6; const s = at(g, { power: { undo: 0, smash: 0, swap: 1, third: 0 } });
+t("R2 blocker repro: Swap lines up 3-6-9, it clears at once, scores, and pays no power-up", () => {
+  const g = E16(); g[0] = 3; g[1] = 9; g[2] = 6; g[3] = 12; g[4] = 1; const s = at(g, { power: { undo: 0, smash: 0, swap: 1, third: 0 } });
   const u = T.use(s, "swap", 1, 2); ok(u.ok);
-  eq(u.flushes.length, 1, "the run flushes inside use()"); eq(u.flushes[0].values, [3, 6, 9]); eq(u.flushes[0].power, null); eq(u.flushes[0].paid, false);
-  eq(u.state.grid[2], 18); eq(u.state.score, 54, "points still score"); eq(u.state.flushes, 1);
+  eq(u.flushes.length, 1, "the run flushes inside use()"); eq(u.flushes[0].values, [3, 6, 9, 12]); eq(u.flushes[0].power, null); eq(u.flushes[0].paid, false);
+  eq(u.state.grid.slice(0, 4), [0, 0, 0, 0], "3-6-9-12 clears"); eq(u.state.score, 120, "points still score"); eq(u.state.flushes, 1);
   eq(u.state.power, { undo: 0, smash: 0, swap: 0, third: 0 }, "no power-up"); eq(T.findRuns(u.state.grid), [], "no run left standing");
   const m = T.move(u.state, "down"); ok(m.moved); eq(tot(m.state), 0, "the next swipe pays nothing either");
 });
 t("R2: Third that completes a run collapses it unpaid", () => {
   const g = E16(); g[4] = 2; g[5] = 6; g[6] = 9; const u = T.use(at(g, { power: { undo: 0, smash: 0, swap: 0, third: 1 } }), "third", 4);
-  ok(u.ok); eq(u.state.grid[6], 18); eq(tot(u.state), 0);
+  ok(u.ok); eq(u.state.grid.slice(4, 7), [0, 0, 0]); eq(u.state.score, 54); eq(tot(u.state), 0);
 });
 t("R2 indirect: the swipe right after Smash opens a run, the flush scores but pays no power-up", () => {
   // column 0 reads 3, 6, 15 and row 2 is a packed 15 9; smash the 15 and the 9 steps left into 3-6-9
@@ -225,30 +236,44 @@ t("Undo revives a run that just ended, when a charge is left", () => {
   const u = T.use(m.state, "undo"); ok(u.ok); ok(!u.state.over);
 });
 
-t("rainbow scale: k = value/3 picks the band, each octave up adds a ring", () => {
+t("colour ladder: one colour per value 3 .. 384, then the colours repeat with a ring", () => {
   eq(T.colour(3), { band: 0, name: "red", octave: 0 }); eq(T.colour(6).name, "orange"); eq(T.colour(9).name, "yellow");
-  eq(T.colour(12).name, "green"); eq(T.colour(15).name, "blue"); eq(T.colour(18).name, "indigo"); eq(T.colour(21).name, "violet");
-  eq(T.colour(24), { band: 0, name: "red", octave: 1 }); eq(T.colour(27).name, "orange"); eq(T.colour(45).octave, 2);
+  eq(T.colour(12).name, "green"); eq(T.colour(18).name, "blue"); eq(T.colour(24).name, "indigo"); eq(T.colour(36).name, "violet");
+  const ladder = [3, 6, 9, 12, 18, 24, 36, 48, 72, 96, 144, 192, 288, 384];
+  eq(ladder.map(T.colour).map(c => c.band), ladder.map((_, i) => i), "fourteen distinct bands");
+  ok(ladder.every(v => T.colour(v).octave === 0), "no ring below 576");
+  eq(T.colour(576), { band: 0, name: "red", octave: 1 }); eq(T.colour(768).octave, 1);
+  eq(T.colour(15).band, T.colour(12).band, "an off-ladder value (old save) takes the rung below");
   eq(T.colour(1).name, "grey"); eq(T.colour(2).band, -1);
 });
-t("tuned: a deliberate bot sees a flush about every 15-30 swipes (shipped variant)", () => {
-  // the same greedy bot as the TUNING table, 150 games (the table used 10,000)
-  let moves = 0, flushes = 0;
-  const ev = (s, r) => { let e = 0, p = 0; const g = s.grid; for (let i = 0; i < 16; i++) { if (!g[i]) e++; if (i % 4 < 3 && T.canMerge(g[i], g[i + 1])) p++; if (i < 12 && T.canMerge(g[i], g[i + 4])) p++; } return r.gained + 6 * e + 40 * r.flushes.length + 2 * p; };
-  for (let seed = 1000; seed < 1150; seed++) {
+t("cold #8: the board's own values never share a colour in real play (round 1: 30 looked like 9)", () => {
+  for (let seed = 1; seed <= 40; seed++) { let s = T.newGame(seed), x = seed;
+    for (let i = 0; i < 400 && !s.over; i++) { const r = T.move(s, T.DIRS[(x = (x * 1103515245 + 12345) >>> 0) % 4]); if (r.moved) s = r.state; else if (!T.canMove(s)) break;
+      const vals = [...new Set(s.grid.filter(v => v > 2))], looks = new Set(vals.map(v => { const c = T.colour(v); return c.band + "/" + c.octave; }));
+      eq(looks.size, vals.length, "seed " + seed + " values " + vals); } }
+});
+t("tuned (round 2): a sensible human-like bot runs a median 150+ swipes with a flush every 20-30", () => {
+  // the "human" bot of tools/sim-three.js: one move ahead, 10 per merge + 5 per empty cell + 30 per flush + noise,
+  // power-ups only when stuck. 300 games here (the TUNING table used 2,000: median 165, mpf 22.6).
+  let rs = 12345; const rnd = () => { const r = T.rand(rs); rs = r[1]; return r[0]; };
+  const ev = (s, r) => 10 * r.trace.filter(x => x.merge).length + 5 * s.grid.filter(v => !v).length + 30 * r.flushes.length + 8 * rnd();
+  const runs = []; let flushes = 0;
+  for (let seed = 1000; seed < 1300; seed++) {
     let s = T.newGame(seed);
     while (!s.over && s.moves < 3000) {
       let best = null, bv = -Infinity;
       T.DIRS.forEach(d => { const r = T.move(s, d); if (r.moved) { const v = ev(r.state, r); if (v > bv) { bv = v; best = r; } } });
       if (best) { flushes += best.flushes.length; s = best.state; continue; }
-      const c = s.grid.findIndex(Boolean); if (T.usable(s, "smash")) s = T.use(s, "smash", s.grid.indexOf(Math.min(...s.grid.filter(Boolean)))).state;
-      else if (T.usable(s, "third")) s = T.use(s, "third", s.grid.findIndex(v => v === 1 || v === 2)).state; else break;
-      if (c < 0) break;
+      let opt = null, ov = -Infinity;
+      const tryU = (name, a, b) => { const u = T.use(s, name, a, b); if (!u.ok) return; T.DIRS.forEach(d => { const r = T.move(u.state, d); if (r.moved) { const v = ev(r.state, r) - (name === "smash" ? 5 : 0); if (v > ov) { ov = v; opt = u.state; } } }); };
+      for (let a = 0; a < 16; a++) { if (s.power.smash) tryU("smash", a); if (s.power.third) tryU("third", a); if (s.power.swap) { if (a % 4 < 3) tryU("swap", a, a + 1); if (a < 12) tryU("swap", a, a + 4); } }
+      if (!opt) break; s = opt;
     }
-    moves += s.moves;
+    runs.push(s.moves);
   }
-  const mpf = moves / flushes, mean = moves / 150;
-  ok(mpf >= 15 && mpf <= 35, "moves per flush " + mpf.toFixed(1)); ok(mean >= 150, "mean run " + mean.toFixed(0));
+  runs.sort((a, b) => a - b);
+  const median = runs[runs.length >> 1], mpf = runs.reduce((a, b) => a + b, 0) / flushes;
+  ok(median >= 150, "median run " + median); ok(mpf >= 20 && mpf <= 30, "moves per flush " + mpf.toFixed(1));
 });
 
 require("./conventions")(t, ok, ["three/engine.js", "three/game.js", "three/index.html", "three/style.css"]);

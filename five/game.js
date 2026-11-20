@@ -260,7 +260,8 @@
     if (!state.power.p[name] || (name === "shield" && state.midTurn)) return;
     armed = name; sel = -1; render();
   }
-  slots.forEach(function (el, i) { el.addEventListener("click", function (e) { e.stopPropagation(); keys = false; boardEl.classList.remove("kb"); cur = i; tap(i); }); });
+  window.addEventListener("pointerdown", function () { keys = false; }, true); // "(Esc cancels)" is for keyboard players
+  slots.forEach(function (el, i) { el.addEventListener("click", function (e) { e.stopPropagation(); boardEl.classList.remove("kb"); cur = i; tap(i); }); });
   boardEl.addEventListener("click", function (e) { // R13: a tap anywhere on the shown board brings the summary back
     if (state.roundOver && !busy && (holding || viewing) && !(e.target.closest && e.target.closest(".over"))) showCard();
   });

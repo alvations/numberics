@@ -1,23 +1,32 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Nine: only what shared/theme.css does not cover. */
-.board{ display:flex; flex-direction:column; gap:var(--gap); }
-.heaps{ flex:1; min-height:0; container-type:size; padding:0 var(--gap); display:flex; flex-direction:column; justify-content:center; gap:var(--gap); }
+/* The panel grows with the rows it holds (round 2, craft #10: three tiles no longer float in a square panel).
+   Tiles keep the size they had in the old square 3x3 panel: --u is that panel's tile-area height, worked out
+   from the width (tile area = width - gap - the 40px take bar). The minimum height leaves room for the end card. */
+.board{ display:flex; flex-direction:column; gap:var(--gap); aspect-ratio:auto; container-type:inline-size; min-height:15.5rem; }
+.heaps{ flex:1; container-type:inline-size; padding:0 var(--gap); display:flex; flex-direction:column; justify-content:center; gap:var(--gap); }
 .hrow{ display:flex; justify-content:center; gap:var(--gap); }
 /* a heap is an Endless tile: the number plus up to nine pips; sizes come from the 3x3 slot it sits in */
-.heap{ position:relative; width:calc((100cqw - 2*var(--gap))/3); height:calc((100cqh - 2*var(--gap))/3);
+.heap{ --u:calc(100cqw + var(--gap) - 40px); position:relative; width:calc((100cqw - 2*var(--gap))/3); height:calc((var(--u) - 2*var(--gap))/3);
   flex-direction:column; gap:4%; border:0; padding:0; font:inherit; font-weight:800; cursor:pointer;
   transition:opacity var(--anim); }
 .heap.gone{ background:var(--cell); cursor:default; }
-.heap .num{ font-size:min(13cqh,16cqw); line-height:1; }
-.pips{ display:grid; grid-template-columns:repeat(3,1fr); gap:min(1.2cqh,1.5cqw); width:min(15cqh,19cqw); }
+.heap .num{ font-size:min(calc(var(--u) * .13),16cqw); line-height:1; }
+.pips{ display:grid; grid-template-columns:repeat(3,1fr); gap:min(calc(var(--u) * .012),1.5cqw); width:min(calc(var(--u) * .15),19cqw); }
 .pips i{ display:block; aspect-ratio:1; border-radius:50%; background:#15151d; opacity:.12; }
 .pips i.on{ opacity:.78; }
 .pips i.take{ opacity:1; background:transparent; box-shadow:0 0 0 1.5px #15151d inset; }
-.heap .bin{ position:absolute; top:5%; right:7%; font:600 min(4.4cqh,5.4cqw)/1 ui-monospace,Menlo,Consolas,monospace; opacity:.7; }
+.heap .bin{ position:absolute; top:5%; right:7%; font:600 min(calc(var(--u) * .044),5.4cqw)/1 ui-monospace,Menlo,Consolas,monospace; opacity:.7; }
 .heap.sel{ box-shadow:0 0 0 3px var(--accent), 0 0 0 6px var(--panel); }
 .heap.peek::after{ content:""; position:absolute; inset:5px; border:2px dashed #15151d; border-radius:calc(var(--tile-radius) - 3px); opacity:.6; pointer-events:none; }
 .heap.cpu::before{ content:""; position:absolute; inset:0; border-radius:inherit; box-shadow:0 0 0 2px var(--cool) inset; pointer-events:none; }
 .board.targeting .heap:not(.gone){ cursor:crosshair; }
+/* R13: the tile taken last, as a ghost of what was taken (hollow pips), ringed by who took it */
+.heap.ghost{ display:flex; align-items:center; justify-content:center; color:var(--mute); }
+.heap.ghost .pips i{ background:transparent; opacity:0; }
+.heap.ghost .pips i.take{ opacity:.9; box-shadow:0 0 0 1.5px var(--mute) inset; }
+.heap.ghost.by-you{ box-shadow:0 0 0 2px var(--accent) inset; } .heap.ghost.by-cpu{ box-shadow:0 0 0 2px var(--cool) inset; }
+.over .row{ margin:4px 0 0; }
 /* focus is a white ring outside the gold selection ring, so focused and selected never look the same (F9) */
 .heap:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; }
 .learn{ margin:0; text-align:center; color:var(--mute); font-size:.8rem; line-height:1.25; }
@@ -31,7 +40,9 @@
 .bar #take{ width:88px; }
 /* a disabled Take is calm (the tray's empty look), not a muddy gold */
 .bar #take:disabled{ background:var(--panel); color:var(--mute); border-color:var(--line); opacity:.6; }
-#best.none{ color:var(--mute); font-weight:600; }
+/* R16 pills (You, Computer, Record) plus Best: they wrap at 320px rather than scroll sideways */
+.stats{ flex-wrap:wrap; }
+#best.none,#rec.none{ color:var(--mute); font-weight:600; }
 .amount{ flex:1; text-align:center; color:var(--mute); font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .amount b{ color:var(--ink); }
 .over .note{ font-size:.85rem; color:var(--accent); }

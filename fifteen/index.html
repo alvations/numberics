@@ -21,7 +21,7 @@
     <div class="stats" aria-live="off">
       <div class="stat"><span>You</span><b id="you">0</b></div>
       <div class="stat"><span>Computer</span><b id="cpu">0</b></div>
-      <div class="stat"><span>Round</span><b id="round">1/5</b></div>
+      <div class="stat" title="Matches won-lost on this device"><span>Record</span><b id="rec" class="none">none</b></div>
     </div>
   </header>
 
@@ -38,8 +38,11 @@
       <div id="trio" class="trio" role="img"></div>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden></p>
-      <button id="next" class="btn primary" type="button">Next round</button>
-      <button id="again" class="btn primary" type="button" hidden>New game</button>
+      <div class="acts">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="next" class="btn primary" type="button">Next round</button>
+        <button id="again" class="btn primary" type="button" hidden>New game</button>
+      </div>
     </div>
   </div>
 
@@ -50,9 +53,9 @@
     </div>
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Take turns claiming numbers. Hold any three that add up to 15 to win the round; best of five.
-     A round you win earns a power-up, unless you used Erase or Double in it. Hard never slips, so you start
-     with an Erase there: use it well and you can always win. Keys: arrows and Enter, V switches view, 1-4 power-ups.</p>
+  <p class="how">Claim numbers in turns; three that add up to 15 win the round. Best of five. A round won without
+     Erase or Double earns a power-up. On Hard you get an Erase every round; the computer can Erase and Double.
+     Keys: arrows, Enter, V, 1-4.</p>
   <nav id="games" class="games" data-root="../" data-current="fifteen" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

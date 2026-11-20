@@ -127,7 +127,6 @@
     $("you").textContent = state.score.you; $("cpu").textContent = state.score.cpu;
     var rc = $("rec"), any = record.won + record.lost > 0;
     rc.textContent = any ? record.won + "-" + record.lost : "none"; rc.classList.toggle("none", !any);
-    $("tiles").textContent = state.level;
     var bv = best[bestKey(state)], be = $("best");
     be.textContent = bv || "none"; be.classList.toggle("none", !bv);
     Array.prototype.forEach.call(document.querySelectorAll("#diff button"), function (b) {
@@ -300,7 +299,7 @@
   $("more").addEventListener("click", function () { step(1); });
   $("take").addEventListener("click", doTake);
   $("again").addEventListener("click", proceed);
-  $("over-view").addEventListener("click", function () { viewing = true; render(); boardEl.focus(); });
+  $("over-view").addEventListener("click", function () { viewing = true; info = ""; render(); boardEl.focus(); });
   // a tap on the board (or Enter) during the hold or while viewing brings the card back
   function showCard() { if (!hold && !viewing) return false; clearTimeout(holdT); holdT = null; hold = false; viewing = false; render(); return true; }
   boardEl.addEventListener("click", function (e) { if (!live() && !e.target.closest(".over")) showCard(); });

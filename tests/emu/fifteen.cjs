@@ -10,6 +10,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   }, patch);
   const S = (p) => p.evaluate(() => window.__fifteen.state);
   const tile = (p, n) => p.locator('.ft[data-n="' + n + '"]');
+  const card = (p) => p.waitForSelector("#over:not([hidden])", { timeout: 4000 });   // R13: after the hold
 
   // 1. loads, plays a real turn by click and by keyboard, the computer replies
   let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
@@ -23,6 +24,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("subtitle starts with a Numberics link home", await p.evaluate(() => { const a = document.querySelector(".sub a"); return !!a && a.textContent === "Numberics" && a.getAttribute("href") === "../" && document.querySelector(".sub").firstElementChild === a; }));
   ck("restart is New game", (await p.textContent("#new")).trim() === "New game");
   ck("no CPU anywhere on the page", !/\bCPU\b/i.test(await p.evaluate(() => document.body.innerText)));
+  // R16: the duel pills, in order, and an empty record reads a dimmed "none"
+  ck("pills are You, Computer, Record", (await p.locator(".stat > span").allTextContents()).join() === "You,Computer,Record", (await p.locator(".stat > span").allTextContents()).join());
+  ck("empty record reads none, dimmed", (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
+  ck("round number in the hint at the start of a round", /^Round 1 of 5\. Your turn/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("R14: the how-to says the computer can use power-ups on Hard", /On Hard .*computer can Erase and\s+Double/.test(await p.textContent(".how")));
   await forge(p, { diff: "easy" });
   await tile(p, 5).click();
   ck("click claims 5 for you", (await S(p)).owner[4] === 1);
@@ -107,7 +113,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const after = await tile(p, 2).boundingBox();
   ck("V switches to the Grid view", await p.evaluate(() => window.__fifteen.view === "grid" && document.getElementById("board").classList.contains("grid")));
   ck("tile 2 moved to the magic square corner", after.x > before.x && after.y > before.y, JSON.stringify([before, after]));
-  ck("first switch shows the one-line note", /adds up to 15/.test(await p.textContent("#toast")));
+  ck("first switch shows the one-line note in the hint line, not a toast (cold #1)", /adds up to 15/.test(await p.textContent("#hint")) && !(await p.evaluate(() => document.getElementById("toast").classList.contains("on"))));
   ck("ownership unchanged by the view", (await S(p)).owner.join() === B([2, 6], [5]).join());
   await p.reload();
   ck("view survives reload", await p.evaluate(() => window.__fifteen.view === "grid"));
@@ -138,6 +144,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("2"); await tile(p, 8).click();
   let s = await S(p);
   ck("Erase removed the computer's 8", s.owner[7] === 0 && s.power.erase === 0 && s.turn === 1);
+  ck("no toast hides the next-step hint after Erase", !/Erased/.test(await p.textContent("#toast")) && /not the one you erased/.test(await p.textContent("#hint")));
   await tile(p, 8).click();
   ck("cannot reclaim the erased number this turn", (await S(p)).owner[7] === 0);
   await tile(p, 6).click();
@@ -161,6 +168,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   s = await S(p);
   ck("Double: 8 + 1 + 6 wins the round", s.result && s.result.winner === 1 && s.result.earned === null);
 
+  // R13: the winning line stays in view, undimmed, before the card
+  ck("R13: no card at first", await p.locator("#over").isHidden() && await p.locator("#board.ended").count() === 0);
+  ck("R13: the winning three glow on the open board", await p.locator(".ft.win").count() === 3);
+  await shot(p, "hold");
+  await p.waitForTimeout(900);
+  ck("R13: still no card after 0.9 s", await p.locator("#over").isHidden());
+  await card(p);
   // 4. round end: the family overlay (R8), the winning three kept visible as owner chips, next round, match end
   ck("round end shows the overlay", await p.locator("#over").isVisible());
   ck("headline names the round", /^You win round 1$/.test(await p.textContent("#over-title")), await p.textContent("#over-title"));
@@ -176,6 +190,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
   ck("Next round is the gold primary in the overlay", await p.locator("#over #next.primary").isVisible());
   ck("the bottom row has no Next round", await p.locator(".row #next").count() === 0);
+  // R13: "See the board" hides the card; a tap on the board brings it back
+  await p.click("#over-view");
+  ck("See the board hides the card", await p.locator("#over").isHidden() && /Tap the board/.test(await p.textContent("#hint")));
+  await tile(p, 2).click();
+  ck("a tap on the board brings the card back", await p.locator("#over").isVisible() && (await S(p)).round === 1);
+  await p.click("#over-view"); await p.keyboard.press("Enter");
+  ck("Enter brings the card back too", await p.locator("#over").isVisible() && (await S(p)).round === 1);
   await p.click("#next");
   s = await S(p);
   ck("next round: the computer starts", s.round === 2 && s.starter === 2);
@@ -185,25 +206,69 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, wins: [0, 1, 0], rounds: [1], round: 2 });
   const rowBefore = await p.evaluate(() => [...document.querySelectorAll(".row .btn")].map(b => { const r = b.getBoundingClientRect(); return [r.width, r.height, getComputedStyle(b).fontSize].join(); }).join("|"));
   await p.evaluate(() => { window.__toasts = []; const t = document.getElementById("toast"); new MutationObserver(() => window.__toasts.push(t.textContent)).observe(t, { childList: true, characterData: true, subtree: true }); });
-  await tile(p, 7).click();
+  await tile(p, 7).click(); await card(p);
   const rowAfter = await p.evaluate(() => [...document.querySelectorAll(".row .btn")].map(b => { const r = b.getBoundingClientRect(); return [r.width, r.height, getComputedStyle(b).fontSize].join(); }).join("|"));
   ck("bottom row unchanged when the round ends", rowBefore === rowAfter, rowBefore + " vs " + rowAfter);
   ck("a clean round win pays, shown once in the overlay", /^\+1 /.test(await p.textContent("#over-best")) && (await p.evaluate(() => window.__toasts.length)) === 0, await p.evaluate(() => window.__toasts.join("|")));
   await p.keyboard.press("Enter");
   ck("Enter starts the next round", (await S(p)).round === 3);
   await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, wins: [0, 2, 0], rounds: [1, 1], round: 3 });
-  await tile(p, 7).click();
+  const rec0 = await p.evaluate(() => Object.assign({}, window.__fifteen.record));
+  await tile(p, 7).click(); await card(p);
   ck("3-0 ends the match with the overlay", await p.locator("#over").isVisible() && /You win the match/.test(await p.textContent("#over-title")));
-  ck("match summary", /^You 3 : 0 Computer · Medium$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("R16 match summary", /^Match won 3-0 · Medium$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("R16: the record counts the match once", (await p.textContent("#rec")) === (rec0.won + 1) + "-" + rec0.lost, await p.textContent("#rec"));
   ck("match end offers New game, not Next round", await p.locator("#again").isVisible() && await p.locator("#next").isHidden() && (await p.textContent("#again")) === "New game");
   await shot(p, "match-over");
   await p.click("#again");
   s = await S(p);
   ck("New game resets", s.round === 1 && s.wins.join() === "0,0,0" && await p.locator("#over").isHidden());
+  ck("a finished match's New game adds no loss", (await p.textContent("#rec")) === (rec0.won + 1) + "-" + rec0.lost);
+  // R12: quitting a live match counts as a loss, and the Sure? says so
+  await tile(p, 5).click(); await p.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
+  await p.click("#new");
+  ck("R12: New game mid-match asks Sure? Counts as a loss", (await p.textContent("#new")) === "Sure? Counts as a loss", await p.textContent("#new"));
+  await p.click("#new");
+  ck("R12: confirming records the loss", (await p.textContent("#rec")) === (rec0.won + 1) + "-" + (rec0.lost + 1), await p.textContent("#rec"));
+  await tile(p, 5).click(); await p.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
+  await p.click('#diff button[data-d="easy"]');
+  ck("R12: a level switch mid-match warns in the hint", /counts as a loss/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await p.click('#diff button[data-d="easy"]');
+  ck("R12: the switch records the loss", (await p.textContent("#rec")) === (rec0.won + 1) + "-" + (rec0.lost + 2) && (await S(p)).diff === "easy");
+  await p.reload();
+  ck("the record survives reload", (await p.textContent("#rec")) === (rec0.won + 1) + "-" + (rec0.lost + 2));
+  await p.click('#diff button[data-d="medium"]');
+  // craft #9: the summary never breaks inside a part (320 px, a drawn round with draws in the tally)
+  await p.setViewportSize({ width: 320, height: 640 });
+  await forge(p, { owner: B([1, 2, 4, 7], [3, 5, 6, 9]), turn: 1, wins: [1, 1, 0], rounds: [0, 1], round: 3 });
+  await tile(p, 8).click(); await card(p);
+  const parts = await p.evaluate(() => [...document.querySelectorAll("#over-text span")].map(e => ({ t: e.textContent, lines: e.getClientRects().length })));
+  ck("summary parts", parts.map(x => x.t).join("|") === "Nobody made 15|You 1 : 0 Computer|2 drawn", JSON.stringify(parts));
+  ck("no part breaks across lines at 320px", parts.every(x => x.lines === 1), JSON.stringify(parts));
+  ck("no horizontal scroll at 320px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  await p.setViewportSize({ width: 375, height: 812 });
+  // R17: Enter on a focused games-row link navigates, with a result up or a power-up armed
+  await p.evaluate(() => { const a = document.querySelector('#games a[href*="nine"]') || document.querySelector("#games a:not([aria-current])"); a.id = "golink"; a.focus(); });
+  const href = await p.evaluate(() => document.getElementById("golink").href);
+  await p.keyboard.press("Enter"); await p.waitForURL(href, { timeout: 3000 }).catch(() => {});
+  ck("R17: Enter on a games link navigates while a result is up", p.url() === href, p.url() + " vs " + href);
+  await p.goto(page);
+  await forge(p, { owner: B([5, 2], [8, 1]), turn: 1, power: { undo: 0, erase: 1, peek: 0, double: 0 } });
+  await p.keyboard.press("2");
+  await p.evaluate(() => { const a = document.querySelector("#games a:not([aria-current])"); a.id = "golink"; a.focus(); });
+  const href2 = await p.evaluate(() => document.getElementById("golink").href);
+  await p.keyboard.press("Enter"); await p.waitForURL(href2, { timeout: 3000 }).catch(() => {});
+  ck("R17: Enter on a games link navigates while Erase is armed", p.url() === href2, p.url());
+  await p.goto(page);
   // Hard with a power-up: the computer uses Double to fork
   await forge(p, { diff: "hard", owner: B([5], [8]), turn: 2, cpuPower: { undo: 0, erase: 0, peek: 0, double: 1 } });
   await p.waitForFunction(() => !!window.__fifteen.state.result || window.__fifteen.state.turn === 1, null, { timeout: 3000 });
   ck("Hard computer used its Double", (await S(p)).cpuPower.double === 0);
+  if (!(await S(p)).result) ck("R14: the hint line announces it", /The computer used Double\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  // R15: a clean win with every slot full says so
+  await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, power: { undo: 9, erase: 9, peek: 9, double: 9 } });
+  await tile(p, 7).click(); await card(p);
+  ck("R15: Power-ups full", (await p.textContent("#over-best")) === "Power-ups full.", await p.textContent("#over-best"));
   ck("no page errors", errs.length === 0, errs.join("|"));
   await ctx.close();
 
@@ -212,6 +277,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
   p = await ctx.newPage(); const errs2 = []; p.on("pageerror", e => errs2.push(e.message));
   await p.goto(page);
+  ck("fits 390x844 without scrolling (craft nit 4)", await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight), await p.evaluate(() => document.documentElement.scrollHeight));
   await tile(p, 5).click();
   ck("plays with storage blocked", (await S(p)).owner[4] === 1);
   ck("no page errors with storage blocked", errs2.length === 0, errs2.join("|"));

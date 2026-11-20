@@ -34,18 +34,26 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 2. tray info on a phone: tapping an empty slot explains it in a neutral toast
   await p.click("#pw-check", { force: true });
-  ck("tapping an empty Check explains it in the neutral info toast (R5, R7: not the red-edged warning)", await toastIs(p, /^Check: Mark wrong digits, briefly\. Earn one for every 9 cells you fill with no clash\.$/, "info"), await p.textContent("#toast"));
+  ck("tapping an empty Check explains it in the neutral info toast (R5, R7: not the red-edged warning)", await toastIs(p, /^Check: Mark wrong digits, briefly\. Earn one per 9 cells with no clash\.$/, "info"), await p.textContent("#toast"));
   ck("the info toast is neutral: no red edge", await p.evaluate(() => { const c = getComputedStyle(document.getElementById("toast")); return c.borderTopColor !== "rgb(255, 107, 107)" && c.backgroundColor !== "rgb(242, 184, 75)"; }));
   ck("toast is clear of the title and the games row (F2)", await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), h = document.querySelector("h1").getBoundingClientRect(), g = document.getElementById("games").getBoundingClientRect(); return t.top >= h.bottom && t.bottom <= g.top; }));
   await p.click("#pw-undo", { force: true });
   ck("tapping Undo with nothing to undo says so", await toastIs(p, /Nothing to undo yet/, "info"));
 
   // 3. earn by progress: 9 filled cells that clash with nothing pay one charge whether right or wrong
-  const quietDigit = (i) => p.evaluate((c) => { // a wrong digit that clashes with nothing on the board, else the right one
-    const S = window.NumbericsSudoku, s = window.__sudoku.state, m = S.candidates(s.grid, c) & ~(1 << s.solution[c]);
-    for (let d = 1; d <= 9; d++) if (m & (1 << d)) return d; return s.solution[c];
-  }, i);
-  let e = await empties(p);
+  // 9 cells with a digit each that clashes with nothing, wrong where possible (planned greedily on a copy of the board)
+  const plan = await p.evaluate(() => {
+    const S = window.NumbericsSudoku, s = window.__sudoku.state, g = s.grid.slice(), out = [];
+    for (let c = 0; c < 81 && out.length < 9; c++) {
+      if (g[c]) continue;
+      const m = S.candidates(g, c); if (!m) continue;
+      let d = 0; for (let x = 1; x <= 9; x++) if ((m & (1 << x)) && (!d || x !== s.solution[c])) { d = x; if (x !== s.solution[c]) break; }
+      g[c] = d; out.push([c, d]);
+    }
+    return out;
+  });
+  let e = plan.map(x => x[0]);
+  const quietDigit = async (c) => plan.find(x => x[0] === c)[1];
   const pre = tot(await st(p));
   for (let i = 0; i < 8; i++) { await p.locator(".c").nth(e[i]).click(); await p.keyboard.press(String(await quietDigit(e[i]))); }
   ck("8 filled cells: nothing yet", tot(await st(p)) === pre && await p.locator(".c.bad").count() === 0);
@@ -109,8 +117,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const g0 = (await st(p)).grid.join(""), t0 = await p.evaluate(() => window.__sudoku.elapsed);
   await p.keyboard.press("u");
   ck("U on a solved board changes nothing (R1 blocker)", (await st(p)).solved && (await st(p)).grid.join("") === g0 && await p.isVisible("#win"));
-  // the explanation is issued, but a toast never sits on the end card (shared kit), so it is not shown over it
-  ck("Undo is shown unavailable once solved, with the reason", (await p.getAttribute("#pw-undo", "aria-disabled")) === "true" && /Not after the puzzle is solved/.test(await p.textContent("#toast")), await p.textContent("#toast"));
+  // a toast never sits on the end card (shared kit), so the card speaks alone; the slot is marked unavailable
+  ck("Undo is shown unavailable once solved", (await p.getAttribute("#pw-undo", "aria-disabled")) === "true" && /not available now/.test(await p.getAttribute("#pw-undo", "aria-label")));
   await p.waitForTimeout(150);
   ck("no toast over the end card", !(await p.evaluate(() => document.getElementById("toast").classList.contains("on"))));
   await p.locator("#pw-undo").click({ force: true });

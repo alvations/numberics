@@ -10,6 +10,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     window.__five.state = s;
   }, patch);
   const st = (p) => p.evaluate(() => window.__five.state);
+  const card = (p) => p.waitForFunction(() => window.__five.state.roundOver && !window.__five.busy && !window.__five.holding, null, { timeout: 5000 });
   const slot = (p, i) => p.locator('.slot[data-i="' + i + '"]');
 
   // 1. loads, the computer opens, a real turn by clicks
@@ -21,6 +22,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let s = await st(p);
   ck("the computer opened the round", s.moves >= 1 && s.tiles.reduce((a, b) => a + b, 0) !== 4 || s.roundOver, JSON.stringify(s.tiles));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  ck("R16: pills are You, Computer, Record; an empty Record reads a dimmed none", (await p.locator(".stat span").allTextContents()).join(",") === "You,Computer,Record" &&
+    (await p.textContent("#matches")) === "none" && await p.locator("#matches.none").count() === 1);
+  ck("R12: Level switch before your first move is one tap (the computer's opener is not you)", await p.evaluate(() => !window.NumbericsFive.played(window.__five.state)));
   await forge(p, { tiles: [2, 1, 1, 1] });
   await slot(p, 0).click();
   ck("tapping your tile selects it", await p.locator(".slot.sel").count() === 1);
@@ -80,7 +84,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await forge(p, { tiles: [1, 0, 0, 4], wins: { p: 0, c: 0 } });
   await slot(p, 0).click(); await slot(p, 3).click();
   await idle(p);
+  // R13: the burst stays on an undimmed board for about 1.5 s, then the card
+  ck("R13: the board shows first, no card yet", await p.evaluate(() => window.__five.holding) && !(await p.isVisible("#over")) && await p.locator('.slot.hit[data-i="3"]').count() === 1);
+  ck("R13: the hint says what burst", /^Your 1 onto their 4 made 5: it burst\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await shot(p, "hold");
+  const t0 = Date.now(); await card(p); const held = Date.now() - t0;
+  ck("R13: the card follows after the hold", held > 900 && held < 2500, String(held));
   ck("round-over overlay shows", await p.isVisible("#over") && /Round to you/.test(await p.textContent("#over-title")));
+  ck("R16: round summary 'You 1 : 0 Computer · first to 3'", (await p.textContent("#over-text")) === "You 1 : 0 Computer · first to 3", await p.textContent("#over-text"));
+  await p.click("#over-view");
+  ck("R13: See the board hides the card and says how to get it back", !(await p.isVisible("#over")) && /Tap the board for the summary\.$/.test(await p.textContent("#hint")));
+  await slot(p, 2).click();
+  ck("R13: a tap on the board brings the card back", await p.isVisible("#over"));
   ck("R7: no toast for the round result (the overlay says it)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("on") && /^Burst!$/.test(document.getElementById("toast").textContent))));
   await shot(p, "round");
   await p.click("#again");
@@ -89,9 +104,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("next round starts fresh with the computer opening", s.round === 2 && !s.roundOver && s.moves > 0);
   await forge(p, { tiles: [1, 0, 0, 4], wins: { p: 2, c: 1 } });
   await slot(p, 0).click(); await slot(p, 3).click();
-  await idle(p);
+  await card(p);
   ck("match-over overlay shows", (await p.textContent("#over-title")) === "Match to you" && (await p.textContent("#again")) === "New game");
-  ck("R8: summary line is '<Result> · <tally>'", (await p.textContent("#over-text")) === "Match won · 3-1", await p.textContent("#over-text"));
+  ck("R16: match summary 'Match won 3-1'", (await p.textContent("#over-text")) === "Match won 3-1", await p.textContent("#over-text"));
   ck("R8: the headline is white, not gold", await p.evaluate(() => getComputedStyle(document.getElementById("over-title")).color) === "rgb(236, 235, 241)");
   ck("matches record counts the win", (await p.textContent("#matches")) === "1-0");
   await shot(p, "match");
@@ -111,12 +126,12 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage(); const e4 = []; p.on("pageerror", e => e4.push(e.message));
   await p.goto(page); await idle(p);
   ck("R6: H1 is the game name, subtitle starts with the Numberics link", (await p.textContent("h1")) === "Five" && (await p.textContent(".sub a")) === "Numberics" && /^Numberics · [A-Z].*\.$/.test((await p.textContent(".sub")).trim()));
-  ck("how-to has no jargon (seat, solved) and says perfect play wins", await p.evaluate(() => { const t = document.querySelector(".how").textContent; return !/seat|solved|opens/i.test(t) && /perfect play always wins/.test(t); }));
+  ck("how-to has no jargon, says 'at 5 or more' and 'you can always win'", await p.evaluate(() => { const t = document.querySelector(".how").textContent; return !/seat|solved|opens|perfect play/i.test(t) && /5 or more bursts/.test(t) && /you can always win/.test(t); }));
   ck("R11: restart says New game", (await p.textContent("#new")) === "New game");
   // R1: a lost round with a snapshot and Undo stock: Undo is aria-disabled and a tap explains why
   await forge(p, { tiles: [4, 0, 1, 2], power: { p: { undo: 2, split: 0, shield: 0, nudge: 0 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } }, wins: { p: 0, c: 2 } });
   await slot(p, 0).click(); await slot(p, 2).click(); // your 4 bursts their 1; the computer's 2 then bursts your 4
-  await p.waitForFunction(() => window.__five.state.roundOver && !window.__five.busy, null, { timeout: 5000 });
+  await card(p);
   s = await st(p);
   ck("the computer took the match", s.matchOver === "c", JSON.stringify(s.tiles));
   ck("R7: the reward toast from your burst is not left over the lost-match card", await p.evaluate(() => !document.getElementById("toast").classList.contains("on")));
@@ -128,6 +143,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R1: tapping it changes nothing and says why", s.matchOver === "c" && s.power.p.undo === undoLeft && undoLeft >= 2 && /Undo: Take back.*Not once a round is decided\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("R8: the lost-match headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.textContent === "Match to the computer" && h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
   ck("record counts the loss", (await p.textContent("#matches")) === "0-1");
+  ck("R16: match lost summary 'Match lost 0-3'", (await p.textContent("#over-text")) === "Match lost 0-3", await p.textContent("#over-text"));
   await shot(p, "lost-375");
   await p.click("#again"); await idle(p);
   // R5: an empty tray button explains itself in the hint line
@@ -167,6 +183,76 @@ module.exports = async function ({ browser, url, ck, shot }) {
   }
   ck("R4: no 'Computer used' or 'Computer earned' toast", !toasts.some(t => /Computer (used|earned)/.test(t)), toasts.join("|"));
   ck("no page errors (375)", e4.length === 0, e4.join("|"));
+  await ctx.close();
+
+  // 4d. round 2: R12, R5 keys, R17, the swallowed tap, the Esc hint, R2 toast
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  p = await ctx.newPage(); const e5 = []; p.on("pageerror", e => e5.push(e.message));
+  await p.goto(page); await idle(p);
+  // the first tap after the computer's burst is never swallowed (mechanics #7): one tile left, tap during the ghost
+  await forge(p, { level: "hard", tiles: [1, 4, 2, 2] });
+  await slot(p, 0).click(); await slot(p, 2).click();
+  await p.waitForFunction(() => window.__five.state.turn === "p" && !window.__five.state.roundOver, null, { timeout: 5000 });
+  s = await st(p);
+  const left = s.tiles[0] ? 0 : 1;
+  const wasBusy = await p.evaluate(() => window.__five.busy);
+  await slot(p, left).click();
+  ck("the first tap with one tile left selects it, even mid-animation", await p.locator('.slot.sel[data-i="' + left + '"]').count() === 1, "busy at tap: " + wasBusy + " " + JSON.stringify(s.tiles));
+  const tgt = s.tiles[2] ? 2 : 3; await slot(p, tgt).click();
+  ck("and the second tap makes the move", (await st(p)).turn !== "p" || (await st(p)).roundOver, JSON.stringify((await st(p)).tiles));
+  await p.waitForFunction(() => !window.__five.busy && !window.__five.holding, null, { timeout: 5000 });
+  if ((await st(p)).roundOver) { await p.click("#again"); }
+  await idle(p);
+  // R5: a number key on an empty slot explains it, exactly like a tap
+  await forge(p, { tiles: [2, 1, 1, 1], power: { p: { undo: 0, split: 0, shield: 0, nudge: 0 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
+  await p.focus("#board"); await p.keyboard.press("3");
+  ck("R5: key 3 on an empty Shield explains it", /^Shield: Your tile cannot be hit.*Burst a computer tile to earn one\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await p.keyboard.press("u");
+  ck("R5: u on an empty Undo explains it", /^Undo: Take back/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  // the Esc hint shows with a keyboard only
+  await forge(p, { tiles: [2, 1, 1, 1], power: { p: { undo: 0, split: 1, shield: 0, nudge: 0 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
+  await p.locator("#tray .pw").nth(1).click();
+  ck("tap-armed Split: a short hint, no Esc", (await p.textContent("#hint")) === "Tap the tile to take 1 from.", await p.textContent("#hint"));
+  await shot(p, "split-375");
+  ck("the Split hint fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("hint"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
+  await p.keyboard.press("Escape"); await p.keyboard.press("2");
+  ck("key-armed Split mentions Esc", / \(Esc cancels\)$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await p.keyboard.press("Escape");
+  // R2: Shield, then a burst on the same turn: the burst happens, no reward, a neutral note
+  await forge(p, { tiles: [2, 1, 3, 2], power: { p: { undo: 0, split: 0, shield: 1, nudge: 0 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
+  await p.locator("#tray .pw").nth(2).click(); await slot(p, 1).click();
+  await slot(p, 0).click(); await slot(p, 2).click();
+  s = await st(p);
+  ck("R2: the burst after Shield pays nothing", s.tiles[2] === 0 && Object.values(s.power.p).every(v => v === 0), JSON.stringify(s.power.p));
+  ck("R2: and says so in a neutral toast", await p.evaluate(() => { const t = document.getElementById("toast"); return t.textContent === "Burst! No reward after Shield." && t.classList.contains("info"); }));
+  await idle(p);
+  // R12: after your first move, New game and a level switch ask "Sure? Counts as a loss" and record the loss
+  await p.waitForFunction(() => !window.__five.holding, null, { timeout: 5000 });
+  if ((await st(p)).roundOver) { await p.click("#again"); await idle(p); }
+  ck("R12: played after your move", await p.evaluate(() => window.NumbericsFive.played(window.__five.state)));
+  const lost0 = await p.evaluate(() => window.__five.record.lost);
+  await p.click("#new");
+  ck("R12: New game says it counts as a loss", (await p.textContent("#new")) === "Sure? Counts as a loss");
+  await p.click("#new"); await idle(p);
+  ck("R12: quitting recorded a loss", await p.evaluate(() => window.__five.record.lost) === lost0 + 1 && (await p.textContent("#matches")) === "0-" + (lost0 + 1));
+  ck("R12: the fresh match is not 'played' yet, so a level switch is one tap", !(await p.evaluate(() => window.NumbericsFive.played(window.__five.state))));
+  await p.click('#levels button[data-level="easy"]'); await idle(p);
+  ck("one tap switched to Easy with no loss", (await st(p)).level === "easy" && await p.evaluate(() => window.__five.record.lost) === lost0 + 1);
+  s = await st(p); { const m = await p.evaluate(() => window.NumbericsFive.legalMoves(window.__five.state)[0]); await slot(p, m.from).click(); await slot(p, m.to).click(); }
+  await idle(p);
+  if (!(await st(p)).roundOver) {
+    await p.click('#levels button[data-level="hard"]'); await p.click('#levels button[data-level="medium"]');
+    ck("only one level button says Sure? at a time", (await p.locator('#levels button').allTextContents()).join(",") === "Easy,Sure?,Hard", (await p.locator('#levels button').allTextContents()).join(","));
+    ck("the hint says the switch counts as a loss", /^Tap Medium again to switch\. This match counts as a loss\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+    await p.click('#levels button[data-level="medium"]'); await idle(p);
+    ck("R12: the level switch recorded the loss", (await st(p)).level === "medium" && await p.evaluate(() => window.__five.record.lost) === lost0 + 2);
+  } else ck("round ended early (unexpected)", false);
+  // R17: Enter on a focused games-row link navigates
+  await p.locator("#games a").first().focus();
+  const href = await p.locator("#games a").first().getAttribute("href");
+  await Promise.all([p.waitForURL(u => !/\/five\/?$/.test(u.pathname), { timeout: 3000 }).catch(() => {}), p.keyboard.press("Enter")]);
+  ck("R17: Enter on a games-row link opens it", !/\/five\/?$/.test(new URL(p.url()).pathname), p.url() + " " + href);
+  ck("no page errors (round 2)", e5.length === 0, e5.join("|"));
   await ctx.close();
 
   // 4c. page height at 390x844 fits without scrolling

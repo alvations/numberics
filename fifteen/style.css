@@ -37,10 +37,9 @@
 .hash i:nth-child(4){ top:calc((100% - 2*var(--gap))*2/3 + var(--gap)*1.5); }
 .board.grid .hash i{ opacity:1; }
 .board.targeting{ cursor:default; }
-.views{ display:flex; gap:0; }
+/* the view choice: separate pills, like every other choice in the family (craft round 2 nit 3) */
+.views{ display:flex; gap:8px; }
 .views .btn{ padding:9px 14px; }
-.views .btn:first-child{ border-radius:10px 0 0 10px; } .views .btn:last-child{ border-radius:0 10px 10px 0; margin-left:-1px; }
-.views .btn[aria-pressed="true"]{ position:relative; z-index:1; }
 /* round and match end (R8): the winning three as chips in their owner's fill */
 .trio{ display:flex; align-items:center; gap:6px; color:var(--mute); font-weight:700; }
 .trio[hidden]{ display:none; }
@@ -48,6 +47,11 @@
   font-size:1.25rem; font-weight:800; font-variant-numeric:tabular-nums; }
 .trio b.mine{ background:var(--accent); color:#1b1b22; } .trio b.theirs{ background:var(--cool); color:#111a28; }
 .over .note{ font-size:.85rem; } .over [hidden]{ display:none; }
+/* the summary breaks only between its parts, never inside "You 2 : 1 Computer" (craft round 2 #9) */
+.over p span{ white-space:nowrap; }
+.over .acts{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+/* R16: an empty record reads a dimmed "none", same weight as the numbers */
+.stat b.none{ color:var(--mute); font-size:.95rem; }
 @media (max-width:380px){ .stat{ min-width:52px; padding:6px 8px; } .views .btn{ padding:9px 10px; } }
 @media (prefers-reduced-motion:reduce){
   .ft{ transition:opacity 200ms, box-shadow 200ms, background-color 200ms; } /* no sliding between views */
