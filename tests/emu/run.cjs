@@ -15,7 +15,7 @@ const srv = http.createServer((q, r) => {
   r.writeHead(200, { "content-type": types[path.extname(f)] || "application/octet-stream" }); r.end(fs.readFileSync(f));
 });
 const ids = process.argv.slice(2);
-const mods = fs.readdirSync(__dirname).filter(f => f.endsWith(".cjs") && f !== "run.cjs")
+const mods = fs.readdirSync(__dirname).filter(f => f.endsWith(".cjs") && f !== "run.cjs" && !f.startsWith("_")) // _name.cjs: shared helpers
   .map(f => f.replace(/\.cjs$/, "")).filter(id => !ids.length || ids.includes(id)).sort();
 let pass = 0, fail = 0;
 (async () => {

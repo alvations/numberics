@@ -105,7 +105,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     for (let i = 2; i < 40; i++) if (d(i, i + 1) < 40) return false; for (let i = 2; i <= 30; i++) for (let j = i + 1; j <= i + 10; j++) if (d(i, j) < 15) return false; return true; }));
   ck("3 and 13, 34 and 144 now look clearly different", await p.evaluate(() => { const h = window.__fibonacci.hue, d = (a, b) => { const x = Math.abs(h(a) - h(b)) % 360; return Math.min(x, 360 - x); }; return d(3, 6) >= 40 && d(8, 11) >= 40; }));
   ck("1 and 2 look different (cream vs a hue)", await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[0] = 1; s.grid[1] = 2; window.__fibonacci.state = s;
-    const t = [...document.querySelectorAll(".tiles .tile")]; return getComputedStyle(t[0]).backgroundColor !== getComputedStyle(t[1]).backgroundColor && !t[1].classList.contains("lo2"); }));
+    const t = [...document.querySelectorAll(".tiles .tile")]; return getComputedStyle(t[0]).backgroundImage !== getComputedStyle(t[1]).backgroundImage && !t[1].classList.contains("lo2"); }));
 
   // 5. award toast on a new highest tile of 55 (round 2 floor); 34 no longer pays
   const sum = () => p.evaluate(() => Object.values(window.__fibonacci.state.power).reduce((a, b) => a + b, 0));

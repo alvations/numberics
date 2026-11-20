@@ -375,14 +375,14 @@ t("R7/F2/F3: toast at the top with a neutral bad variant; warnings use it", () =
   ok(/\.toast\.bad\{/.test(src["style.css"]), "bad variant");
   ok(/toast\([^;]*"bad"\)/.test(src["game.js"]), "a warning passes bad");
 });
-t("R8/F7: darker scrim, New best line, gold best", () => {
-  ok(/\.over\{[^}]*rgba\(20,21,28,\.9[5-9]\d*\)/.test(src["style.css"]), "scrim .95 or darker");
+t("R8/F7 (REDESIGN.md 2.1 end card): a near-opaque blurred card, New best line, gold best", () => {
+  ok(/\.over\{[^}]*rgba\(18,19,26,\.9[5-9]\d*\)[^}]*color-mix\(in srgb, var\(--bg\) 9[2-9]%, transparent\)[^}]*backdrop-filter:blur\(3px\)/.test(src["style.css"]), "card: .95+ fallback, then 92%+ bg with blur");
   ok(/id="over-best" class="best" hidden>New best\.</.test(src["index.html"]), "New best line");
   ok(/\.over \.best\{/.test(src["style.css"]), "best style");
 });
-t("F5/F9: hover, press and gold link focus ring are mirrored from shared/theme.css", () => {
+t("F5/F9: hover, press and the gold focus ring (3px, REDESIGN.md 2.1) are mirrored from shared/theme.css", () => {
   ok(/\.btn:hover:not\(:disabled\)/.test(src["style.css"]) && /\.pw:active:not\(:disabled\)/.test(src["style.css"]), "hover/press");
-  ok(/a:focus-visible\{ outline:2px solid var\(--accent\)/.test(src["style.css"]), "link focus ring");
+  ok(/:focus-visible\{ outline:3px solid var\(--accent\)/.test(src["style.css"]), "focus ring on links and controls");
 });
 t("R9: Enter or Space on a focused button is left to the button", () => {
   ok(/\(e\.key === "Enter" \|\| e\.key === " "\) && \(tag === "BUTTON" \|\| tag === "A"\)\) return;/.test(src["game.js"]));
@@ -399,7 +399,7 @@ t("round 3: the help line says exactly how R2 works and names the number keys", 
   const how = src["index.html"].replace(/\s+/g, " ");
   ok(/Swapped and boosted tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost\. Keys 1 to 4 use the power-ups\./.test(how), "help copy");
   ok(!/except on the move right after you use one/.test(how), "the old one-move copy is gone");
-  ok(/\.toast\.info\{/.test(src["style.css"]) && /--line:#33364a/.test(src["style.css"]), "info toast and --line mirrored");
+  ok(/\.toast\.info\{/.test(src["style.css"]) && /--line:#33384f/.test(src["style.css"]), "info toast and --line mirrored (the token block, tests/test-theme.js)");
 });
 
 t("history carries only the owner's authorship (no AI author, co-author or trailer)", () => {

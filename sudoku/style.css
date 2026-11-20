@@ -1,13 +1,60 @@
-/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) */
-:root{ --bg:#14151c; --panel:#1d1f2a; --cell:#262938; --ink:#ecebf1; --mute:#9a9bb0; --accent:#f2b84b;
-  --peer:#2f3348; --same:#3d4a72; --bad:#ff6b6b; --line:#4b4f6a; }
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Sudoku keeps its own CSS (REDESIGN.md 2.3); the token block is a byte-for-byte copy of shared/theme.css. */
+/* tokens: REDESIGN.md 2.1, copied byte for byte into style.css and sudoku/style.css (tests/test-theme.js) */
+:root{
+  /* colour: dark (default) */
+  --bg:#12131a; --bg-glow:#1b1d2b; --panel:#1c1f2c; --panel-2:#242839; --cell:#2a2e41; --well:#161823;
+  --board:#1c1f2c; --board-cell:#2a2e41;
+  --line:#33384f; --line-2:#4a5070; --ink:#f2f1f7; --mute:#a5a7bd; --faint:#6f7290;
+  --accent:#f5bd4f; --accent-2:#ffd27a; --accent-ink:#1d1a12; --accent-text:#f5bd4f;
+  --cool:#74b9ff; --cool-2:#a6d2ff; --bad:#ff7a7a; --good:#62d6a0; --tile-ink:#16161e;
+  --tile-s:66%; --tile-l:62%; --tile-lo:hsl(40 30% 90%); --tile-lo2:hsl(36 52% 82%);
+  /* depth */
+  --sh-1:0 1px 0 rgba(255,255,255,.05) inset, 0 1px 2px rgba(0,0,0,.35);
+  --sh-2:0 1px 0 rgba(255,255,255,.06) inset, 0 8px 24px rgba(0,0,0,.35);
+  --sh-tile:inset 0 -.55cqw 0 rgba(0,0,0,.20), 0 .5cqw 1.2cqw rgba(0,0,0,.28);
+  /* shape */
+  --r-xs:8px; --r-sm:12px; --r-md:16px; --r-lg:22px; --r-pill:999px;
+  --radius:var(--r-lg); --tile-radius:var(--r-sm);
+  --gap:10px; --tap:44px; --tap-lg:52px;
+  /* type */
+  --font:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+  --fs-xs:.75rem; --fs-sm:.875rem; --fs-md:1rem; --fs-lg:1.2rem; --fs-xl:1.6rem; --fs-2xl:2.25rem;
+  /* motion (section 5) */
+  --m-slide:110ms; --m-pop:180ms; --m-appear:170ms; --m-fade:160ms; --m-sheet:240ms; --anim:var(--m-slide);
+  --e-slide:cubic-bezier(.45,0,.55,1); --e-out:cubic-bezier(.2,.8,.2,1); --e-pop:cubic-bezier(.3,1.5,.6,1);
+  --e-fall:cubic-bezier(.55,0,1,.45);
+  color-scheme:dark;
+}
+@media (max-width:520px){ :root{ --gap:8px; } }
+:root[data-theme="light"]{
+  --bg:#f5f1e8; --bg-glow:#fffaf0; --panel:#ffffff; --panel-2:#f3eee3; --cell:#e9e2d3; --well:#efe9dc;
+  --board:#cdbfa6; --board-cell:#e2d8c5;
+  --line:#ddd5c4; --line-2:#c4baa5; --ink:#1e1f29; --mute:#5b5d70; --faint:#8a8c9c;
+  --accent:#f2b443; --accent-2:#f7c766; --accent-ink:#2a1f05; --accent-text:#8a5a00;
+  --cool:#1f6fd1; --cool-2:#5b9be6; --bad:#c93a3a; --good:#1d8a57; --tile-l:58%;
+  --sh-1:0 1px 2px rgba(60,40,10,.10); --sh-2:0 8px 24px rgba(60,40,10,.12);
+  --sh-tile:inset 0 -.55cqw 0 rgba(0,0,0,.14), 0 .4cqw 1cqw rgba(60,40,10,.18);
+  color-scheme:light;
+}
+:root[data-contrast="high"]{ --mute:#d6d7e4; --faint:#b5b7cc; --line:#6c7193; --line-2:#9aa0c4;
+  --panel:#16182a; --cell:#2c3150; --board:#16182a; --board-cell:#2c3150; }
+:root[data-theme="light"][data-contrast="high"]{ --mute:#2e3040; --faint:#444; --line:#7d7461; --line-2:#4d4636; --cell:#ddd3be;
+  --panel:#ffffff; --board:#cdbfa6; --board-cell:#e2d8c5; } /* keeps light surfaces: the dark high-contrast rule above also matches */
+:root[data-text="large"]{ font-size:118.75%; }   /* 16 -> 19 px; boards and tiles size by the board, not by this */
+/* end tokens */
+/* Sudoku's own colours, on top of the family tokens (Sudoku keeps its own look) */
+:root{ --peer:#2f3348; --same:#3d4a72; --digit:#9fc2ff; --wrong:#6a2632; --bad-soft:#ffadad; }
+:root[data-theme="light"]{ --peer:#ece5d6; --same:#cfdaf0; --digit:#1f5fb8; --wrong:#f5cccc; --bad-soft:#a42a2a; }
 *{ box-sizing:border-box; }
-html,body{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-body{ min-height:100dvh; display:flex; justify-content:center;
-  padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom)); }
+html{ background:var(--bg); }
+html,body{ margin:0; color:var(--ink); font:var(--fs-md)/1.4 var(--font); -webkit-font-smoothing:antialiased; }
+body{ min-height:100dvh; display:flex; flex-direction:column; align-items:center;
+  background:radial-gradient(120% 60% at 50% -10%, var(--bg-glow), var(--bg) 60%) fixed;
+  padding:max(8px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom)); }
 #app{ width:100%; max-width:480px; position:relative; }
 header{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:8px; flex-wrap:wrap; }
-h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
+h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 .sub{ margin:0; color:var(--mute); font-size:.85rem; text-wrap:balance; } .sub a{ color:var(--mute); }
 .brand{ flex:1 1 0; min-width:0; } /* the pills stay beside the title; a long line wraps inside the brand */
 @media (max-width:359px){ .brand{ flex-basis:100%; } } /* 320: the pills drop under the title so the tagline keeps one line (craft #3) */
@@ -16,69 +63,85 @@ h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
 .stat span{ display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
 .stat b{ font-size:1.1rem; font-variant-numeric:tabular-nums; }
 .levels{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px; }
-.levels button{ background:var(--panel); color:var(--mute); border:1px solid #33364a; border-radius:10px; padding:7px; font:inherit; font-size:.85rem; cursor:pointer; }
+.levels button{ background:var(--panel); color:var(--mute); border:1px solid var(--line); border-radius:10px; padding:7px; font:inherit; font-size:.85rem; cursor:pointer; }
 .levels button[aria-pressed="true"]{ color:var(--ink); border-color:var(--accent); }
-.board{ display:grid; grid-template-columns:repeat(9,1fr); width:100%; aspect-ratio:1; background:var(--line); gap:1px;
-  border:2px solid var(--line); border-radius:14px; overflow:hidden; container-type:inline-size; touch-action:manipulation; }
+.board{ display:grid; grid-template-columns:repeat(9,1fr); width:100%; aspect-ratio:1; background:var(--line-2); gap:1px;
+  border:2px solid var(--line-2); border-radius:14px; overflow:hidden; container-type:inline-size; touch-action:manipulation; }
 .c{ position:relative; background:var(--cell); display:flex; align-items:center; justify-content:center; font-size:6cqw;
-  font-variant-numeric:tabular-nums; cursor:pointer; user-select:none; -webkit-user-select:none; color:#9fc2ff; }
+  font-variant-numeric:tabular-nums; cursor:pointer; user-select:none; -webkit-user-select:none; color:var(--digit); }
 .c.given{ color:var(--ink); font-weight:700; }
 .c.peer{ background:var(--peer); } .c.same{ background:var(--same); }
 .c.sel{ background:var(--cell); outline:2px solid var(--accent); outline-offset:-2px; z-index:1; } /* gold outline on the normal fill (S1) */
 .c.bad{ color:var(--bad); } .c.bad.given{ color:var(--bad); }
-.c.bad.same{ color:#ffadad; } /* a clash on the blue same-digit fill keeps 4.5:1 (craft nit 4) */
-.c:nth-child(9n+4),.c:nth-child(9n+7){ box-shadow:-2px 0 0 var(--line); }
+.c.bad.same{ color:var(--bad-soft); } /* a clash on the blue same-digit fill keeps 4.5:1 (craft nit 4) */
+.c:nth-child(9n+4),.c:nth-child(9n+7){ box-shadow:-2px 0 0 var(--line-2); }
 .r{ display:contents; } /* role="row" wrappers for valid grid ARIA; the cells stay items of the board grid */
-.r:nth-child(3) .c,.r:nth-child(6) .c{ border-bottom:2px solid var(--line); }
+.r:nth-child(3) .c,.r:nth-child(6) .c{ border-bottom:2px solid var(--line-2); }
 .notes{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,1fr); font-size:3.6cqw; color:var(--mute); line-height:1; } /* readable on a phone (S3, craft #4) */
 .notes i{ font-style:normal; display:flex; align-items:center; justify-content:center; }
 /* power-up tray: the Endless tray (shared/theme.css), sitting where the old tools row was */
 .tray{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:10px 0 8px; }
-.pw{ position:relative; background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:10px;
+.pw{ position:relative; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px;
   padding:9px 4px; font:inherit; font-size:.85rem; cursor:pointer; white-space:nowrap; }
 .pw.empty{ opacity:.45; } .pw.empty:hover{ opacity:.6; } /* unusable now: a tap explains it (R5) */
 .pw.armed{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
-.pw i{ font-style:normal; margin-left:6px; background:var(--accent); color:#1b1b22; border-radius:99px;
+.pw i{ font-style:normal; margin-left:6px; background:var(--accent); color:var(--accent-ink); border-radius:99px;
   padding:0 7px; font-weight:700; font-size:.78rem; }
 @media (max-width:440px){ .pw{ font-size:.78rem; } .pw i{ margin-left:3px; padding:0 5px; } }
 @media (max-width:360px){ .tray{ gap:6px; } .pw{ font-size:.72rem; padding:9px 2px; } .pw i{ margin-left:2px; padding:0 4px; } } /* fits at 320 */
 .board.targeting{ box-shadow:0 0 0 2px var(--accent); cursor:crosshair; }
-.c.wrong{ background:#6a2632; }
+.c.wrong{ background:var(--wrong); }
 .tools{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:0 0 8px; }
 .pad{ display:grid; grid-template-columns:repeat(9,1fr); gap:6px; }
-.pad button{ position:relative; background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:8px; padding:10px 0 12px;
+.pad button{ position:relative; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 0 12px;
   font:inherit; font-size:1.15rem; font-weight:700; cursor:pointer; }
 .pad button small{ position:absolute; right:3px; bottom:1px; font-size:.7rem; color:var(--mute); font-weight:400; }
 .pad button:disabled{ opacity:.3; cursor:default; }
-.btn{ background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:10px; padding:9px 6px; font:inherit; font-size:.85rem; cursor:pointer; }
-.btn[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent); }
-.btn.primary{ background:var(--accent); color:#1b1b22; border-color:var(--accent); font-weight:700; padding:9px 18px; }
+.btn{ background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:9px 6px; font:inherit; font-size:.85rem; cursor:pointer; }
+.btn[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent-text); }
+.btn.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; padding:9px 18px; }
 .btn:focus-visible,.pw:focus-visible,.pad button:focus-visible,.levels button:focus-visible,.c:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .row{ display:flex; justify-content:center; margin:10px 0 4px; } .row .btn{ padding:9px 18px; font-size:1rem; } /* same size as the family (F17) */
 .how{ color:var(--mute); font-size:.82rem; text-align:center; margin:8px 0; }
 /* end card: the family overlay (shared .over, R8), a full scrim over the board */
 .wrap{ position:relative; }
-.over{ position:absolute; inset:0; border-radius:14px; background:rgba(20,21,28,.985); display:flex; flex-direction:column;
+.over{ position:absolute; inset:0; border-radius:14px; background:rgba(18,19,26,.985); background:color-mix(in srgb, var(--bg) 98.5%, transparent); display:flex; flex-direction:column;
   align-items:center; justify-content:center; gap:10px; text-align:center; padding:20px; z-index:3; }
 .over[hidden]{ display:none; } .over h2{ margin:0; font-size:1.6rem; line-height:1.2; text-wrap:balance; }
-.over p{ margin:0; color:var(--mute); text-wrap:balance; } .over .best{ color:var(--accent); font-weight:700; }
+.over p{ margin:0; color:var(--mute); text-wrap:balance; } .over .best{ color:var(--accent-text); font-weight:700; }
 .over p[hidden]{ display:none; }
 .over .row{ gap:8px; margin:4px 0 0; flex-wrap:wrap; } /* "See the board" beside the primary, the family card set */
 .stat b.none,.stat .none{ color:var(--mute); font-weight:600; font-size:1.1rem; } /* the family's one empty-value style (shared .stat .none, TRIAGE3) */
 /* toast at the top, never over the games row (F2); warnings use the neutral variant (F3) */
 .toast{ position:fixed; left:50%; top:max(12px,env(safe-area-inset-top)); transform:translateX(-50%); background:var(--accent);
-  color:#1b1b22; padding:8px 16px; border-radius:99px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 200ms;
+  color:var(--accent-ink); padding:8px 16px; border-radius:99px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 200ms;
   width:max-content; max-width:calc(100vw - 32px); text-align:center; z-index:5; box-shadow:0 4px 18px rgba(0,0,0,.45); }
 .toast.on{ opacity:1; }
 .toast.bad{ background:var(--panel); color:var(--ink); border:1px solid var(--bad); font-weight:600; }
 .toast.info{ background:var(--panel); color:var(--ink); border:1px solid var(--line); font-weight:600; } /* a plain explanation (R7) */
 /* hover and press feedback (desktop), no movement (F5) */
-.btn:hover:not(:disabled),.pw:hover,.levels button:hover,.pad button:hover:not(:disabled){ background:#262a3a; border-color:#4b4f6a; }
-.btn:active:not(:disabled),.pw:active,.levels button:active,.pad button:active:not(:disabled){ background:#2f3349; }
-.btn.primary:hover:not(:disabled){ background:#f5c46a; border-color:#f5c46a; } .btn.primary:active:not(:disabled){ background:#e0a93f; }
+.btn:hover:not(:disabled),.pw:hover,.levels button:hover,.pad button:hover:not(:disabled){ background:var(--panel-2); border-color:var(--line-2); }
+.btn:active:not(:disabled),.pw:active,.levels button:active,.pad button:active:not(:disabled){ background:var(--cell); }
+.btn.primary:hover:not(:disabled){ background:var(--accent-2); border-color:var(--accent-2); } .btn.primary:active:not(:disabled){ background:var(--accent); }
 .levels button[aria-pressed="true"]:hover,.btn[aria-pressed="true"]:hover,.pw.armed:hover{ border-color:var(--accent); }
 a:hover{ color:var(--ink); }
 a:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; } /* gold ring on links too (F9) */
 .board:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .games{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px 12px; margin:10px 0 4px; font-size:.82rem; }
-.games a{ color:var(--mute); } .games a[aria-current="page"]{ color:var(--accent); text-decoration:none; }
+.games a{ color:var(--mute); } .games a[aria-current="page"]{ color:var(--accent-text); text-decoration:none; }
+/* the family top bar (REDESIGN.md 3.2), mirrored from shared/theme.css */
+.topbar{ width:100%; max-width:1100px; min-height:var(--tap-lg); margin:0 auto 4px; display:flex; align-items:center; gap:8px; }
+.tb-home{ display:flex; align-items:center; gap:8px; min-height:var(--tap); padding:0 6px 0 2px; margin-left:-2px; border-radius:var(--r-sm);
+  color:var(--mute); text-decoration:none; font-size:var(--fs-sm); font-weight:700; letter-spacing:.01em; }
+.tb-home:hover{ color:var(--ink); }
+.tb-home svg{ width:26px; height:26px; flex:none; }
+.tb-sp{ flex:1; }
+.tb-btn{ position:relative; width:var(--tap); height:var(--tap); display:grid; place-items:center; padding:0; cursor:pointer;
+  background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:var(--r-sm); box-shadow:var(--sh-1); font:inherit; }
+.tb-btn svg{ width:22px; height:22px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.tb-btn.tb-games{ width:auto; display:flex; gap:6px; padding:0 12px 0 10px; font-size:var(--fs-sm); font-weight:650; }
+.tb-btn.tb-games svg{ width:20px; height:20px; }
+.tb-btn:hover{ background:var(--panel-2); border-color:var(--line-2); }
+.tb-btn:focus-visible,.tb-home:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
+.tb-dot{ position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--panel); }
+.tb-dot[hidden]{ display:none; }

@@ -31,7 +31,7 @@
 .tile.three[data-oct="2"]{ box-shadow:inset 0 0 0 3px #fff, inset 0 0 0 6px hsl(var(--h) var(--s,62%) var(--l)), inset 0 0 0 8px rgba(255,255,255,.85), 0 2px 0 hsl(var(--h) 50% 34%); }
 .tile.three[data-oct="3"]{ box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 0 6px #fff, 0 0 10px var(--accent), 0 2px 0 hsl(var(--h) 50% 34%); }
 /* 1 and 2: neutral grey halves of a 3, quieter and a little smaller so the threes lead */
-.tile.one,.tile.two{ font-weight:700; color:#2a2c38; background:none; }
+.tile.one,.tile.two{ font-weight:700; color:#2a2c38; background:none; box-shadow:none; } /* no tile lip around the grey half-tile (A1) */
 .tile.one::before,.tile.two::before{ content:""; position:absolute; inset:2.2cqw; border-radius:6px; z-index:-1; }
 .tile.one::before{ background:hsl(230 10% 78%); } .tile.two::before{ background:hsl(230 8% 64%); }
 
@@ -92,3 +92,6 @@
   .help .ex{ gap:2px; } .help .tile,.help .gone{ width:22px; height:22px; font-size:.78rem; }
   .help .tile[data-len="2"]{ font-size:.7rem; }
 }
+/* A1 (REDESIGN.md 1.1: status copy is 14px): the hint band keeps room for two lines, as Four and Nine do, so a longer
+   keyboard targeting line never moves the board */
+.hint{ min-height:2.9em; line-height:1.45; display:flex; align-items:center; justify-content:center; }

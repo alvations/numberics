@@ -30,5 +30,6 @@ t("every games.json entry is well formed and paths are unique", () => {
   games.forEach(g => { ok(g.id && g.name && typeof g.path === "string" && /^(live|planned)$/.test(g.status), g.id); ok(!seen.has(g.path), "dup " + g.path); seen.add(g.path); });
   games.filter(g => g.status === "live" && g.path).forEach(g => ok(fs.existsSync(path.join(root, g.path, "index.html")), g.id + " page"));
 });
-require("./conventions")(t, ok, ["shared/kit.js", "shared/power.js", "shared/nav.js", "shared/theme.css"]);
+require("./conventions")(t, ok, ["shared/kit.js", "shared/power.js", "shared/nav.js", "shared/theme.css", "shared/boot.js",
+  "shared/settings.js", "shared/motion.js", "shared/audio.js", "shared/trophies.js", "shared/progress.js", "shared/ui.js"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

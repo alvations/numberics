@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Browser checks for Fifteen. Run: NODE_PATH=$(npm root -g) node tests/emu/run.cjs fifteen */
 "use strict";
+const playFit = require("./_fit.cjs");
 module.exports = async function ({ browser, url, ck, shot }) {
   const page = url + "fifteen/";
   const B = (mine, theirs) => { const o = new Array(9).fill(0); mine.forEach(n => o[n - 1] = 1); theirs.forEach(n => o[n - 1] = 2); return o; };
@@ -62,8 +63,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("ownership needs no ring", look.mineShadow === "none", look.mineShadow);
   await p.keyboard.press("Tab"); await p.evaluate(() => document.querySelector('.ft[data-n="2"]').focus());
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowLeft");
-  const fr = await p.evaluate(() => { const e = document.activeElement, c = getComputedStyle(e); return { n: e.dataset.n, outline: c.outlineStyle + " " + c.outlineColor, shadow: c.boxShadow }; });
-  ck("a focused claimed tile has exactly one ring (gold outline, no shadow rings)", /solid rgb\(242, 184, 75\)/.test(fr.outline) && fr.shadow === "none", JSON.stringify(fr));
+  const fr = await p.evaluate(() => { const e = document.activeElement, c = getComputedStyle(e); return { n: e.dataset.n, outline: c.outlineStyle + " " + c.outlineColor, shadow: c.boxShadow, gold: (n => { const pr = document.createElement("i"); pr.style.color = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); document.body.appendChild(pr); const c = getComputedStyle(pr).color; pr.remove(); return c; })("--accent") }; });
+  ck("a focused claimed tile has exactly one ring (gold outline, no shadow rings)", fr.outline === "solid " + fr.gold && fr.shadow === "none", JSON.stringify(fr));
 
   // R5: a power-up with no charge explains itself on a tap; disabled is aria-disabled, never `disabled`
   await forge(p, { owner: B([2], [4]), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 0 } });
@@ -282,7 +283,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
   p = await ctx.newPage(); const errs2 = []; p.on("pageerror", e => errs2.push(e.message));
   await p.goto(page);
-  ck("fits 390x844 without scrolling (craft nit 4)", await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight), await p.evaluate(() => document.documentElement.scrollHeight));
+  ck("the game fits 390x844 without scrolling (craft nit 4; top bar to the last control)", (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   await tile(p, 5).click();
   ck("plays with storage blocked", (await S(p)).owner[4] === 1);
   ck("no page errors with storage blocked", errs2.length === 0, errs2.join("|"));

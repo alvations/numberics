@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Browser checks for Six (run by tests/emu/run.cjs). */
 "use strict";
+const playFit = require("./_fit.cjs");
 module.exports = async function ({ browser, url, ck, shot }) {
   const page = url + "six/";
   // the line's known solution, read from the page's engine
@@ -147,7 +148,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click("#reveal"); ck("Show answer asks first", !(await st(p)).done);
   ck("first tap says it ends the run", /ends the Climb run/.test(await p.textContent("#hint")) && /Ends run/.test(await p.textContent("#reveal")));
   const row1 = (await p.locator("#board .tools").boundingBox()).height;
-  const oneLine = await p.$$eval("#board .tools .btn:not([hidden])", bs => bs.every(b => b.getBoundingClientRect().height < 40));
+  const oneLine = await p.$$eval("#board .tools .btn:not([hidden])", bs => bs.every(b => b.getBoundingClientRect().height < 50)); // one line at the 44px target (REDESIGN.md 1.1); two lines are 57px
   ck("tool row does not wrap or grow at 390px", row0 === row1 && oneLine, row0 + " " + row1);
   await shot(p, "armed");
   await p.click("#reveal");
@@ -203,10 +204,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage(); const e4 = []; p.on("pageerror", e => e4.push(e.message));
   await p.goto(page);
   ck("BEST reads a dimmed none before any play", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
-  ck("fits 390x844 without scrolling", await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight), await p.evaluate(() => document.documentElement.scrollHeight));
+  ck("the game fits 390x844 without scrolling (top bar to the last control)", (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   ck("the target is shown once in the board panel (the tier label names tools, not the target)",
     !/make|\b6\b/i.test(await p.textContent("#tier")) && (await p.textContent("#board .goal")) === "make6" && await p.evaluate(() => (document.querySelector("#board").innerText.match(/\bmake\b/gi) || []).length === 1));
-  ck("an empty gap looks live: gold ring, bold ?", await p.evaluate(() => { const b = getComputedStyle(document.querySelector(".gp.empty b")); return b.borderTopColor === "rgb(242, 184, 75)" && +b.fontWeight >= 700 && b.color === "rgb(242, 184, 75)"; }));
+  ck("an empty gap looks live: gold ring, bold ?", await p.evaluate(() => { const b = getComputedStyle(document.querySelector(".gp.empty b")); const gold = (n => { const pr = document.createElement("i"); pr.style.color = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); document.body.appendChild(pr); const c = getComputedStyle(pr).color; pr.remove(); return c; })("--accent"); return b.borderTopColor === gold && +b.fontWeight >= 700 && b.color === gold; }));
   ck("Show answer looks like a run-ender in Climb", await p.locator("#reveal.ender").count() === 1);
   // the mechanics repro: 3 ? 3 ? 3, drag 1-2, then 1-3 (add), then 1-3 again (remove): no "Maximum call stack size exceeded"
   await p.evaluate(() => {
@@ -227,7 +228,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("nested bars sit on two rows", await p.evaluate(() => { const s = window.__six.state; return s.cur.b.length === 1; }));
   await dragN(0, 2);
   ck("two nested bars draw on rows 1 and 2", JSON.stringify(await p.$$eval("#bars .bar", bs => bs.map(b => b.style.gridRow).sort())) === '["1","2"]');
-  ck("fits 390x844 with two bracket rows", await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight));
+  ck("the game fits 390x844 with two bracket rows", (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   // the Climb-ending warning is never under a toast: Hint toasts, then Show answer arms
   await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.power.hint = 2; window.__six.state = s; });
   await p.focus("#board"); await p.keyboard.press("2");
@@ -325,7 +326,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // the page still fits 390x844 with a stacked five-number line
   await p.setViewportSize({ width: 390, height: 844 });
   await setLine("74 74 74 74 74");
-  ck("390x844: a five-number line stacks its gaps and still fits", await p.locator("#line.stack").count() === 1 && await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight), await p.evaluate(() => document.documentElement.scrollHeight));
+  ck("390x844: a five-number line stacks its gaps and still fits", await p.locator("#line.stack").count() === 1 && (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   ck("round 3 checks: no page errors", e5.length === 0, e5.join("|"));
   await ctx.close();
 };

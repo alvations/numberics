@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Browser checks for Five. Run: NODE_PATH=$(npm root -g) node tests/emu/run.cjs five */
 "use strict";
+const playFit = require("./_fit.cjs");
 module.exports = async function ({ browser, url, ck, shot }) {
   const page = url + "five/";
   const idle = (p) => p.waitForFunction(() => window.__five && !window.__five.busy && (window.__five.state.turn === "p" || window.__five.state.roundOver), null, { timeout: 5000 });
@@ -115,7 +116,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await card(p);
   ck("round 3: match won reads 'You win'", (await p.textContent("#over-title")) === "You win" && (await p.textContent("#again")) === "New game", await p.textContent("#over-title"));
   ck("round 3: match summary 'Match won 3-1 · Medium'", (await p.textContent("#over-text")) === "Match won 3-1 · Medium", await p.textContent("#over-text"));
-  ck("R8: the headline is white, not gold", await p.evaluate(() => getComputedStyle(document.getElementById("over-title")).color) === "rgb(236, 235, 241)");
+  ck("R8: the headline is white (--ink), not gold", await p.evaluate(() => getComputedStyle(document.getElementById("over-title")).color === (n => { const pr = document.createElement("i"); pr.style.color = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); document.body.appendChild(pr); const c = getComputedStyle(pr).color; pr.remove(); return c; })("--ink")));
   ck("matches record counts the win", (await p.textContent("#matches")) === "1-0");
   await shot(p, "match");
   await p.reload(); await idle(p);
@@ -311,7 +312,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 4c. page height at 390x844 fits without scrolling
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   p = await ctx.newPage(); await p.goto(page); await idle(p);
-  ck("page fits 390x844 without scrolling", await p.evaluate(() => document.documentElement.scrollHeight <= 844), String(await p.evaluate(() => document.documentElement.scrollHeight)));
+  ck("the game fits 390x844 without scrolling (top bar to the New game row)", (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   await ctx.close();
 
   // 5. storage blocked

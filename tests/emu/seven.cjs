@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Browser checks for Seven. Run: NODE_PATH=$(npm root -g) node tests/emu/run.cjs seven */
 "use strict";
+const playFit = require("./_fit.cjs");
 module.exports = async function ({ browser, url, ck, shot }) {
   const page = url + "seven/";
   const W = 7, at = (r, c) => r * W + c;
@@ -253,7 +254,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
   // page height: the main phone size does not scroll (craft F15)
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); p = await ctx.newPage(); await p.goto(page);
-  ck("fits 390x844 without scrolling", await p.evaluate(() => document.documentElement.scrollHeight <= 844), String(await p.evaluate(() => document.documentElement.scrollHeight)));
+  ck("the game fits 390x844 without scrolling (top bar to the New game row)", (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   // a saved run with a broken field is not loaded (critic #4)
   await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__seven.state)); delete s.left; localStorage.setItem("numberics_seven_v1", JSON.stringify({ mode: "classic", runs: { classic: s }, best: {}, day: 0 })); });
   await p.reload();

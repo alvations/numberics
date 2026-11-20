@@ -191,7 +191,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("every targeting line starts with Tap", lines.every(([t]) => /^(Tap|Now tap) /.test(t)), JSON.stringify(lines));
   ck("phone copy says how to cancel by tapping; keyboard copy adds arrows + Enter and Esc", lines.slice(0, 4).every(([t]) => /Tap (Smash|Swap|Third) to cancel\.$/.test(t)) &&
     lines.slice(4).every(([t]) => /Esc cancels\.$/.test(t)) && lines.slice(4).filter(([t]) => /arrows \+ Enter/.test(t)).length === 3, JSON.stringify(lines));
-  ck("every targeting line fits on one line at 375 px (the board never moves)", lines.every(([, h]) => h < 25), JSON.stringify(lines));
+  ck("every targeting line fits the two-line hint band at 375 px (the board never moves)", lines.every(([, h]) => h < 45 && h === lines[0][1]), JSON.stringify(lines));
   ck("tapping the armed button cancels", await p.locator("#board.targeting").count() === 0);
   await p.evaluate(() => { window.__three.desk = matchMedia("(hover: hover) and (pointer: fine)").matches; });
 

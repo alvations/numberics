@@ -2,6 +2,7 @@
  * Browser checks for Sudoku (tests/emu/run.cjs module): power-ups, earn by progress, the solved lock (R1),
  * the two-step difficulty switch (R10), the clock across reloads, tray info (R5), toasts (R7), the end card (R8). */
 "use strict";
+const playFit = require("./_fit.cjs");
 module.exports = async function ({ browser, url, ck, shot }) {
   const page = async (opts, init) => {
     const ctx = await browser.newContext(Object.assign({ viewport: { width: 375, height: 900 }, deviceScaleFactor: 2 }, opts || {}));
@@ -31,7 +32,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("empty Best reads 'none', not a hyphen (R11)", (await p.textContent("#best")) === "none");
   ck("empty Best uses the family's one empty style: dimmed, weight 600, same size as values (TRIAGE3)", await p.evaluate(() => {
     const b = getComputedStyle(document.getElementById("best")), t = getComputedStyle(document.getElementById("time"));
-    return b.fontWeight === "600" && b.fontSize === t.fontSize && b.color === "rgb(154, 155, 176)"; }));
+    return b.fontWeight === "600" && b.fontSize === t.fontSize && b.color === (n => { const pr = document.createElement("i"); pr.style.color = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); document.body.appendChild(pr); const c = getComputedStyle(pr).color; pr.remove(); return c; })("--mute"); })); // the --mute token
   ck("New puzzle button is 16px like the family (F17)", await p.evaluate(() => getComputedStyle(document.getElementById("new")).fontSize) === "16px");
   ck("board grid has role=row children (valid ARIA)", await p.locator("#board > [role=row]").count() === 9 && await p.locator("#board [role=row] > [role=gridcell]").count() === 81);
 
@@ -238,7 +239,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 12. phone sizes: the main phone size does not scroll (F15); 320 does not scroll sideways
   ({ ctx, p, errs } = await page({ viewport: { width: 390, height: 844 } }));
-  ck("390x844: the page fits without scrolling (F15)", await p.evaluate(() => document.documentElement.scrollHeight <= 844), await p.evaluate(() => document.documentElement.scrollHeight));
+  ck("390x844: the game fits without scrolling (F15; top bar to the last control)", (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   await ctx.close();
   ({ ctx, p, errs } = await page({ viewport: { width: 320, height: 640 } }));
   await p.evaluate(() => window.__demo());

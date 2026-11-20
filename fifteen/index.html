@@ -6,12 +6,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Numberics Fifteen</title>
 <meta name="description" content="Take turns claiming the numbers 1 to 9. The first to hold three that add up to 15 wins. Best of five against the computer.">
-<meta name="theme-color" content="#14151c">
+<meta name="theme-color" content="#12131a">
+<script src="../shared/boot.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='45' font-size='34' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E15%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="../shared/theme.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="topbar" class="topbar" data-root="../"></div>
 <main id="app">
   <header>
     <div class="brand">
@@ -60,9 +62,15 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
 <script src="../shared/power.js"></script>
 <script src="engine.js"></script>
 <script src="game.js"></script>
 <script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
 </body>
 </html>
