@@ -185,7 +185,8 @@
   function tick() { try { if (w.NumbericsAudio) w.NumbericsAudio.tick(); } catch (e) { /* silent */ } }
   function hasVibrate() { try { return !!(w.navigator && typeof w.navigator.vibrate === "function"); } catch (e) { return false; } }
   function sw(field, name, sub, on) {
-    return '<div class="set"' + (on === false ? " hidden" : "") + '><div class="lbl"><b>' + name + "</b>" + (sub ? "<small>" + sub + "</small>" : "") +
+    if (on === false) return ""; // no row at all (a [hidden] .set would still show: .set sets display)
+    return '<div class="set"><div class="lbl"><b>' + name + "</b>" + (sub ? "<small>" + sub + "</small>" : "") +
       '</div><button class="sw" role="switch" aria-checked="false" type="button" aria-label="' + name + '" data-sw="' + field + '"></button></div>';
   }
   function seg(field, name, opts) {

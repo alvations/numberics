@@ -311,3 +311,9 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 :root[data-motion="full"]{ --anim:var(--m-slide); }
 :root[data-motion="reduced"]{ --anim:0ms; }
 /* ===== end B1 settings ===== */
+
+/* ===== B4 trophies + progress (shared/trophies.js): the empty-sheet line and the end-card pill row ===== */
+.tro-none{ margin:8px 0 4px; color:var(--mute); font-size:var(--fs-sm); }
+.tro-pills{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+.tro-pills[hidden]{ display:none; }
+/* ===== end B4 ===== */
