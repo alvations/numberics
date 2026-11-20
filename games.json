@@ -45,7 +45,7 @@
     "id": "five",
     "name": "Five",
     "path": "five/",
-    "status": "planned",
+    "status": "live",
     "blurb": "Add one tile onto another; at five it bursts. Beat the computer."
   },
   {

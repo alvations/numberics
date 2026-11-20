@@ -5,7 +5,10 @@
 (function () {
   "use strict";
   var LIVE = [
-    ["endless", "Endless", ""], ["sudoku", "Sudoku", "sudoku/"], ["fibonacci", "Fibonacci", "fibonacci/"]
+    ["endless", "Endless", ""],
+    ["sudoku", "Sudoku", "sudoku/"],
+    ["fibonacci", "Fibonacci", "fibonacci/"],
+    ["five", "Five", "five/"]
   ];
   var el = document.getElementById("games"); if (!el) return;
   var root = el.getAttribute("data-root") || "", cur = el.getAttribute("data-current");

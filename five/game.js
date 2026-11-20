@@ -66,9 +66,10 @@
     $("you").textContent = state.wins.p; $("cpu").textContent = state.wins.c;
     $("matches").textContent = record.won + "-" + record.lost;
     var pips = $("pips"); pips.textContent = "";
-    for (var k = 0; k < 5; k++) {
+    var R = 2 * N.ROUNDS_TO_WIN - 1;
+    for (var k = 0; k < R; k++) {
       var d = document.createElement("i");
-      if (k < state.wins.p) d.className = "p"; else if (k >= 5 - state.wins.c) d.className = "c";
+      if (k < state.wins.p) d.className = "p"; else if (k >= R - state.wins.c) d.className = "c";
       pips.appendChild(d);
     }
     pips.setAttribute("aria-label", "Rounds: you " + state.wins.p + ", computer " + state.wins.c + ", first to 3");
@@ -146,7 +147,7 @@
     fxEl.textContent = ""; busy = false;
   }
 
-  // commit a new state from an action, animate it, then hand the turn to the computer if needed
+  // commit a new state from an action, animate it, then pass the turn to the computer if needed
   function commit(res, who) {
     var before = state.tiles.slice();
     state = res.state; persist();
