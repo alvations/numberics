@@ -45,7 +45,7 @@
     if (kind && typeof kind === "object") { el = kind; kind = null; }
     el = el || document.getElementById("toast"); if (!el) return;
     if (overlayUp()) { el.classList.remove("on"); return; } // never on an end screen
-    el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.toggle("info", kind === "info");
+    el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.toggle("info", kind === "info"); el.classList.toggle("trophy", kind === "trophy");
     // Sit just above the board, over the hint line (round 2: inside the board it hid the top row;
     // at the top of the screen it hid the title). Fall back to inside the board when there is no room.
     try {

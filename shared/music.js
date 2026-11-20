@@ -25,7 +25,7 @@
   // Levels (MUSIC.md, Levels). Every style is matched by its `level` to TARGET_LUFS at unity (mix = 1), measured by
   // tools/render-music.cjs. Shipped level = unity * musicVolume * SCALE, which keeps the music peak at least 6 dB
   // under the SFX peak at default sliders (the render report checks it).
-  var TARGET_LUFS = -20, SCALE = 0.06;
+  var TARGET_LUFS = -20, SCALE = 0.016;
   var DEF = { music: true, musicVolume: 0.5, musicStyle: "auto" };
   var FADE_IN = 2.5, XFADE = 2.0, STOP_FADE = 0.8, DUCK = 0.35, LOOKAHEAD = 0.35, TICK_MS = 50;
 
@@ -39,7 +39,7 @@
   var STYLES = {
     chill: {
       name: "Chill", blurb: "Slow warm keys and a lazy beat.",
-      bpm: 84, swing: 0.2, beats: 4, root: 65, mode: "major", level: 1.33, verb: 0.24,
+      bpm: 84, swing: 0.2, beats: 4, root: 65, mode: "major", level: 0.39, verb: 0.24,
       echo: { beats: 0.75, fb: 0.3, mix: 0.22 },
       voices: {
         lead: { wave: "triangle", gain: 0.3, a: 0.006, d: 0.6, s: 0.22, r: 0.35, echo: 1, partial: 2, pg: 0.18 },
@@ -65,14 +65,14 @@
         C: { bars: 4, chords: "47 37 27 5", pad: 1, bass: "R . . . . . . .", arp: "0 2 3 4 3 2 1 2", drums: "hats" },
         A2: { bars: 8, chords: "17 67 27 57", pad: 1, bass: "R . . 5 - 8 5 .", arp: "- - 2 - - 3 - -", drums: "main", fill: "fill", harm: 1,
           lead: "- 3 5 6 5 3 2 3 | - 1' 7 6 5 . 3 5 | 6 . 4 6 1' . 2' 1' | 7 . . . - - 5 6 | 1' . 6 5 3 . 5 6 | 1' . 2' 1' 6 . 5 . | 4 . 6 5 . 3 2 . | 1 . . . - - - -",
-          alt: { harm: 0, leadOct: 12 } },
+          alt: { harm: 0, arp: "- 1 - 2 - 3 - 4" } },
       },
       form: ["I", "A", "B", "C", "A2", "B"],
     },
 
     epic: {
       name: "Epic", blurb: "Big drums, brass and a long climb.",
-      bpm: 88, swing: 0, beats: 4, root: 62, mode: "minor", level: 1.33, verb: 0.34,
+      bpm: 88, swing: 0, beats: 4, root: 62, mode: "minor", level: 0.39, verb: 0.34,
       voices: {
         lead: { wave: "sawtooth", gain: 0.13, a: 0.04, d: 0.4, s: 0.75, r: 0.25, lp: 2200 },
         lead2: { wave: "sawtooth", gain: 0.08, a: 0.12, d: 0.5, s: 0.8, r: 0.4, lp: 1300 },
@@ -96,23 +96,24 @@
         C: { bars: 8, chords: "6 7 1 1 6 7 5M 5M", pad: 1, bass: "R . . . . . . .", drums: "low", fill: "roll",
           lead: "3 . . . | 4 . 2 . | 5 . . . | - - - - | 1' . . . | 2' . 7 . | #7 . . . | - - 4 5",
           lead2: "1 . . . | 2 . . . | 3 . . . | 3 . . . | 6, . . . | 7, . . . | #7, . . . | #7, . . ." },
-        A2: { bars: 8, chords: "1 6 3 7", pad: 1, bass: "R . . R 5 . R .", drums: "main", fill: "fill", crash: 1, harm: 1,
+        A2: { bars: 8, chords: "1 6 3 7", pad: 1, bass: "R . . R 5 . R .", drums: "main", fill: "fill", crash: 1,
+          lead2: "3 . . . | 1 . . . | 3 . . . | 2 . . . | 3 . . . | 4 . . . | 5 . 3 . | 2 . . .",
           lead: "5 . . . 4 3 4 5 | 6 . . . 5 . 4 . | 3 . 5 . 1' . . . | 7 . . 6 7 . . . | 5 . . . 4 3 4 5 | 6 . . . 1' . 6 . | 5 . 3 . 1 . 3 . | 1 . . . . . - -",
-          alt: { leadOct: 12, harm: 0, lead2: "1 . . . | 1 . . . | 1 . . . | 2 . . . | 1 . . . | 1 . . . | 1 . . . | 1 . . ." } },
+          alt: { lead2: "5 . . . | 6 . . . | 5 . . . | 4 . . . | 5 . . . | 6 . . . | 7 . 5 . | 4 . . ." } },
       },
       form: ["I", "A", "B", "C", "A2"],
     },
 
     pulse: {
       name: "Pulse", blurb: "Four on the floor, a pumping pad and a bright hook.",
-      bpm: 124, swing: 0, beats: 4, root: 69, mode: "minor", level: 1.06, verb: 0.16, pump: 0.65,
+      bpm: 124, swing: 0, beats: 4, root: 69, mode: "minor", level: 0.67, verb: 0.16, pump: 0.65,
       echo: { beats: 0.75, fb: 0.32, mix: 0.2 },
       voices: {
         lead: { wave: "supersaw", gain: 0.085, a: 0.005, d: 0.2, s: 0.6, r: 0.12, lp: 3200, echo: 1 },
         lead2: { wave: "square", gain: 0.05, a: 0.2, d: 0.5, s: 0.8, r: 0.6, lp: 1600, echo: 1 },
         bass: { wave: "square", gain: 0.24, a: 0.003, d: 0.15, s: 0.5, r: 0.05, oct: -2, lp: 520 },
         pad: { wave: "supersaw", gain: 0.04, a: 0.3, d: 0.6, s: 0.85, r: 0.5, oct: -1, lp: 1700 },
-        arp: { wave: "square", gain: 0.035, a: 0.002, d: 0.09, s: 0, r: 0.03, lp: 2600, echo: 1 },
+        arp: { wave: "square", gain: 0.035, a: 0.002, d: 0.09, s: 0, r: 0.03, lp: 2600, echo: 1, oct: -1 },
       },
       kit: { k: 0.8, s: 0.26, h: 0.035, o: 0.05, c: 0.06, snare: "clap" },
       drums: {
@@ -126,11 +127,11 @@
         I: { bars: 8, chords: "4 6 1 7", pad: 1, drums: "intro" },
         U: { bars: 8, chords: "4 6 1 7", pad: 1, bass: "R - - - R - - -", arp: "0 1 2 4 2 1 0 1 2 4 5 4 2 1 0 2", drums: "build", fill: "roll" },
         D: { bars: 16, chords: "4 6 1 7", pad: 1, bass: "- R - R - 8 - R", arp: "0 1 2 4 2 1 0 1 2 4 5 4 2 1 0 2", drums: "drop", fill: "dfill", crash: 1,
-          lead: "6 - 6 1' - 6 5 4 | 3 - 3 5 - 3 4 5 | 1' - 7 5 - 3 5 . | 7 . . 5 . . 2 . | 6 - 6 1' - 6 5 4 | 3 - 3 5 - 3 4 5 | 1' - 2' 3' - 2' 1' 7 | 5 . . . 7 . 2' ." },
+          lead: "6 - 6 1' - 6 5 4 | 5 - 5 3 - 5 6 7 | 1' - 7 5 - 3 5 . | 7 . . 5 . . 2 . | 6 - 6 1' - 6 5 4 | 5 - 5 3 - 5 6 7 | 1' - 2' 3' - 2' 1' 7 | 5 . . . 7 . 2' ." },
         K: { bars: 8, chords: "4 6 1 7", pad: 1, arp: "0 - - - 2 - - - 4 - - - 2 - - -", fill: "roll",
           lead2: "1' . . . | 1' . . . | 3' . . . | 2' . 7 ." },
         D2: { bars: 16, chords: "4 6 1 7", pad: 1, bass: "- R - R - 8 - R", arp: "0 1 2 4 2 1 0 1 2 4 5 4 2 1 0 2", drums: "drop", fill: "dfill", crash: 1,
-          lead: "6 - 6 1' - 6 5 4 | 3 - 3 5 - 3 4 5 | 1' - 7 5 - 3 5 . | 7 . . 5 . . 2 . | 4' - 3' 2' - 1' 2' 3' | 1' - 7 1' - 5 6 7 | 1' - 2' 3' - 5' 3' 2' | 1' . . . 7 . 5 .",
+          lead: "6 - 6 1' - 6 5 4 | 5 - 5 3 - 5 6 7 | 1' - 7 5 - 3 5 . | 7 . . 5 . . 2 . | 4' - 3' 2' - 1' 2' 3' | 1' - 7 1' - 5 6 7 | 1' - 2' 3' - 5' 3' 2' | 1' . . . 7 . 5 .",
           alt: { harm: 1 } },
       },
       form: ["I", "U", "D", "K", "D2"],
@@ -138,7 +139,7 @@
 
     blocks: {
       name: "Blocks", blurb: "A quick folk dance on an old handheld chip.",
-      bpm: 150, swing: 0, beats: 4, root: 67, mode: "harmonic", level: 1.35, verb: 0.08,
+      bpm: 150, swing: 0, beats: 4, root: 67, mode: "harmonic", level: 0.55, verb: 0.08,
       voices: {
         lead: { wave: "square", gain: 0.085, a: 0.002, d: 0.12, s: 0.55, r: 0.04 },
         lead2: { wave: "pulse25", gain: 0.05, a: 0.002, d: 0.12, s: 0.5, r: 0.04 },
@@ -169,7 +170,7 @@
 
     pocket: {
       name: "Pocket", blurb: "A bright little town tune on a pocket console.",
-      bpm: 116, swing: 0.1, beats: 4, root: 74, mode: "major", level: 1.58, verb: 0.1,
+      bpm: 116, swing: 0.1, beats: 4, root: 74, mode: "major", level: 0.55, verb: 0.1,
       echo: { beats: 0.5, fb: 0.22, mix: 0.14 },
       voices: {
         lead: { wave: "pulse25", gain: 0.075, a: 0.003, d: 0.15, s: 0.6, r: 0.05, echo: 1 },
@@ -188,7 +189,7 @@
           lead: "1 . 3 5 . 3 6 5 | 4 . 6 1' . 6 5 4 | 5 . 2 5 7 . 6 5 | 3 . 1 . 5, . - - | 6 . 1' 6 5 . 3 . | 2 . 4 2 1 . 7, . | 5 . 4 3 2 . 3 4 | 1 . . . - - - -",
           alt: { harm: 1 } },
         B: { bars: 8, chords: "4 4 1 1 2M7 2M7 5 5", bass: "R - 3 - 5 - 3 -", arp: "- 0 - 1 - 2 - 1", drums: "main", fill: "fill",
-          lead: "1' . 2' 1' 7 . 6 . | 6 . 4 . 6 . 1' . | 7 . 6 5 3 . 5 . | 6 . . . - - 5 6 | #4 . 6 2' . 6 #4 . | 5 . #4 . 6 . 2' . | 1' . 7 . 6 . 5 . | 2' . . . 7 . 5 ." },
+          lead: "1' . 2' 1' 7 . 6 . | 1' . 6 . 4 . 6 . | 7 . 6 5 3 . 5 . | 6 . . . - - 5 6 | #4 . 6 2' . 6 #4 . | 5 . #4 . 6 . 2' . | 1' . 7 . 6 . 5 . | 2' . . . 7 . 5 ." },
         A2: { bars: 8, chords: "1 4 5 1 6 2 5 1", bass: "R - 5 - 8 - 5 -", arp: "- 0 - 1 - 2 - 1", drums: "main", fill: "fill", harm: 1,
           lead: "1 3 5 1' . 6 5 3 | 4 6 1' 2' . 1' 6 4 | 5 . 2 5 7 6 5 4 | 3 . 1 . 5, . 1 2 | 3 . 1' 6 5 . 3 . | 2 . 4 2 1 . 7, . | 5 4 3 4 2 . 3 4 | 1 . . . - - 5, -",
           alt: { harm: 0 } },
@@ -199,7 +200,7 @@
 
     quest: {
       name: "Quest", blurb: "A march over open country, bound for somewhere far.",
-      bpm: 132, swing: 0, beats: 4, root: 70, mode: "major", level: 1.32, verb: 0.14,
+      bpm: 132, swing: 0, beats: 4, root: 70, mode: "major", level: 0.4, verb: 0.14,
       voices: {
         lead: { wave: "square", gain: 0.075, a: 0.004, d: 0.2, s: 0.7, r: 0.06 },
         lead2: { wave: "pulse25", gain: 0.045, a: 0.004, d: 0.2, s: 0.65, r: 0.06 },
@@ -230,7 +231,7 @@
 
     drift: {
       name: "Drift", blurb: "Soft bells and a slow pad, no drums.",
-      bpm: 66, swing: 0, beats: 4, root: 69, mode: "lydian", level: 1.43, verb: 0.42,
+      bpm: 66, swing: 0, beats: 4, root: 69, mode: "lydian", level: 0.49, verb: 0.42,
       echo: { beats: 1, fb: 0.38, mix: 0.28 },
       voices: {
         lead: { wave: "sine", gain: 0.15, a: 0.004, d: 1.6, s: 0, r: 1.0, partial: 3, pg: 0.12, echo: 1 },
@@ -623,6 +624,7 @@
       w.addEventListener("numberics:settings", function (e) {
         var before = resolve(), wasOn = cfg.on;
         cfg = readCfg(e && e.detail, cfg);
+        if (e && e.detail && "musicStyle" in e.detail) want = null; // a saved choice beats an earlier setStyle()
         if (!cfg.on) { if (eng) ramp(eng.mix.gain, 0, 0.3); if (wasOn) halt(0.3); return; }
         if (eng) ramp(eng.mix.gain, mixTarget(), 0.08);
         if (wanted && (!cur || !wasOn || resolve() !== before)) go();
