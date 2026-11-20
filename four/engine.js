@@ -219,7 +219,7 @@
   // Strength per level. loose: chance a turn picks at random among the columns the search does not see losing;
   // blunder: chance a loose turn ignores even that (any legal column). A win in one is always taken.
   // Tuned against a safe-move player (never leaves the computer an immediate line for its shown disc), see tests.
-  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.35 }, medium: { depth: 6, nodes: 20000, loose: 0.3, blunder: 0 },
+  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.35 }, medium: { depth: 6, nodes: 20000, loose: 0.85, blunder: 0.2 },
              hard: { depth: 14, nodes: 40000, loose: 0, blunder: 0 } };
 
   function Search(own, num, toMove, masks, budget) {
@@ -384,23 +384,21 @@
     if (state.over || state.turn !== 2) return { state: state, actions: [] };
     var s = clone(state), lvName = s.level, side = 1, actions = [];
     function act(name, arg) { var u = use(s, name, arg); if (u.ok) { s = u.state; actions.push({ type: name, arg: arg }); } return u.ok; }
-    var col;
-    if (lvName === "hard") col = hardPowers(s, act);
+    var col, lp = LV[lvName] || LV.medium, loose = false;
+    if (lp.loose) { var rr = rand(s.aiSeed); s.aiSeed = rr[1]; loose = rr[0] < lp.loose; }
+    if (lvName === "hard" && !loose) col = hardPowers(s, act);
     if (col === undefined || col === null) {
       var r = analyse(s, {});
       col = r ? r.best : legal(s)[0];
-      var lp = LV[lvName] || LV.medium;
-      if (lp.loose && r && r.score < WINF - 64) {
-        // a loose turn: always takes a win in one (handled above), otherwise picks at random
-        var rr = rand(s.aiSeed); s.aiSeed = rr[1];
-        if (rr[0] < lp.loose) {
-          var all = Object.keys(r.scores).map(Number);
-          var ok = all.filter(function (c) { return r.scores[c] > -WINF + 64; });
-          var r3 = rand(s.aiSeed); s.aiSeed = r3[1];
-          if (!ok.length || r3[0] < lp.blunder) ok = all;
-          var r2 = rand(s.aiSeed); s.aiSeed = r2[1];
-          col = ok[Math.floor(r2[0] * ok.length)];
-        }
+      if (loose && r && r.score < WINF - 64) {
+        // a loose turn: a found win is always played, otherwise a random column the search does not see losing
+        // (or, on a blunder, any legal column)
+        var all = Object.keys(r.scores).map(Number);
+        var ok = all.filter(function (c) { return r.scores[c] > -WINF + 64; });
+        var r3 = rand(s.aiSeed); s.aiSeed = r3[1];
+        if (!ok.length || r3[0] < lp.blunder) ok = all;
+        var r2 = rand(s.aiSeed); s.aiSeed = r2[1];
+        col = ok[Math.floor(r2[0] * ok.length)];
       }
     }
     var d = drop(s, col);

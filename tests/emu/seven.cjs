@@ -82,7 +82,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("held disc sits before the label, apart from the count badge", await p.locator("#tray .pw").nth(2).evaluate(b => b.firstChild.classList.contains("mini")));
   ck("held disc shown on the Hold button", (await p.locator("#tray .pw").nth(2).locator(".mini").count()) === 1);
   await setup(p, ["e3....e", "eee...e"], { power: { undo: 1, smash: 0, hold: 0, crack: 1 } });
-  await p.keyboard.press("4"); s = await st(p);
+  await p.keyboard.press("4"); s = await st(p); await shot(p, "crack-target");
   ck("Crack first marks the eggs it would crack, spending nothing (cold #16)", s.power.crack === 1 && s.grid[at(5, 0)] === 8 && await p.locator(".disc.aim").count() === 2 && /marked eggs/.test(await p.textContent("#hint")));
   await p.keyboard.press("Escape");
   ck("Esc cancels Crack", (await st(p)).power.crack === 1 && await p.locator(".disc.aim").count() === 0);
@@ -105,19 +105,20 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("hint says how many drops until the eggs rise", (await p.textContent("#hint")) === "7 drops until the eggs rise.");
 
   // 4. rising row and the end screen: no Undo (R1), an honest final board (cold #10), a new best (R8)
-  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 1e8, used: 2, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 9000, used: 2, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
   const before = (await st(p)).grid;
   await p.mouse.click(box.x + box.width * (3.5 / 7), box.y + box.height * 0.3); await idle(p);
   s = await st(p);
   ck("overflow ends the run", s.over && await p.isVisible("#over"));
   ck("the end screen offers no Undo (R1)", await p.locator("#over button").count() === 2 && !(await p.locator("#over").textContent()).includes("Undo"));
   ck("Undo key after the end does nothing but explain", await (async () => { await p.keyboard.press("1"); const x = await st(p); return x.over && x.power.undo === 1 && /run is over/.test(await p.textContent("#hint")); })());
-  ck("summary is one line: score, level, power-ups", (await p.textContent("#over-text")) === "Score 100,000,004 · level 1 · power-ups 2");
+  ck("summary is one line: score, level, power-ups", (await p.textContent("#over-text")) === "Score 9,000 · level 1 · power-ups 2", await p.textContent("#over-text"));
   ck("a new best says so", await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
   ck("final well is the well the player saw (no shift up)", s.grid.every((v, i) => i === at(6, 3) ? v === 4 : v === before[i]));
   ck("the pushed-out disc is ringed", await p.locator(".disc.out").count() === 1);
   await shot(p, "over");
   await p.click("#over-view");
+  await shot(p, "over-well");
   ck("See the well hides the summary and explains the loss", !(await p.isVisible("#over")) && /pushed the ringed discs/.test(await p.textContent("#hint")));
   await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.5);
   ck("tapping the well brings the summary back", await p.isVisible("#over") && (await st(p)).over);

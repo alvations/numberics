@@ -70,74 +70,99 @@ const unitDone = (s, u) => S.UNIT[u].every(c => s.grid[c] === s.solution[c]);
 function fillUnit(s, u, leave) { S.UNIT[u].forEach(c => { if (c !== leave && !s.grid[c]) s = S.place(s, c, s.solution[c]); }); return s; }
 function openUnit(s) { for (let u = 0; u < 27; u++) { const e = S.UNIT[u].filter(c => !s.grid[c]); if (e.length >= 2) return u; } }
 
-t("new game stock: one Reveal, nothing else; nothing used; all-given units pre-paid", () => {
+t("new game stock: one Reveal, nothing else; nothing used; no progress yet", () => {
   const s = S.newState(S.generate(1, "easy"));
-  eq(s.stock, { reveal: 1, check: 0, cands: 0 }); eq(s.used, { reveal: 0, check: 0, cands: 0 });
-  for (let u = 0; u < 27; u++) eq(!!(s.paid & (1 << u)), unitDone(s, u), "unit " + u);
+  eq(s.stock, { reveal: 1, check: 0, cands: 0 }); eq(s.used, { reveal: 0, check: 0, cands: 0 }); eq(s.high, 0); eq(S.filled(s), 0);
 });
-t("completing a correct unit pays exactly one charge, once", () => {
-  let s = S.newState(S.generate(21, "medium")); const u = openUnit(s), last = S.UNIT[u].filter(c => !s.grid[c]).pop();
-  s = fillUnit(s, u, last); const before = S.total(s.stock);
-  const s1 = S.place(s, last, s.solution[last]);
-  ok(s1.paid & (1 << u), "unit marked paid"); eq(S.total(s1.stock), before + 1); eq(s1.gain.length, 1);
-  const again = S.place(S.place(s1, last, 0), last, s1.solution[last]); // erase and re-place: no second pay
-  eq(S.total(again.stock), before + 1, "a unit pays only once");
-});
-t("one move pays at most one charge even when it finishes several units", () => {
-  for (const seed of [3, 4, 5, 6]) {
-    let s = S.newState(S.generate(seed, "easy")); const e = emptiesOf(s), c = e[0];
-    e.forEach(k => { if (k !== c) s = S.place(s, k, s.solution[k]); });
-    const t0 = S.total(s.stock), n = S.place(s, c, s.solution[c]);
-    ok(n.solved); eq(S.total(n.stock) - t0, 1, "row+col+box at once still pays one");
+// fill n empty cells (in order) with `digit(c)`; returns the state
+function fillN(s, n, digit) { const e = emptiesOf(s).filter(c => !s.grid[c]); for (let i = 0; i < n; i++) s = S.place(s, e[i], digit(s, e[i])); return s; }
+const right = (s, c) => s.solution[c], wrongD = (s, c) => (s.solution[c] % 9) + 1;
+t("progress pays one charge at every new multiple of 9 filled cells, and only there", () => {
+  let s = S.newState(S.generate(21, "medium")), t0 = S.total(s.stock);
+  for (let i = 1; i <= 27; i++) {
+    s = fillN(s, 1, right);
+    eq(S.total(s.stock) - t0, Math.floor(i / 9), "after " + i + " cells");
+    eq(s.gain.length, i % 9 === 0 ? 1 : 0, "gain flag at " + i);
   }
 });
-t("a complete but WRONG unit does not pay", () => {
-  let s = S.newState(S.generate(22, "easy")); const u = openUnit(s), e = S.UNIT[u].filter(c => !s.grid[c]);
-  const a = e[0], b = e[1];
-  s = fillUnit(s, u, a); s = S.place(s, b, s.solution[a]); // b holds a's digit
-  const t0 = S.total(s.stock); s = S.place(s, a, s.solution[b]); // unit full, digits swapped
-  ok(!(s.paid & (1 << u))); eq(S.total(s.stock), t0);
+t("a reward reveals nothing: wrong digits earn exactly like right ones", () => {
+  for (const seed of [3, 7, 21]) {
+    const a = fillN(S.newState(S.generate(seed, "medium")), 18, right), b = fillN(S.newState(S.generate(seed, "medium")), 18, wrongD);
+    eq(S.total(a.stock), S.total(b.stock)); eq(a.stock, b.stock, "same kinds, same order");
+  }
+  // the old leak (mechanics #3): fill the last cell of a unit right or wrong; the stock must not differ
+  let s = S.newState(S.generate(3, "medium")); const u = openUnit(s), last = S.UNIT[u].filter(c => !s.grid[c]).pop();
+  s = fillUnit(s, u, last);
+  eq(S.place(s, last, s.solution[last]).stock, S.place(s, last, wrongD(s, last)).stock);
 });
-t("a unit finished by Reveal does not pay, and Reveal spends its charge", () => {
-  let s = S.newState(S.generate(23, "medium")); const u = openUnit(s), last = S.UNIT[u].filter(c => !s.grid[c]).pop();
-  s = fillUnit(s, u, last); s.stock = Object.assign({}, s.stock, { reveal: 1 });
-  const t0 = S.total(s.stock), n = S.reveal(s, last);
-  eq(n.grid[last], s.solution[last]); ok(n.paid & (1 << u), "marked paid so it never pays later");
-  eq(n.stock.reveal, 0); eq(n.used.reveal, 1); eq(S.total(n.stock), t0 - 1); eq(n.hints, 1);
-  ok(S.reveal(n, emptiesOf(n).find(c => !n.grid[c])) === n, "no charge, no reveal");
+t("the high-water mark never drops: Erase and Undo cannot farm a charge twice", () => {
+  let s = S.newState(S.generate(24, "medium")); s = fillN(s, 8, right);
+  const c = emptiesOf(s).find(k => !s.grid[k]), t0 = S.total(s.stock);
+  const s1 = S.place(s, c, s.solution[c]); eq(S.total(s1.stock), t0 + 1);
+  const u1 = S.undo(s1); eq(u1.grid[c], 0); eq(u1.stock, s1.stock, "Undo keeps an earned charge"); eq(u1.high, 9, "and the mark");
+  const s2 = S.place(u1, c, s.solution[c]); eq(S.total(s2.stock), t0 + 1, "re-filling after Undo pays nothing");
+  const e2 = S.place(S.place(s2, c, 0), c, s.solution[c]); eq(S.total(e2.stock), t0 + 1, "erase and re-fill pays nothing");
+  // reach 18 only by filling 9 NEW cells above the mark
+  let x = S.place(e2, c, 0); x = fillN(x, 9, right); eq(S.total(x.stock), t0 + 1, "back at 17 filled: no new step");
+  x = fillN(x, 1, right); eq(S.total(x.stock), t0 + 2);
+});
+t("a cell filled by Reveal raises the mark but never pays (R2), and Reveal spends its charge", () => {
+  let s = S.newState(S.generate(23, "medium")); s = fillN(s, 8, right);
+  const c = emptiesOf(s).find(k => !s.grid[k]), t0 = S.total(s.stock);
+  const n = S.reveal(s, c);
+  eq(n.grid[c], s.solution[c]); eq(n.high, 9); eq(n.gain, []); eq(n.stock.reveal, s.stock.reveal - 1); eq(S.total(n.stock), t0 - 1); eq(n.hints, 1);
+  ok(S.reveal(Object.assign({}, n, { stock: { reveal: 0, check: 0, cands: 0 } }), emptiesOf(n).find(k => !n.grid[k])).grid, "refused without a charge");
+  // Reveal then Undo then type the shown digit: no reward (mechanics #4)
+  const back = S.undo(n), typed = S.place(back, c, s.solution[c]);
+  eq(typed.gain, []); eq(S.total(typed.stock), t0 - 1);
+});
+t("the move that solves the board never pays (R7: no power-up on the final move)", () => {
+  for (const seed of [3, 4, 5, 6, 40, 41, 42]) for (const d of ["easy", "medium", "hard"]) {
+    let s = S.newState(S.generate(seed, d)); const e = emptiesOf(s), c = e[e.length - 1];
+    e.forEach(k => { if (k !== c) s = S.place(s, k, s.solution[k]); });
+    const n = S.place(s, c, s.solution[c]); ok(n.solved); eq(n.gain, [], d + "/" + seed); eq(n.stock, s.stock);
+  }
 });
 t("Reveal is refused on givens and correct cells (no charge spent)", () => {
   const s = S.newState(S.generate(8, "medium")), g = s.puzzle.findIndex(Boolean), c = s.puzzle.findIndex(v => !v);
   ok(S.reveal(s, g) === s); const p = S.place(s, c, s.solution[c]); ok(S.reveal(p, c) === p);
   const w = S.place(s, c, (s.solution[c] % 9) + 1), r = S.reveal(w, c); eq(r.grid[c], s.solution[c], "fixes a wrong digit");
 });
-t("undo rewinds a reward (re-earning gives the same kind, net zero)", () => {
-  let s = S.newState(S.generate(24, "medium")); const u = openUnit(s), last = S.UNIT[u].filter(c => !s.grid[c]).pop();
-  s = fillUnit(s, u, last); const stock0 = s.stock;
-  const s1 = S.place(s, last, s.solution[last]), u1 = S.undo(s1);
-  eq(u1.stock, stock0); ok(!(u1.paid & (1 << u)));
-  const s2 = S.place(u1, last, s.solution[last]); eq(s2.stock, s1.stock, "same reward, deterministic");
-});
-t("undo never refunds a spent charge, so nothing can be farmed", () => {
+t("undo never refunds a spent charge (R3)", () => {
   let s = S.newState(S.generate(25, "medium")); const c = emptiesOf(s)[0];
   const r = S.reveal(s, c); eq(r.stock.reveal, 0);
   const back = S.undo(r); eq(back.grid[c], 0); eq(back.stock.reveal, 0, "reveal stays spent"); eq(back.used.reveal, 1);
-  // earn -> spend -> undo both -> re-earn: still net zero (the debt is repaid)
-  let a = S.newState(S.generate(26, "medium")); a.stock = { reveal: 0, check: 0, cands: 0 };
-  const u = openUnit(a), last = S.UNIT[u].filter(k => !a.grid[k]).pop(); a = fillUnit(a, u, last);
-  const steps = a.history.length, b = S.place(a, last, a.solution[last]), k = b.gain[0];
-  let x = k === "check" ? S.check(b).state : k === "reveal" ? S.reveal(b, emptiesOf(b).find(q => !b.grid[q])) : S.fillBox(b, emptiesOf(b).find(q => !b.grid[q]));
-  eq(x.stock[k], 0);
-  while (x.history.length > steps) x = S.undo(x);
-  ok(!(x.stock[k] > 0), "no usable charge after rewinding the reward");
-  const y = S.place(x, last, x.solution[last]); eq(y.stock[k], 0, "re-earning repays the debt: " + JSON.stringify(y.stock));
+  let a = fillN(S.newState(S.generate(26, "medium")), 9, right); a.stock = { reveal: 0, check: 1, cands: 1 };
+  const k = S.check(a).state; eq(S.undo(k).stock.check, 0, "Check is not an Undo step and stays spent");
+  const f = S.fillBox(a, emptiesOf(a).find(q => !a.grid[q])); eq(S.undo(f).stock.cands, 0, "Candidates stays spent");
+});
+t("property: no sequence of moves, erases and undos earns more than one charge per 9 cells ever filled", () => {
+  for (let seed = 1; seed <= 12; seed++) {
+    let s = S.newState(S.generate(seed, ["easy", "medium", "hard"][seed % 3])), r = S.generate(seed, "easy").seed * 7 + 1;
+    const rand = () => { r = (Math.imul(r, 1103515245) + 12345) >>> 0; return r / 4294967296; };
+    const start = S.total(s.stock);
+    for (let i = 0; i < 600 && !s.solved; i++) {
+      const e = emptiesOf(s), c = e[Math.floor(rand() * e.length)], x = rand();
+      s = x < 0.15 ? S.undo(s) : x < 0.25 ? S.place(s, c, 0) : S.place(s, c, rand() < 0.7 ? s.solution[c] : 1 + Math.floor(rand() * 9));
+      ok(S.total(s.stock) - start <= Math.floor(s.high / 9), "seed " + seed + " step " + i);
+      ok(s.high >= S.filled(s), "the mark is never below the board");
+    }
+  }
 });
 t("the stock caps at 9 per kind and stays deterministic per seed", () => {
-  const run = (seed) => { let s = S.newState(S.generate(seed, "easy")); emptiesOf(s).forEach(c => { s = S.place(s, c, s.solution[c]); }); return s.stock; };
+  const run = (seed) => { let s = S.newState(S.generate(seed, "hard")); emptiesOf(s).forEach(c => { s = S.place(s, c, s.solution[c]); }); return s.stock; };
   const a = run(31); eq(a, run(31)); S.KINDS.forEach(k => ok(a[k] <= 9, k));
-  let s = S.newState(S.generate(32, "easy")); s.stock = { reveal: 9, check: 9, cands: 8 };
-  const u = openUnit(s), last = S.UNIT[u].filter(c => !s.grid[c]).pop(); s = fillUnit(s, u, last);
-  s.stock = { reveal: 9, check: 9, cands: 8 }; s = S.place(s, last, s.solution[last]); eq(s.stock, { reveal: 9, check: 9, cands: 9 });
+  let s = fillN(S.newState(S.generate(32, "easy")), 8, right); s.stock = { reveal: 9, check: 9, cands: 8 };
+  s = fillN(s, 1, right); eq(s.stock, { reveal: 9, check: 9, cands: 9 });
+  s = fillN(s, 9, right); eq(s.stock, { reveal: 9, check: 9, cands: 9 }, "all full: nothing more");
+});
+t("a full puzzle pays about 4 to 6 charges (easy 4, medium 5, hard 5 or 6)", () => {
+  const want = { easy: [4, 4], medium: [5, 5], hard: [5, 6] };
+  for (const d of ["easy", "medium", "hard"]) for (let seed = 50; seed < 56; seed++) {
+    let s = S.newState(S.generate(seed, d)); const t0 = S.total(s.stock);
+    emptiesOf(s).forEach(c => { s = S.place(s, c, s.solution[c]); });
+    const got = S.total(s.stock) - t0; ok(got >= want[d][0] && got <= want[d][1], d + "/" + seed + ": " + got);
+  }
 });
 t("Check marks exactly the wrong digits, spends once, leaves the board and history alone", () => {
   let s = S.newState(S.generate(27, "medium")); const e = emptiesOf(s);
@@ -166,15 +191,37 @@ t("solved board refuses every power-up", () => {
   s.stock = { reveal: 3, check: 3, cands: 3 }; ok(s.solved);
   ok(S.check(s).state === s); ok(S.fillBox(s, 0) === s); ok(S.reveal(s, 0) === s);
 });
+t("R1: Undo is refused on a solved board, so a solved puzzle stays solved (blocker)", () => {
+  for (const d of ["easy", "medium", "hard"]) {
+    let s = S.newState(S.generate(12, d)); emptiesOf(s).forEach(c => { s = S.place(s, c, s.solution[c]); });
+    ok(s.solved && s.history.length > 0); ok(!S.canUndo(s)); ok(S.undo(s) === s, d + ": undo returned a new state");
+    ok(S.place(s, emptiesOf(s)[0], 0) === s, "erase refused too");
+    ok(S.toggleNote(s, emptiesOf(s)[0], 1) === s);
+  }
+  const s0 = S.newState(S.generate(12, "easy")); ok(!S.canUndo(s0), "nothing to undo at the start");
+  ok(S.canUndo(S.place(s0, emptiesOf(s0)[0], 1)));
+});
 t("old saves (before power-ups) upgrade cleanly and keep their progress", () => {
   let s = S.newState(S.generate(29, "easy")); const e = emptiesOf(s);
   s = S.place(s, e[0], s.solution[e[0]]);
-  const old = JSON.parse(JSON.stringify(s)); delete old.stock; delete old.used; delete old.paid; delete old.gain; old.hints = 2;
-  old.history = old.history.map(h => ({ grid: h.grid, notes: h.notes }));
+  const old = JSON.parse(JSON.stringify(s)); delete old.stock; delete old.used; delete old.high; delete old.gain; old.hints = 2;
   const u = S.upgrade(old);
-  eq(u.grid, s.grid); eq(u.stock, S.START); eq(u.used, { reveal: 2, check: 0, cands: 0 }); eq(u.paid, S.unitMask(u.grid, u.solution));
+  eq(u.grid, s.grid); eq(u.stock, S.START); eq(u.used, { reveal: 2, check: 0, cands: 0 }); eq(u.high, 1, "progress so far pays nothing again");
   eq(S.undo(u).grid[e[0]], 0, "old history entries still undo");
   const bad = Object.assign({}, s, { stock: { reveal: 40, check: 0, cands: 0 } }); eq(S.upgrade(bad).stock.reveal, 9, "clamped to the cap");
+});
+t("saves from the unit-reward version (paid mask, stock in history, a debt) load and play on", () => {
+  let s = S.newState(S.generate(30, "medium")); s = fillN(s, 12, right);
+  const old = JSON.parse(JSON.stringify(s)); delete old.high; old.paid = 5;
+  old.history = old.history.map(h => Object.assign({}, h, { stock: { reveal: 1, check: 0, cands: 0 }, used: { reveal: 0, check: 0, cands: 0 }, paid: 1 }));
+  old.stock = { reveal: 2, check: -1, cands: 1 };
+  const u = S.upgrade(old);
+  ok(!("paid" in u)); eq(u.high, 12); eq(u.stock, { reveal: 2, check: 0, cands: 1 }, "a debt is forgiven, the rest kept");
+  const back = S.undo(u); eq(back.stock, u.stock, "old history stock is ignored by Undo"); eq(S.filled(back), 11);
+  let x = fillN(u, 5, right); eq(S.total(x.stock), S.total(u.stock), "16 filled: below the next step");
+  x = fillN(x, 2, right); eq(S.total(x.stock), S.total(u.stock) + 1, "18 filled pays");
+  const solvedOld = JSON.parse(JSON.stringify(old)); solvedOld.grid = solvedOld.solution.slice(); solvedOld.solved = true;
+  ok(S.upgrade(solvedOld).solved && S.undo(S.upgrade(solvedOld)).solved, "an old solved save stays locked");
 });
 t("uniqueness still holds across many seeds (power-ups never touch the generator)", () => {
   for (let seed = 100; seed < 112; seed++) eq(S.countSolutions(S.generate(seed, ["easy", "medium", "hard"][seed % 3]).puzzle, 2), 1);
@@ -187,11 +234,10 @@ t("completing the grid correctly marks solved and locks the board", () => {
 });
 t("a full but wrong grid is NOT solved", () => {
   let s = S.newState(S.generate(9, "easy")); const empties = s.puzzle.map((v, i) => v ? -1 : i).filter(i => i >= 0);
-  empties.forEach(i => { s = S.place(s, i, s.solution[i]); });
-  ok(s.solved);
-  const bad = Object.assign({}, S.undo(s)); // one cell short, then fill it wrongly
-  const last = empties[empties.length - 1], wrong = (s.solution[last] % 9) + 1;
-  ok(!S.place(bad, last, wrong).solved);
+  const last = empties[empties.length - 1];
+  empties.forEach(i => { if (i !== last) s = S.place(s, i, s.solution[i]); });
+  ok(!s.solved); // one cell short, then fill it wrongly
+  ok(!S.place(s, last, (s.solution[last] % 9) + 1).solved);
 });
 
 const root = path.join(__dirname, "..");

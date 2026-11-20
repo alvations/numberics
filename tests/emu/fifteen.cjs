@@ -38,7 +38,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.waitForFunction(() => window.__fifteen.state.turn === 1 || !!window.__fifteen.state.result, null, { timeout: 3000 });
 
   // ownership is the fill (craft N1): gold for you, cool for the computer, neutral when free; one focus ring (F9)
-  await forge(p, { owner: B([2, 8], [4, 5]), turn: 1 });
+  await forge(p, { owner: B([2, 8], [4, 5]), turn: 1 }); await p.waitForTimeout(350);   // let the colour transition settle
   const look = await p.evaluate(() => {
     const cs = (n) => getComputedStyle(document.querySelector('.ft[data-n="' + n + '"]'));
     const root = getComputedStyle(document.documentElement), tmp = document.createElement("i"); document.body.appendChild(tmp);
@@ -75,7 +75,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // R9: keyboard targeting from anywhere: key 2 arms Erase, arrows move, Enter erases
   await forge(p, { owner: B([5, 2], [8, 1]), turn: 1, power: { undo: 0, erase: 1, peek: 0, double: 0 } });
-  await p.evaluate(() => document.activeElement && document.activeElement.blur());
+  await p.evaluate(() => { document.querySelector('.ft[data-n="5"]').focus(); document.activeElement.blur(); });   // cursor on 5
   await p.keyboard.press("2");
   ck("Erase armed", await p.locator("#board.targeting").count() === 1);
   // cursor starts on the centre cell (5); move to 8 (bottom middle in Numbers view)
@@ -85,9 +85,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("Enter erases the number under the cursor", (await S(p)).owner[7] === 0 && (await S(p)).power.erase === 0);
   ck("the erase target style is gone", await p.locator(".ft.target").count() === 0);
   // Enter on a focused button is that button, never a claim
-  await p.focus("#v-grid"); await p.keyboard.press("Enter");
-  ck("Enter on the Grid button switches the view and claims nothing", await p.evaluate(() => window.__fifteen.view === "grid") && (await S(p)).owner.filter(o => o === 1).length === 2);
-  await p.click("#v-numbers");
+  await p.evaluate(() => { const st = window.__fifteen.state; st.moves = 3; window.__fifteen.state = st; });
+  await p.focus("#new"); await p.keyboard.press("Enter");
+  ck("Enter on the New game button asks Sure? and claims nothing", /^Sure\?/.test(await p.textContent("#new")) && (await S(p)).owner.filter(o => o === 1).length === 2);
   // R7: a warning uses the neutral toast
   await forge(p, { owner: B([5], [8]), turn: 1 });
   await tile(p, 8).click();

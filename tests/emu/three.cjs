@@ -108,7 +108,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await set(p, [1, 3, 0, 0, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12], { moves: 3, power: { undo: 1, smash: 2, swap: 1, third: 1 } });
   await p.focus("#board");
   await p.keyboard.press("2");
-  ck("keyboard arming shows a cursor on the first tile", await p.locator("#tiles .tiles .tile.cur").count() === 1 && /Arrows/.test(await p.textContent("#hint")));
+  ck("keyboard arming shows a cursor on the first tile", await p.locator("#tiles .tile.cur").count() === 1 && /Arrows/.test(await p.textContent("#hint")));
   await shot(p, "kbd-targeting");
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown");
   ck("arrows move the cursor, not the tiles", (await st(p)).grid[5] === 2 && await p.evaluate(() => { const c = document.querySelector(".tile.cur"); return c && c.textContent === "2"; }));

@@ -97,7 +97,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click("#again");
 
   // 4. round end, match end, misere unlock, learn view
-  await forge(p, { heaps: [0, 4, 0], s: { score: { you: 0, cpu: 0 } } });
+  await forge(p, { heaps: [0, 4, 0], s: { score: { you: 0, cpu: 0 }, round: 1 } });
   await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take");
   ck("last take wins the round", await p.isVisible("#over") && (await p.textContent("#over-title")) === "Round won");
   await shot(p, "round");
@@ -140,8 +140,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("Hard Learn: no live nim-sum, and it says so (R4)", !/Nim-sum \d/.test(await p.textContent("#learn")) && /Hard shows no live nim-sum \(Easy and Medium do\)/.test(await p.textContent("#learn")) && await p.locator(".heap .bin").count() > 0);
   // F9: a focused tile and the selected tile look different
   await forge(p, { heaps: [3, 4, 5] });
-  await p.locator('.heap[data-i="0"]').click();
-  await p.keyboard.press("Tab");
+  await p.locator('.heap[data-i="1"]').click();
+  await p.focus("#board"); await p.keyboard.press("Tab"); // focus lands on tile 0, tile 1 stays selected
   const rings = await p.evaluate(() => { const a = document.querySelector(".heap.sel"), f = document.activeElement; const g = (e) => { const c = getComputedStyle(e); return c.outlineStyle + c.outlineColor + c.boxShadow; }; return { sel: g(a), foc: f && f.classList.contains("heap") && !f.classList.contains("sel") ? g(f) : null }; });
   ck("focus ring and selection ring differ (F9)", rings.foc && rings.foc !== rings.sel, JSON.stringify(rings));
   await p.keyboard.press("Escape");
