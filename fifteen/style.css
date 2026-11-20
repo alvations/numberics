@@ -23,7 +23,7 @@
 .ft.win.theirs{ box-shadow:0 0 14px 2px var(--cool); }
 @keyframes ft-win{ 50%{ filter:brightness(1.15); } }
 /* under the round-end scrim the board rests evenly (craft N3); the chips carry the winning three */
-.board.ended .ft{ opacity:1; box-shadow:none; animation:none; }
+.board.ended .ft{ opacity:.35; box-shadow:none; animation:none; }   /* under the card the ghost digits stay faint (craft round 2 #6) */
 .ft.peek{ box-shadow:inset 0 0 0 3px var(--accent); }
 .ft.blocked{ opacity:.45; cursor:not-allowed; }
 .ft.target{ cursor:crosshair; box-shadow:inset 0 0 0 4px var(--accent), inset 0 0 0 6px #111a28; }

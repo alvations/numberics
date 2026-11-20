@@ -96,7 +96,7 @@
     if (armed) hint = PW_HINT[armed] + (keys ? " (Esc cancels)" : "");
     else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again to switch. This match counts as a loss.";
     else if (state.roundOver) hint = state.roundOver === "draw" ? "Drawn: the same position came up 3 times, or 40 turns passed without a burst."
-      : (holding || viewing) ? lastWords() + (viewing ? " Tap the board for the summary." : "") : "";
+      : viewing ? "Tap the board for the summary." : holding ? lastWords() : ""; // one line: the ringed slot shows what burst
     else if (state.turn === "c" || busy) hint = "The computer is thinking\u2026";
     else if (N.mustPass(state)) hint = "Nothing to hit this turn. Tap your tile to pass, or use a power-up.";
     else if (sel >= 0) hint = "Add " + state.tiles[sel] + " onto which tile? Your own other tile counts.";

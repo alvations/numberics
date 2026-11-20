@@ -93,7 +93,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("round-over overlay shows", await p.isVisible("#over") && /Round to you/.test(await p.textContent("#over-title")));
   ck("R16: round summary 'You 1 : 0 Computer · first to 3'", (await p.textContent("#over-text")) === "You 1 : 0 Computer · first to 3", await p.textContent("#over-text"));
   await p.click("#over-view");
-  ck("R13: See the board hides the card and says how to get it back", !(await p.isVisible("#over")) && /Tap the board for the summary\.$/.test(await p.textContent("#hint")));
+  ck("R13: See the board hides the card and says how to get it back", !(await p.isVisible("#over")) && (await p.textContent("#hint")) === "Tap the board for the summary." && await p.locator('.slot.hit[data-i="3"]').count() === 1);
   await slot(p, 2).click();
   ck("R13: a tap on the board brings the card back", await p.isVisible("#over"));
   ck("R7: no toast for the round result (the overlay says it)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("on") && /^Burst!$/.test(document.getElementById("toast").textContent))));
