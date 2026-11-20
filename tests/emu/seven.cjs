@@ -16,7 +16,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.goto(page);
   ck("49 well cells", await p.locator(".cells div").count() === 49);
   ck("header: game name, Numberics link, tagline with a full stop (R6)", (await p.textContent("h1")) === "Seven" && /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 1);
-  ck("level is a stat pill", (await p.textContent("#level")) === "1");
+  ck("level is in the hint line", /^Level 1 · /.test(await p.textContent("#hint")));
   ck("discs drawn", await p.locator(".disc:not(.ghost)").count() > 0);
   ck("next disc preview", await p.locator("#next .mini").count() === 1);
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
@@ -103,7 +103,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("full column uses the neutral toast", /column is full/.test(await p.textContent("#toast")) && await p.locator("#toast.bad").count() === 1);
   // the idle hint labels the gold dots (craft V1)
   await setup(p, ["e......"], { left: 7 });
-  ck("hint says how many drops until the eggs rise", (await p.textContent("#hint")) === "7 drops until the eggs rise.");
+  ck("hint says how many drops until the eggs rise", (await p.textContent("#hint")) === "Level 1 · 7 drops until the eggs rise.");
 
   // 4. rising row and the end screen: no Undo (R1), an honest final board (cold #10), a new best (R8)
   await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 9000, used: 2, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });

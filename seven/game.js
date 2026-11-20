@@ -133,12 +133,11 @@
     if (state.over) return !viewing ? "" : N.hasRoom(state.grid) ? "Ringed discs were pushed out. Tap for the summary."
       : "Full, and no power-up can act. Tap for the summary.";
     if (!N.hasRoom(state.grid)) return "The well is full. Use a power-up to make room.";
-    return state.left === 1 ? "Eggs rise after this drop." : state.left + " drops until the eggs rise.";
+    return "Level " + state.level + " · " + (state.left === 1 ? "eggs rise after this drop." : state.left + " drops until the eggs rise.");
   }
   function renderChrome() {
     showScore();
     var nx = $("next"); nx.textContent = ""; nx.appendChild(mini(state.next));
-    $("level").textContent = String(state.level);
     var pips = $("pips"), total = N.dropsFor(state.mode, state.level); pips.textContent = "";
     for (var k = 0; k < total; k++) { var p = document.createElement("i"); if (k >= state.left) p.className = "used"; pips.appendChild(p); }
     pips.title = state.left + " drops until the eggs rise";
