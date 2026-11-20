@@ -23,21 +23,39 @@
   }
   function spend(s, name) { if (!s[name]) return false; s[name]--; return true; }
 
-  // Tray: defs = [{id, label, title}] (exactly 4). opts = {armed, disabled(id) -> bool, onUse(id)}
+  // Tray: defs = [{id, label, desc, earn?}] (exactly 4, Undo first). desc: "Take back the last move."
+  // opts = {armed, disabled(id) -> bool | reason string, onUse(id), earn: "How to earn charges.", hint: element,
+  //         onInfo(id, text)}. Buttons are never `disabled`: a button that cannot act now gets
+  //         aria-disabled + class "empty", and a tap explains it instead (phones have no hover).
+  function info(d, s, why, opts) {
+    var t = d.label + ": " + (d.desc || d.title || "") + " ";
+    if (typeof why === "string" && why) t += why;
+    else if (!s[d.id]) t += (d.earn || opts.earn || "");
+    return t.trim();
+  }
   function tray(el, defs, s, opts) {
     opts = opts || {};
     el.textContent = "";
     defs.forEach(function (d, i) {
       var b = document.createElement("button");
-      b.type = "button"; b.className = "pw" + (opts.armed === d.id ? " armed" : "");
-      b.disabled = !s[d.id] || !!(opts.disabled && opts.disabled(d.id));
+      var why = opts.disabled ? opts.disabled(d.id) : false;
+      var empty = !s[d.id] || !!why;
+      b.type = "button"; b.className = "pw" + (opts.armed === d.id ? " armed" : "") + (empty ? " empty" : "");
+      if (empty) b.setAttribute("aria-disabled", "true");
       b.appendChild(document.createTextNode(d.label));
       var n = document.createElement("i"); n.textContent = s[d.id] || 0; b.appendChild(n);
-      b.title = (i + 1) + ": " + (d.title || d.label);
-      b.setAttribute("aria-label", d.label + ", " + (s[d.id] || 0) + " left. " + (d.title || ""));
-      b.addEventListener("click", function () { if (opts.onUse) opts.onUse(d.id); });
+      b.title = (i + 1) + ": " + d.label + ". " + (d.desc || d.title || "");
+      b.setAttribute("aria-label", d.label + ", " + (s[d.id] || 0) + " left. " + (d.desc || d.title || ""));
+      b.addEventListener("click", function () {
+        if (empty) {
+          var t = info(d, s, why, opts);
+          if (opts.onInfo) opts.onInfo(d.id, t); else if (opts.hint) opts.hint.textContent = t;
+          return;
+        }
+        if (opts.onUse) opts.onUse(d.id);
+      });
       el.appendChild(b);
     });
   }
-  return { CAP: CAP, stock: stock, total: total, award: award, spend: spend, tray: tray };
+  return { CAP: CAP, stock: stock, total: total, award: award, spend: spend, tray: tray, info: info };
 });
