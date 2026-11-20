@@ -86,7 +86,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await idle(p);
   // R13: the burst stays on an undimmed board for about 1.5 s, then the card
   ck("R13: the board shows first, no card yet", await p.evaluate(() => window.__five.holding) && !(await p.isVisible("#over")) && await p.locator('.slot.hit[data-i="3"]').count() === 1);
-  ck("R13: the hint says what burst", /^Your 1 onto their 4 made 5: it burst\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("R13: the hint says what burst", /^Your 1 onto their 4 made 5: burst\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await shot(p, "hold");
   const t0 = Date.now(); await card(p); const held = Date.now() - t0;
   ck("R13: the card follows after the hold", held > 900 && held < 2500, String(held));
@@ -243,7 +243,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   if (!(await st(p)).roundOver) {
     await p.click('#levels button[data-level="hard"]'); await p.click('#levels button[data-level="medium"]');
     ck("only one level button says Sure? at a time", (await p.locator('#levels button').allTextContents()).join(",") === "Easy,Sure?,Hard", (await p.locator('#levels button').allTextContents()).join(","));
-    ck("the hint says the switch counts as a loss", /^Tap Medium again to switch\. This match counts as a loss\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+    ck("the hint says the switch counts as a loss", /^Tap Medium again: this match counts as a loss\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
     await p.click('#levels button[data-level="medium"]'); await idle(p);
     ck("R12: the level switch recorded the loss", (await st(p)).level === "medium" && await p.evaluate(() => window.__five.record.lost) === lost0 + 2);
   } else ck("round ended early (unexpected)", false);

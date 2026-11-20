@@ -94,7 +94,7 @@
     boardEl.classList.toggle("targeting", !!armed);
     var hint = "";
     if (armed) hint = PW_HINT[armed] + (keys ? " (Esc cancels)" : "");
-    else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again to switch. This match counts as a loss.";
+    else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again: this match counts as a loss.";
     else if (state.roundOver) hint = state.roundOver === "draw" ? "Drawn: the same position came up 3 times, or 40 turns passed without a burst."
       : viewing ? "Tap the board for the summary." : holding ? lastWords() : ""; // one line: the ringed slot shows what burst
     else if (state.turn === "c" || busy) hint = "The computer is thinking\u2026";
@@ -119,10 +119,10 @@
   // what ended the round, for the hint line while the board shows (R13)
   function lastWords() {
     var l = state.last; if (!l || !l.burst) return "";
-    var who = l.side === "p" ? "Your" : "The computer's", whose = N.side(l.to) === l.side ? (l.side === "p" ? "your" : "its") : (l.side === "p" ? "their" : "your");
+    var who = l.side === "p" ? "Your" : "Computer's", whose = N.side(l.to) === l.side ? (l.side === "p" ? "your" : "its") : (l.side === "p" ? "their" : "your");
     if (l.kind === "nudge") return "Nudge burst " + whose + " " + l.prevTo + ".";
     if (l.prevTo === undefined) return "";
-    return who + " " + l.add + " onto " + whose + " " + l.prevTo + " made " + l.value + ": it burst.";
+    return who + " " + l.add + " onto " + whose + " " + l.prevTo + " made " + l.value + ": burst.";
   }
   // R13: after the round-ending move, hold the board (undimmed) for a beat, then show the card
   function hold() {
