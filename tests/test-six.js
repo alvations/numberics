@@ -227,6 +227,12 @@ t("a round of six ends; Climb's next round climbs a tier; Daily does not continu
   for (let k = 0; k < 6; k++) { d = solveLine(d); d = E.next(d).state; }
   ok(d.over); eq(E.nextRound(d).ok, false);
 });
+t("Answer shows the known solution: it ends a Climb run, and moves the Daily on", () => {
+  let s = E.newGame(51, "climb"); const r = E.reveal(s); ok(r.ok);
+  s = r.state; ok(s.done && s.gave && s.over && s.ended && E.onTarget(s)); eq(s.solved, 0, "not counted as made");
+  eq(E.nextRound(s).ok, false, "an ended run has no next round");
+  let d = E.newGame(20261120, "daily"); d = E.reveal(d).state; ok(d.done && !d.over); d = E.next(d).state; eq(d.idx, 1); ok(!d.gave);
+});
 t("power-ups cap at 9", () => {
   let s = E.newGame(41, "climb"); s.power = { hint: 9, skip: 9, peek: 9, undo: 9 };
   for (let k = 0; k < 3; k++) { s = solveLine(s); if (k < 2) s = E.next(s).state; }

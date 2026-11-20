@@ -325,7 +325,7 @@
   }
   function startLine(s) {
     var L = s.lines[s.idx];
-    s.cur = blank(L.n.length); s.done = false; s.helped = false; s.peeks = []; s.prev = null;
+    s.cur = blank(L.n.length); s.done = false; s.gave = false; s.helped = false; s.peeks = []; s.prev = null;
   }
   function newGame(seed, mode) {
     var s = { v: 1, mode: mode === "daily" ? "daily" : "climb", seed: seed >>> 0, start: seed >>> 0, round: 1, idx: 0,
@@ -485,8 +485,17 @@
     if (s.idx === s.lines.length - 1) { s.over = true; s.prev = null; return { ok: true, state: s, round: true }; }
     s.idx++; startLine(s); return { ok: true, state: s };
   }
+  // give up on the line: the known solution is shown. In Climb that ends the run; in the Daily it moves on.
+  function reveal(state) {
+    if (locked(state)) return { ok: false, state: state };
+    var s = clone(state);
+    s.cur = JSON.parse(JSON.stringify(line(s).sol)); s.done = true; s.gave = true; s.helped = true; s.streak = 0; s.prev = null;
+    s.revealed = (s.revealed || 0) + 1;
+    if (s.mode === "climb") { s.over = true; s.ended = true; }
+    return { ok: true, state: s };
+  }
   function nextRound(state) {
-    if (!state.over || state.mode === "daily") return { ok: false, state: state };
+    if (!state.over || state.mode === "daily" || state.ended) return { ok: false, state: state };
     var s = clone(state); s.round++; s.over = false; deal(s); return { ok: true, state: s };
   }
 
@@ -496,5 +505,5 @@
            treeToModel: treeToModel, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial,
            BANK: BANK, POOL: POOL, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK,
            newGame: newGame, line: line, target: target, current: current, onTarget: onTarget, canJoin: canJoin,
-           edit: edit, use: use, useable: useable, next: next, nextRound: nextRound, hintStep: hintStep, parts: parts };
+           edit: edit, use: use, useable: useable, next: next, nextRound: nextRound, reveal: reveal, hintStep: hintStep, parts: parts };
 });

@@ -126,12 +126,12 @@
     Array.prototype.forEach.call($("modes").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
 
     $("next").hidden = !state.done || state.over;
-    $("brk").hidden = state.done; $("clear").hidden = state.done;
+    $("brk").hidden = state.done; $("clear").hidden = state.done; $("reveal").hidden = state.done;
     $("brk").setAttribute("aria-pressed", String(bracketMode));
     P.tray($("tray"), PW, state.power, { disabled: function (id) { return !E.useable(state, id); }, onUse: activate });
 
     var h = "";
-    if (state.done && !state.over) h = "Made " + L.g + ". Next line (Enter).";
+    if (state.done && !state.over) h = state.gave ? "One answer, shown. Next line (Enter)." : "Made " + L.g + ". Next line (Enter).";
     else if (bracketMode) h = anchor < 0 ? "Tap the first number to group (Esc cancels)." : "Now tap the last number of the group.";
     else if (anchor >= 0) h = "Bracket opened at number " + (anchor + 1) + ". Move and press ) to close.";
     else if (state.peeks.length) h = "Peek: " + state.peeks.map(function (p) { return L.n.slice(p.i, p.j + 1).join(" ") + " make " + p.v; }).join(" · ");
@@ -141,8 +141,12 @@
     if (state.over) {
       if (state.mode === "daily") {
         $("over-title").textContent = "Daily Six done";
-        $("over-text").textContent = "Six lines, " + state.used + " power-up" + (state.used === 1 ? "" : "s") + " used. A new six tomorrow.";
+        $("over-text").textContent = state.solved + " of 6 made, " + state.used + " power-up" + (state.used === 1 ? "" : "s") + " used. A new six tomorrow.";
         $("again").textContent = "Play Climb";
+      } else if (state.ended) {
+        $("over-title").textContent = "Run over";
+        $("over-text").textContent = "Reached round " + state.round + ", " + state.solved + " line" + (state.solved === 1 ? "" : "s") + " made. The answer is on the line.";
+        $("again").textContent = "New game";
       } else {
         $("over-title").textContent = "Round " + state.round + " cleared";
         $("over-text").textContent = state.solved + " lines solved, " + state.used + " power-up" + (state.used === 1 ? "" : "s") + " used.";
@@ -186,6 +190,7 @@
   function again() {
     if (!state.over) return;
     if (state.mode === "daily") return setMode("climb");
+    if (state.ended) return startNew();
     state = E.nextRound(state).state; cursor = 0; persist(); render();
   }
   function setMode(m) {
@@ -244,6 +249,18 @@
   $("brk").addEventListener("click", function () { bracketMode = !bracketMode; anchor = -1; render(); });
   $("clear").addEventListener("click", function () { anchor = -1; bracketMode = false; doEdit({ k: "clear" }, true); });
   $("next").addEventListener("click", nextLine);
+  // Answer: two taps (it ends a Climb run), no blocking confirm() dialog
+  var revealArmed = null;
+  $("reveal").addEventListener("click", function () {
+    var b = $("reveal");
+    if (!revealArmed) {
+      b.textContent = state.mode === "climb" ? "Sure? Ends the run" : "Sure? Show it";
+      revealArmed = setTimeout(function () { revealArmed = null; b.textContent = "Answer"; }, 3000); return;
+    }
+    clearTimeout(revealArmed); revealArmed = null; b.textContent = "Answer";
+    var r = E.reveal(state); if (!r.ok) return;
+    state = r.state; anchor = -1; bracketMode = false; persist(); render();
+  });
   $("again").addEventListener("click", again);
   Array.prototype.forEach.call($("modes").children, function (b) { b.addEventListener("click", function () { setMode(b.dataset.mode); }); });
   K.twoStep($("new"), function () { return state.edits > 0 && !state.over; }, startNew);
@@ -287,6 +304,12 @@
           .sort(function (a, b) { return (a[0][1] - a[0][0]) - (b[0][1] - b[0][0]); })[0];
         if (cu) doEdit({ k: "un", i: t, u: 0 }, true); else if (inner) doEdit({ k: "br", i: inner[0][0], j: inner[0][1] }, true);
       }
+      return;
+    }
+    if (key === "b") { // cycle the sign of the innermost bracket around the cursor
+      var inb = state.cur.b.map(function (b, x) { return [b, x]; }).filter(function (p) { return p[0][0] <= t && t <= p[0][1]; })
+        .sort(function (a, b) { return (a[0][1] - a[0][0]) - (b[0][1] - b[0][0]); })[0];
+      if (inb) doEdit({ k: "bu", x: inb[1] }, true);
       return;
     }
     if (key === "c") { doEdit({ k: "clear" }, true); }

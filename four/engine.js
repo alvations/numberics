@@ -13,7 +13,7 @@
   var POWERS = ["undo", "pop", "hold", "tune"];
   var CPU_POWERS = ["pop", "hold", "tune"]; // the computer never rewinds, so Undo is not in its pool
   // The bag every side deals from (reshuffled when empty). Tuned in docs: see tests/test-four.js measurements.
-  var BAG = [1, 1, 2, 2, 3, 3, 4, 4];
+  var BAG = [1, 1, 1, 1, 2, 2, 3, 4];
   var ORDER = [3, 2, 4, 1, 5, 0, 6]; // centre first
   var LEVELS = ["easy", "medium", "hard"];
 
