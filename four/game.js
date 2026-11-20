@@ -14,7 +14,7 @@
     { id: "hold", label: "Hold", desc: "Put your next disc aside, or swap it back." },
     { id: "tune", label: "Tune", desc: "Choose your next disc's number." },
   ];
-  var RULE = "Four of your colour in a row, or any four in a row that sum to 10 with two of yours.";
+  var RULE = "Four of yours in a row, or a 10 with two of yours.";
   var NAMES = { undo: "Undo", pop: "Pop", hold: "Hold", tune: "Tune" };
   var LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
@@ -104,7 +104,7 @@
   function renderHint() {
     var h = $("hint"); h.textContent = "";
     if (note) { h.textContent = note; return; }
-    if (targeting && targeting.name === "pop") { h.textContent = "Tap a disc to pop it, or arrows and Enter. (Esc cancels)"; return; }
+    if (targeting && targeting.name === "pop") { h.textContent = "Tap a disc to pop it. Arrows, Enter; Esc cancels."; return; }
     if (targeting && targeting.name === "tune") {
       h.appendChild(document.createTextNode("Your next disc becomes:"));
       var box = document.createElement("span"); box.className = "pick";
@@ -279,7 +279,7 @@
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
     clearTimeout(cpuTimer); cpuTimer = null; targeting = null;
-    var s = F.newGame(2046, { level: "medium" }), mine = [3, 1, 3, 4, 3, 6, 4];
+    var s = F.newGame(2051, { level: "medium" }), mine = [3, 1, 3, 4, 3, 6, 4]; // a seed whose whole line plays out
     for (var k = 0; k < mine.length && !s.over; k++) {
       var r = F.drop(s, mine[k]); if (!r.ok || r.state.over) break; s = r.state;
       if (s.turn === 2) { var t = F.computerTurn(s); if (t.state.over) break; s = t.state; }

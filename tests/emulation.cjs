@@ -112,8 +112,8 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.keyboard.press("Escape");
   await p.keyboard.press("4"); for (let i = 0; i < 3; i++) { await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp"); } await p.keyboard.press("Enter"); // cell 0 = 4, the top
   ck("boost to a new top tile says it earns no reward", /Boosted to 32\. Boosts earn no reward\./.test(await p.textContent("#toast")) && await p.evaluate(() => !document.getElementById("toast").classList.contains("bad")));
-  const tb = await p.evaluate(() => [document.getElementById("toast").getBoundingClientRect().bottom, document.getElementById("board").getBoundingClientRect().top, document.getElementById("games").getBoundingClientRect().top]);
-  ck("toast sits at the top, clear of the games row (F2)", tb[0] < tb[2] && tb[0] < tb[1] + 40, JSON.stringify(tb));
+  const tb = await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(); return [t.top, t.bottom, document.querySelector("h1").getBoundingClientRect().bottom, document.getElementById("board").getBoundingClientRect().top, document.getElementById("games").getBoundingClientRect().top]; });
+  ck("toast sits inside the top of the board, clear of the title and the games row (F2)", tb[0] >= tb[2] && tb[0] <= tb[3] + 20 && tb[1] < tb[4], JSON.stringify(tb));
   // Enter on a focused button presses that button only (R9)
   await p.evaluate(() => { const s = window.__numberics.state; s.power = { undo: 0, smash: 1, swap: 0, boost: 0 }; s.moves = 5; window.__numberics.state = s; });
   const g0 = await p.evaluate(() => JSON.stringify(window.__numberics.state.grid));

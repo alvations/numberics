@@ -120,3 +120,34 @@ deviation from the plan with its reason. All measurements are seeded Node bot ru
 - Start: 1 Reveal (keeps the old Hint's job). Units pay once each, at most one charge per move, odds weighted
   Reveal 1 : Check 2 : Candidates 3 (equal odds and one per unit filled every slot to the cap).
 - Hard, easiest-cells-first solver: first charge at ~9% of cells, ~1.8 / 2.3 / 3.2 in stock at half way.
+
+---
+
+# QA round 1 (20 Nov 2026): what changed
+
+Reviews and decisions: `docs/reviews/REVIEW*1.md`, `TRIAGE1.md` (family rules R1-R11). Highlights, with numbers:
+
+- **Family:** Undo never crosses a decided result (R1); a power-up never earns one, even indirectly (R2); spent
+  information power-ups stay spent (R3); solved-game opponents lose to perfect play (R4); power-up buttons explain
+  themselves on tap (R5) and Undo is slot 1 everywhere; one header pattern (R6); one channel per event and neutral
+  warning toasts (R7); family end card with "New best." (R8); keyboard targeting everywhere (R9); two-step switches
+  (R10); naming (R11). The toast sits just inside the top of the board (never over the title or the games row).
+- **Sudoku:** earn by progress (each new multiple of 9 filled cells on a high-water mark): 4 / 5 / 6 charges per
+  Easy / Medium / Hard puzzle, revealing nothing about correctness; clock survives reloads.
+- **Fibonacci:** 111-degree hue step so merge neighbours differ; merge rule confirmed by a published write-up (spawn
+  odds still assumed). Award floor stays 34 (per move it already pays half as often as Endless).
+- **Seven:** overflow leaves the last well and rings the discs pushed out; Crack arms before firing; Undo counted.
+- **Three:** first-run explainer; a run made by a power-up collapses without paying, and so does the swipe after
+  Smash/Swap/Third; flush spacing unchanged (29.5 moves greedy, `tools/sim-three.js`).
+- **Four:** a ten-line needs at least two discs of the side completing it (`MINE = 2`); discs filled by owner; the
+  opener alternates; safe-move bot wins Easy 68%, Medium 44%, Hard 29% (`tools/measure-four.js`); ten-lines decide
+  51-59% of games; the computer earns power-ups only on Hard.
+- **Five:** the computer never uses power-ups; perfect play wins 100% on every level; Hard sets traps from lost
+  positions; greedy player wins Easy 86%, Medium 35%, Hard 0% (`EASY_CARE`, `MEDIUM_CARE = 0.4`).
+- **Six:** tray Undo, Hint, Skip, Peek; Show answer (ends the run, two-step); plain first line on every seed and Daily;
+  the exactness rule stated where it bites.
+- **Fifteen:** tiles filled by owner; a round won after Erase or Double (by that side) pays nothing; perfect play with
+  the starting Erase wins every Hard match; family round-end overlay keeps the winning triple.
+- **Nine:** Hard deals a losing start 1 time in 5 (`HARD_LOSING = 0.2`) and hides the live nim-sum; perfect play with
+  power-ups wins ~66-73% of Hard matches; Easy stays the default (beginner wins 75.6% on Easy, 2.5% on Medium); the
+  computer earns only Add and Pass.

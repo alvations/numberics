@@ -30,7 +30,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R11: an empty Held reads 'none'", (await p.textContent("#held")) === "none");
   ck("R6: H1 is the game name, subtitle is the Numberics link and a tagline", (await p.textContent("h1")) === "Four" &&
      /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a[href='../']").count() === 1);
-  ck("the rule stays in the hint line", /two of yours/.test(await p.textContent("#hint")));
+  ck("the rule stays in the hint line", /with two of yours/.test(await p.textContent("#hint")));
   await p.locator("#tray button").nth(1).click({ force: true });
   ck("R5: tapping an empty power-up explains it and how to earn it", /^Pop: Remove any disc.*Earn charges/.test(await p.textContent("#hint")),
      await p.textContent("#hint"));

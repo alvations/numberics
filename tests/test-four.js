@@ -134,20 +134,20 @@ t("the computer takes an immediate ten-line", () => {
   const s = board([[0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [1, 3] });
   for (const lv of ["easy", "medium", "hard"]) { s.level = lv; const r = F.computerTurn(s); eq(r.state.over && r.state.over.type, "ten", lv); eq(r.state.over.winner, 2); }
 });
-// blocks: Hard on every turn it is not loose; Easy and Medium play loose turns (tuned), so they are measured over seeds
+// blocks: Hard unless it blunders (a rare loose turn, tuned); Easy and Medium play loose turns (tuned), so they are measured over seeds
 function blockRate(s, lv, col) {
   let n = 0; for (let k = 0; k < 100; k++) { const x = JSON.parse(JSON.stringify(s)); x.level = lv; x.aiSeed = k * 7919 + 1;
     const r = F.computerTurn(x); if (r.actions[r.actions.length - 1].arg === col) n++; }
   return n / 100;
 }
-t("the computer blocks an immediate colour loss (Hard always, Medium mostly, Easy often)", () => {
+t("the computer blocks an immediate colour loss (Hard nearly always, Medium mostly, Easy often)", () => {
   const s = board([[0, 0, 1, 1], [1, 0, 1, 1], [2, 0, 1, 1], [0, 3, 2, 1], [0, 4, 2, 2]], { turn: 2, next: [1, 1] });
-  eq(blockRate(s, "hard", 0), 1, "hard"); ok(blockRate(s, "medium", 0) >= 0.75, "medium"); ok(blockRate(s, "easy", 0) >= 0.4, "easy");
+  ok(blockRate(s, "hard", 0) >= 0.9, "hard"); ok(blockRate(s, "medium", 0) >= 0.75, "medium"); ok(blockRate(s, "easy", 0) >= 0.4, "easy");
 });
 t("the computer blocks an immediate ten-line loss (the player holds the 3 it needs)", () => {
   // (0,1..3) = 4 2 1 needs a 3 at (0,4); (0,0) is filled so that is the only hole; two of them are the player's
   const s = board([[0, 0, 2, 1], [0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [3, 1] });
-  eq(blockRate(s, "hard", 4), 1, "hard"); ok(blockRate(s, "medium", 4) >= 0.75, "medium"); ok(blockRate(s, "easy", 4) >= 0.4, "easy");
+  ok(blockRate(s, "hard", 4) >= 0.9, "hard"); ok(blockRate(s, "medium", 4) >= 0.75, "medium"); ok(blockRate(s, "easy", 4) >= 0.4, "easy");
 });
 t("Easy is deterministic by seed", () => {
   const run = seed => { let s = F.newGame(seed, { level: "easy" }), cols = [];
@@ -297,6 +297,26 @@ t("measure: Medium beats a random player almost always", () => {
     if (s.over.winner === 2) w++; }
   ok(w >= 26, "medium won " + w + "/30");
 });
+
+// Round 1 tuning target (TRIAGE1): a safe-move player (wins in one when it can, otherwise a random column that leaves
+// the computer no immediate line for its shown disc; no power-ups; the opener alternates) beats Easy >= 65%, Medium
+// 40-55%, Hard 20-35%. Measured over 400 games each (see the round 1 report); these are loose, fast guards.
+function safeBot(s, rs) {
+  const L = F.legal(s), n = s.next[0];
+  for (const c of L) if (F.linesAt(s.own, s.num, F.height(s.own, c) * C + c, 1, n).length) return [c, rs];
+  const safe = L.filter(c => { const own = s.own.slice(), num = s.num.slice(), h = F.height(own, c); own[h * C + c] = 1; num[h * C + c] = n;
+    for (let k = 0; k < C; k++) { const hk = F.height(own, k); if (hk < 6 && F.linesAt(own, num, hk * C + k, 2, s.next[1]).length) return false; } return true; });
+  const pool = safe.length ? safe : L, r = F.rand(rs); return [pool[Math.floor(r[0] * pool.length)], r[1]];
+}
+function botRate(lv, games) {
+  let w = 0, rs = 12345;
+  for (let g = 0; g < games; g++) { let s = F.newGame(1000 + g, { level: lv, first: g % 2 ? 2 : 1 });
+    while (!s.over) { if (s.turn === 1) { let c; [c, rs] = safeBot(s, rs); s = F.drop(s, c).state; } else s = F.computerTurn(s).state; }
+    if (s.over.winner === 1) w++; }
+  return w / games;
+}
+t("balance: a safe-move player beats Easy most of the time (target >= 65%)", () => { const r = botRate("easy", 200); ok(r >= 0.6, "easy " + r); });
+t("balance: a safe-move player beats Medium about half the time (target 40-55%)", () => { const r = botRate("medium", 60); ok(r >= 0.28 && r <= 0.65, "medium " + r); });
 
 require("./conventions")(t, ok, ["four/engine.js", "four/game.js", "four/index.html", "four/style.css"]);
 console.log(pass + " passed, " + fail + " failed");
