@@ -9,7 +9,13 @@
  *
  * The slide-and-merge core takes a RULE SET, so sibling games (fibonacci/) reuse it:
  *   make(rules) -> a full engine API. The default export is make(ENDLESS); tests/test.js
- *   replays a pinned fixture (re-recorded once, for the round-2 R2 rule: state.free).
+ *   replays a pinned fixture (re-recorded for the round-2 R2 rule, state.free, and for the
+ *   round-3 rule, state.marks).
+ * R2 (a power-up never earns one), round 3, by tile: a tile that Swap or Boost placed or changed is
+ *   MARKED (state.marks, one 0/1 per cell); a merge with a marked tile makes a marked tile, and a new
+ *   highest tile pays only when an unmarked merge made it, however many moves later. Smash changes
+ *   space, not a tile, so it keeps the one-move rule (state.free: the next move pays nothing); Swap and
+ *   Boost set it too, since a swap into an empty cell, or a boosted tile that merges away, also opens space.
  * A rule set is { canMerge(a, b), mergeResult(a, b), spawn(r), value(level),
  *   label(level), awardFrom }, all on stored levels; r is a float in [0,1).
  */
@@ -50,13 +56,19 @@
         size: s.size, grid: s.grid.slice(), score: s.score, top: s.top,
         moves: s.moves, seed: s.seed, over: s.over,
         power: { undo: s.power.undo, smash: s.power.smash, swap: s.power.swap, boost: s.power.boost },
-        prev: s.prev, free: !!s.free,
+        prev: s.prev, free: !!s.free, marks: marksOf(s),
       };
+    }
+    // An old save has no marks: every tile is unmarked. A malformed list is read as no marks.
+    function marksOf(s) {
+      var n = s.grid.length, m = s.marks;
+      if (!Array.isArray(m) || m.length !== n) return new Array(n).fill(0);
+      return m.map(function (v, i) { return v && s.grid[i] ? 1 : 0; });
     }
 
     function snapshot(s) {
       return { grid: s.grid.slice(), score: s.score, top: s.top, moves: s.moves,
-               seed: s.seed, power: Object.assign({}, s.power), free: !!s.free };
+               seed: s.seed, power: Object.assign({}, s.power), free: !!s.free, marks: marksOf(s) };
     }
 
     function spawn(s) {
@@ -66,7 +78,7 @@
       var r = rand(s.seed); s.seed = r[1];
       var cell = empty[Math.floor(r[0] * empty.length)];
       r = rand(s.seed); s.seed = r[1];
-      s.grid[cell] = rules.spawn(r[0]);
+      s.grid[cell] = rules.spawn(r[0]); s.marks[cell] = 0; // a spawned tile is honest
       if (s.grid[cell] > s.top) s.top = s.grid[cell];
       return cell;
     }
@@ -77,28 +89,30 @@
         size: size, grid: new Array(size * size).fill(0), score: 0, top: 0,
         moves: 0, seed: seed >>> 0, over: false,
         power: { undo: 1, smash: 0, swap: 0, boost: 0 }, prev: null, free: false,
+        marks: new Array(size * size).fill(0),
       };
       spawn(s); spawn(s);
       return s;
     }
 
     // Slide one line toward index 0. Each tile merges at most once per move.
-    // `idx` maps line positions to grid cells so callers can trace movement.
-    function slideLine(levels, idx) {
-      var out = [], mergedAt = [], trace = [], gained = 0, merges = [];
+    // `idx` maps line positions to grid cells so callers can trace movement. `mk` (optional) holds the
+    // line's marks: a tile keeps its mark as it slides, and a merge with a marked tile is marked.
+    function slideLine(levels, idx, mk) {
+      var out = [], om = [], mergedAt = [], trace = [], gained = 0, merges = [], mergeMarks = [];
       for (var i = 0; i < levels.length; i++) {
         if (!levels[i]) continue;
-        var last = out.length - 1;
+        var last = out.length - 1, m = mk && mk[i] ? 1 : 0;
         if (last >= 0 && !mergedAt[last] && rules.canMerge(out[last], levels[i])) {
-          out[last] = rules.mergeResult(out[last], levels[i]); mergedAt[last] = true;
-          gained += rules.value(out[last]); merges.push(out[last]);
+          out[last] = rules.mergeResult(out[last], levels[i]); mergedAt[last] = true; om[last] = om[last] || m;
+          gained += rules.value(out[last]); merges.push(out[last]); mergeMarks.push(om[last]);
           trace.push({ from: idx[i], to: idx[last], merge: true });
         } else {
-          out.push(levels[i]); mergedAt[out.length - 1] = false;
+          out.push(levels[i]); om.push(m); mergedAt[out.length - 1] = false;
           trace.push({ from: idx[i], to: idx[out.length - 1], merge: false });
         }
       }
-      return { out: out, trace: trace, gained: gained, merges: merges };
+      return { out: out, marks: om, trace: trace, gained: gained, merges: merges, mergeMarks: mergeMarks };
     }
 
     function lines(size, dir) {
@@ -139,37 +153,44 @@
       var r = rand(s.seed); s.seed = r[1];
       // pick among powers still under the cap, so a full stock never wastes a reward
       var open = POWERS.filter(function (p) { return s.power[p] < POWER_CAP; });
-      if (!open.length) return;
+      if (!open.length) return false;
       var p = open[Math.floor(r[0] * open.length)];
       s.power[p]++;
       awarded.push({ power: p, level: level });
+      return true;
     }
 
     function move(state, dir) {
       var res = { state: state, moved: false, gained: 0, merges: [], trace: [],
                   spawned: -1, milestones: [], awarded: [] };
       if (DIRS.indexOf(dir) < 0 || state.over) return res;
-      var s = clone(state), trace = [], any = false;
+      var s = clone(state), trace = [], any = false, honest = {};
       lines(s.size, dir).forEach(function (idx) {
         var lv = idx.map(function (i) { return s.grid[i]; });
-        var r = slideLine(lv, idx);
-        idx.forEach(function (cell, j) { s.grid[cell] = j < r.out.length ? r.out[j] : 0; });
+        var r = slideLine(lv, idx, idx.map(function (i) { return s.marks[i]; }));
+        idx.forEach(function (cell, j) {
+          s.grid[cell] = j < r.out.length ? r.out[j] : 0; s.marks[cell] = j < r.out.length ? r.marks[j] : 0;
+        });
         r.trace.forEach(function (t) { if (t.from !== t.to || t.merge) any = true; trace.push(t); });
         res.gained += r.gained; res.merges = res.merges.concat(r.merges);
+        r.merges.forEach(function (l, j) { if (!r.mergeMarks[j]) honest[l] = true; });
       });
       if (!any) return res;
       s.prev = snapshot(state);
       s.score += res.gained; s.moves++;
       // milestones: every NEW highest tile; the game never declares a win.
       // R2: the move right after a board-changing power-up (Smash, Swap, Boost) still counts its
-      // milestones but pays nothing, so a power-up can never set up a reward (state.free).
+      // milestones but pays nothing (state.free), and a new highest tile that only a merge with a
+      // marked (swapped or boosted) tile made pays nothing either (res.marked). Both still score.
       if (state.free) res.free = true;
       s.free = false;
       var fresh = res.merges.filter(function (l, i, a) { return l > s.top && a.indexOf(l) === i; })
                             .sort(function (a, b) { return a - b; });
       fresh.forEach(function (l) {
         res.milestones.push(l);
-        if (l >= rules.awardFrom && !res.free) award(s, l, res.awarded);
+        if (l < rules.awardFrom || res.free) return;
+        if (!honest[l]) { res.marked = true; return; }
+        if (!award(s, l, res.awarded)) res.full = true; // R15: the client says "Power-ups full"
       });
       if (fresh.length) s.top = fresh[fresh.length - 1];
       res.spawned = spawn(s);
@@ -182,25 +203,26 @@
     function use(state, name, a, b) {
       var fail = { state: state, ok: false };
       if (!state.power[name] || state.power[name] < 1) return fail;
-      var s = clone(state), g = s.grid, n = g.length;
+      var s = clone(state), g = s.grid, n = g.length, mk = s.marks;
       if (name === "undo") {
         if (!state.prev) return fail;
         var p = state.prev;
         s.grid = p.grid.slice(); s.score = p.score; s.top = p.top; s.moves = p.moves;
-        s.seed = p.seed; s.power = Object.assign({}, p.power); s.free = !!p.free;
+        s.seed = p.seed; s.power = Object.assign({}, p.power); s.free = !!p.free; s.marks = marksOf(p);
         s.power.undo = Math.max(0, s.power.undo - 1); // the rewind is paid for
         s.prev = null;
       } else {
         var snap = snapshot(state);
         if (name === "smash") {
           if (!(a >= 0 && a < n) || !g[a]) return fail;
-          g[a] = 0;
+          g[a] = 0; mk[a] = 0;
         } else if (name === "boost") {
           if (!(a >= 0 && a < n) || !g[a]) return fail;
-          g[a]++; if (g[a] > s.top) s.top = g[a]; // no reward: boosting must not farm rewards
+          g[a]++; mk[a] = 1; if (g[a] > s.top) s.top = g[a]; // no reward: boosting must not farm rewards
         } else if (name === "swap") {
           if (!(a >= 0 && a < n && b >= 0 && b < n) || a === b || (!g[a] && !g[b])) return fail;
           var t = g[a]; g[a] = g[b]; g[b] = t;
+          mk[a] = g[a] ? 1 : 0; mk[b] = g[b] ? 1 : 0; // both swapped tiles are marked
         } else return fail;
         s.power[name]--; s.prev = snap; s.free = true; // R2: the next move pays no reward
       }

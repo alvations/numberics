@@ -218,6 +218,25 @@ t("stock caps at 9: a full stock is skipped, a fully stocked tray earns nothing"
   const f = T.move(at(g, { power: { undo: 9, smash: 9, swap: 9, third: 9 } }), "left"); eq(f.flushes[0].power, null);
   ok(T.POWERS.every(p => f.state.power[p] === 9));
 });
+t("R15 (critic S2): a flush on a full stock is flagged full, so the client can say Power-ups full", () => {
+  const g = E16(); g[0] = 3; g[4] = 6; g[9] = 9;
+  const f = T.move(at(g, { power: { undo: 9, smash: 9, swap: 9, third: 9 } }), "left").flushes[0];
+  eq([f.paid, f.power, f.full], [true, null, true], "earned, nothing to give, said");
+  const p = T.move(at(g, { power: { undo: 9, smash: 9, swap: 9, third: 8 } }), "left").flushes[0];
+  eq(p.full, false, "a slot under the cap takes the reward");
+  // an unpaid (power-up made) flush is not "full": it never earned a reward
+  const g2 = E16(); g2[0] = 3; g2[1] = 9; g2[2] = 6; g2[3] = 12; g2[4] = 1;
+  const w = T.use(at(g2, { power: { undo: 9, smash: 9, swap: 9, third: 9 } }), "swap", 1, 2);
+  eq([w.flushes[0].paid, w.flushes[0].full], [false, false]);
+});
+t("cold #17: the flush ladder is 3, 6, 9, 12 only (15 never exists), and 1 + 1, 2 + 2 never merge", () => {
+  ok(!T.canMerge(1, 1) && !T.canMerge(2, 2) && !T.canMerge(6, 9) && !T.canMerge(9, 6));
+  const vals = new Set(); for (let k = 0; k < 14; k++) vals.add(T.ladder(k));
+  ok(!vals.has(15), "15 is off the ladder");
+  // the only straight runs the ladder can form are within 3, 6, 9, 12
+  const ladder = [...vals].sort((a, b) => a - b);
+  const runnable = ladder.filter(v => vals.has(v + 3) || vals.has(v - 3)); eq(runnable, [3, 6, 9, 12]);
+});
 t("the run ends only when locked AND no power-up can act", () => {
   const none = { undo: 0, smash: 0, swap: 0, third: 0 };
   const lockedAfterLeft = [0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3]; // the dealt 12 completes a 3/12 checkerboard

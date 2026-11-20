@@ -100,15 +100,15 @@ t("rising row: eggs rise from the bottom after N drops and the level goes up", (
   eq(r.state.grid.slice(42), [E, E, E, E, E, E, E]); eq(r.state.grid[at(5, 0)], E); eq(r.state.grid[at(5, 3)], 5);
   eq(r.state.level, 2); eq(r.state.left, S.dropsFor("classic", 2)); eq(rise.points, S.RULES.levelBonus * 2);
 });
-t("overflow: a rise that pushes a disc out of the top ends the run", () => {
+t("overflow with no Undo: a rise that pushes a disc out of the top ends the run", () => {
   const rows = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
-  const r = S.drop(st(rows, 4, { left: 1 }), 3);
+  const r = S.drop(st(rows, 4, { left: 1, power: { undo: 0, smash: 0, hold: 0, crack: 0 } }), 3);
   ok(r.state.over); ok(r.trace.find(x => x.type === "rise").overflow);
   ok(!S.drop(r.state, 2).ok, "no drops after the end");
 });
 t("overflow leaves the well as the player saw it and names the discs pushed out (cold #10)", () => {
   const rows = ["5.....2", "e.....e", "e.....e", "e.....e", "e.....e", "e.....e", "e.....e"];
-  const s = st(rows, 4, { left: 1 }); const level = s.level;
+  const s = st(rows, 4, { left: 1, power: { undo: 0, smash: 0, hold: 0, crack: 0 } }); const level = s.level;
   const r = S.drop(s, 3), rise = r.trace.find(x => x.type === "rise");
   const want = s.grid.slice(); want[at(6, 3)] = 4;
   eq(r.state.grid, want, "nothing shifted up, no egg row added");
@@ -119,8 +119,49 @@ t("overflow leaves the well as the player saw it and names the discs pushed out 
 });
 t("the drop that overflows is counted in drops (gameplay #1)", () => {
   const rows = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
-  const s = st(rows, 4, { left: 1, drops: 10 }); const r = S.drop(s, 3);
+  const s = st(rows, 4, { left: 1, drops: 10, power: { undo: 0, smash: 0, hold: 0, crack: 0 } }); const r = S.drop(s, 3);
   ok(r.state.over); eq(r.state.drops, 11);
+});
+t("stuck is not over while Undo is in stock (TRIAGE3): an overflow with Undo is on the brink, not ended", () => {
+  const rows = ["5.....2", "e.....e", "e.....e", "e.....e", "e.....e", "e.....e", "e.....e"];
+  const s = st(rows, 4, { left: 1, score: 500, power: { undo: 2, smash: 1, hold: 1, crack: 1 } });
+  const r = S.drop(s, 3), rise = r.trace.find(x => x.type === "rise");
+  ok(!r.state.over, "not over: an Undo can still save the run"); eq(r.state.overflow, [0, 6], "names the columns");
+  ok(rise.overflow && rise.pending, "the trace says the overflow is pending"); eq(rise.out, [0, 6]);
+  eq(r.state.out, [], "nothing is pushed out yet");
+  // on the brink nothing but Undo can act, and no disc drops
+  ok(!S.drop(r.state, 2).ok, "no drop on the brink");
+  ["smash", "hold", "crack"].forEach(n => ok(!S.use(r.state, n, at(6, 0)).ok, n + " refused on the brink"));
+  // Undo the last drop: back to the well before it, one Undo spent, the run goes on
+  const u = S.use(r.state, "undo"); ok(u.ok); eq(u.state.grid, s.grid); eq(u.state.power.undo, 1); ok(!u.state.overflow && !u.state.over);
+  ok(S.drop(u.state, 2).ok, "play goes on after the Undo");
+  // or end the run: over, the discs pushed out named, and then R1 holds (nothing at all can act)
+  const e = S.end(r.state); ok(e.ok); ok(e.state.over); eq(e.state.out, [0, 6]); eq(e.state.overflow, null);
+  eq(e.state.score, r.state.score, "ending keeps the score");
+  ["undo", "smash", "hold", "crack"].forEach(n => ok(!S.use(e.state, n, at(6, 0)).ok, n + " refused once ended (R1)"));
+  ok(!S.end(e.state).ok, "end only from the brink"); ok(!S.end(s).ok, "and never from a live run");
+  // with no Undo left the same overflow ends the run at once
+  const z = S.drop(st(rows, 4, { left: 1, power: { undo: 0, smash: 1, hold: 1, crack: 1 } }), 3);
+  ok(z.state.over && !z.state.overflow); ok(!z.trace.find(x => x.type === "rise").pending);
+});
+t("the brink survives an Undo chain honestly: after the Undo the snapshot is gone, so a second overflow ends", () => {
+  const rows = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
+  const r = S.drop(st(rows, 4, { left: 1, power: { undo: 1, smash: 0, hold: 0, crack: 0 } }), 3); ok(r.state.overflow);
+  const u = S.use(r.state, "undo"); ok(u.ok); eq(u.state.power.undo, 0); eq(u.state.prev, null);
+  const again = S.drop(u.state, 3); ok(again.state.over, "no Undo left: the same drop now ends the run");
+});
+t("Undo is not dealt once three are held (round 3 mechanics #2)", () => {
+  const lucky = (undo, seed) => S.drop(st(["e......", "e......", "777777."], 7, { seed: seed, power: { undo: undo, smash: 0, hold: 0, crack: 0 } }), 6);
+  let undos = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    const r = lucky(3, seed); ok(r.awarded.length >= 1);
+    r.awarded.forEach(a => { ok(a.power !== "undo", "Undo dealt at 3, seed " + seed); });
+    if (lucky(0, seed).awarded.some(a => a.power === "undo")) undos++;
+  }
+  ok(undos > 20, "below three, Undo is still dealt: " + undos);
+  // with the other three at the cap, a reward at three Undos is reported as full (R15), not turned into a fourth Undo
+  const f = S.drop(st(["e......", "e......", "777777."], 7, { power: { undo: 3, smash: 9, hold: 9, crack: 9 } }), 6);
+  eq(f.awarded, []); ok(f.full.length >= 1); eq(f.state.power.undo, 3);
 });
 t("N shrinks with level in Classic and Daily, fixed at 5 in Blitz", () => {
   ok(S.dropsFor("classic", 1) > S.dropsFor("classic", 5)); eq(S.dropsFor("classic", 99), S.RULES.minN);
@@ -167,7 +208,8 @@ t("Undo restores the whole snapshot (stock included) and is paid for", () => {
 });
 t("Undo never crosses a decided result: refused once the run is over (R1)", () => {
   const rows = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
-  const s = st(rows, 4, { left: 1, power: { undo: 3, smash: 2, hold: 2, crack: 2 } }); const r = S.drop(s, 3); ok(r.state.over);
+  const s = st(rows, 4, { left: 1, power: { undo: 3, smash: 2, hold: 2, crack: 2 } }); const b = S.drop(s, 3); ok(b.state.overflow);
+  const r = { state: S.end(b.state).state }; ok(r.state.over, "the player ended the run");
   ok(r.state.prev, "the snapshot exists, and still Undo is refused");
   ["undo", "smash", "hold", "crack"].forEach(n => { const u = S.use(r.state, n, at(6, 0)); ok(!u.ok, n + " refused after the end"); ok(u.state === r.state); });
   // a full well that is not decided (Undo can still act) is not over, and Undo works there
@@ -213,6 +255,7 @@ t("fuzz: every trace is consistent (scores, gravity, no pending pops, legal valu
   for (let seed = 1; seed <= 40; seed++) {
     let s = S.newGame(seed, seed % 3 ? "classic" : "blitz");
     for (let k = 0; k < 400 && !s.over; k++) {
+      if (s.overflow) { s = (k % 2 ? S.use(s, "undo") : S.end(s)).state; continue; } // both ways off the brink
       const cols = [0, 1, 2, 3, 4, 5, 6].filter(c => S.landing(s.grid, c) >= 0);
       if (!cols.length) break;
       const r = S.drop(s, cols[(k * 7 + seed) % cols.length]);

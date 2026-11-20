@@ -274,7 +274,7 @@
 
   // ---------- lines, tiers, difficulty ----------
   var TIERS = {
-    1: { join: false, label: "Tier 1", what: "+ − × ÷" },
+    1: { join: false, label: "Tier 1", what: "+ − × ÷ and brackets" },
     2: { join: false, label: "Tier 2", what: "√ or !" },
     3: { join: false, label: "Tier 3", what: "more signs" },
     4: { join: true, label: "Tier 4", what: "join digits" },
@@ -293,8 +293,40 @@
     if (!r.count) return null;
     return { count: r.count, cost: r.cost, d: difficulty(tokens.length, join, r.count, r.cost), sol: treeToModel(tokens.length, r.tree) };
   }
+  // the fewest bracket groups any solution needs, with signs only on numbers (from lu) costing at most maxCost.
+  // Interval DP keyed by value, the root's precedence and the cost: a part needs a bracket exactly when
+  // treeToModel would draw one (a looser root under a tighter operator, or an equal one right of - or /).
+  // -> {g groups, c cost, sol model} or null. Round 3: Tier 1 must never ask for two groups.
+  function groups(tokens, target, lu, maxCost) {
+    var n = tokens.length, T = [];
+    function put(map, v, r, c, g, w) {
+      var k = key(v) + "|" + r + "|" + c, e = map.get(k);
+      if (!e || g < e.g) map.set(k, { v: v, r: r, c: c, g: g, w: w });
+    }
+    for (var len = 1; len <= n; len++) for (var i = 0; i + len <= n; i++) {
+      var j = i + len - 1, map = new Map();
+      if (len === 1) lu.forEach(function (u) {
+        var x = u ? unary(u, literal(tokens[i])) : literal(tokens[i]);
+        if (x && UN_COST[u] <= maxCost && !(u && same(x, literal(tokens[i])))) put(map, x, 3, UN_COST[u], 0, { t: "L", i: i, j: i, dot: -1, u: u });
+      });
+      for (var k = i; k < j; k++) T[i][k].forEach(function (a) {
+        T[k + 1][j].forEach(function (b) {
+          if (a.c + b.c > maxCost) return;
+          for (var o = 0; o < 4; o++) {
+            var op = OPS[o], p = prec(op), v = binop(op, a.v, b.v); if (!v) continue;
+            var g = a.g + b.g + (a.r < p ? 1 : 0) + (b.r < p || (b.r === p && (op === "-" || op === "/")) ? 1 : 0);
+            put(map, v, p, a.c + b.c, g, { t: "B", op: op, k: k, a: a.w, b: b.w, u: 0, i: i, j: j });
+          }
+        });
+      });
+      (T[i] = T[i] || [])[j] = map;
+    }
+    var best = null;
+    T[0][n - 1].forEach(function (e) { if (same(e.v, target) && (!best || e.g < best.g || (e.g === best.g && e.c < best.c))) best = e; });
+    return best && { g: best.g, c: best.c, sol: treeToModel(n, best.w) };
+  }
   // the tools a line needs (no joining, tiers 1-3), measured by solving with fewer tools:
-  //   0 + - x / alone, no brackets   1 + - x / and brackets   2 one sign (sqrt or !) on a number
+  //   0 + - x / alone, no brackets   1 + - x / and one bracket group   2 one sign (sqrt or !) on a number
   //   3 at most two single signs, on numbers or on a group   4 more: nested signs (sqrt sqrt, (sqrt)!) or three signs
   // skill(tokens, target) -> {h, sol}: sol is one shortest solution that uses only those tools (what Hint teaches)
   function skill(tokens, target) {
@@ -304,10 +336,19 @@
       for (var k = 0, x = c; k < n - 1; k++, x = Math.floor(x / 4)) m.g[k] = OPS[x % 4];
       if (same(value(tokens, m).v, t)) return { h: 0, sol: m };
     }
-    var steps = [[{ lu: [0], gu: [0] }, 0], [{ lu: [0, 1, 2], gu: [0] }, 1], [{ lu: [0, 1, 2], gu: [0, 1, 2] }, 2], [{}, Infinity]];
+    // + - x / with brackets: the witness uses the fewest groups. A line that needs two groups or more is not a
+    // Tier 1 line (round 3: "TIER 1" lines that needed two groups ended Climb runs); with one sign on a number
+    // and one group it is a Tier 2 line, otherwise many > 1 tells the builder to leave it out.
+    var gr = groups(tokens, t, [0], 0);
+    if (gr && gr.g <= 1) return { h: 1, sol: gr.sol };
+    if (gr) {
+      var g2 = groups(tokens, t, [0, 1, 2], 1);
+      return g2 && g2.g <= 1 ? { h: 2, sol: g2.sol } : { h: 1, sol: gr.sol, many: gr.g };
+    }
+    var steps = [[{ lu: [0, 1, 2], gu: [0] }, 1], [{ lu: [0, 1, 2], gu: [0, 1, 2] }, 2], [{}, Infinity]];
     for (var q = 0; q < steps.length; q++) {
       var r = solve(tokens, t, steps[q][0]);
-      if (r.count && r.cost <= steps[q][1]) return { h: q + 1, sol: treeToModel(n, r.tree) };
+      if (r.count && r.cost <= steps[q][1]) return { h: q + 2, sol: treeToModel(n, r.tree) };
     }
     return null;
   }
@@ -568,7 +609,7 @@
   return { fr: fr, add: add, sub: sub, mul: mul, div: div, sqrt: sqrt, fact: fact, same: same, show: show, literal: literal,
            UN: UN, unary: unary, solve: solve, tokenize: tokenize, parse: parse, evaluate: evaluate, calc: calc,
            OPS: OPS, JOPS: JOPS, SYM: SYM, blank: blank, literals: literals, normalize: normalize, text: text, value: value,
-           treeToModel: treeToModel, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial, skill: skill, depths: depths,
+           treeToModel: treeToModel, groups: groups, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial, skill: skill, depths: depths,
            BANK: BANK, POOL: POOL, order: order, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK,
            newGame: newGame, line: line, target: target, current: current, onTarget: onTarget, canJoin: canJoin,
            edit: edit, use: use, useable: useable, why: why, plain: plain, sameM: sameM, next: next, nextRound: nextRound, reveal: reveal, hintStep: hintStep, parts: parts };

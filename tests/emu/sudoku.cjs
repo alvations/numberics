@@ -22,13 +22,16 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("tray has 4 slots: Undo Reveal Check Candidates", (await p.locator("#tray .pw").allTextContents()).map(s => s.replace(/[0-9∞]+$/, "")).join(",") === "Undo,Reveal,Check,Candidates");
   ck("Notes and Erase stay plain tools", await p.locator(".tools #notes").count() === 1 && await p.locator(".tools #erase").count() === 1);
   ck("start stock: 1 Reveal, Check and Candidates empty", JSON.stringify((await st(p)).stock) === JSON.stringify({ reveal: 1, check: 0, cands: 0 }));
-  ck("Undo shows no infinity badge while there is nothing to undo (S5)", await p.locator("#pw-undo i").isHidden() && (await p.getAttribute("#pw-undo", "aria-disabled")) === "true");
+  ck("Undo always shows its infinity badge, dimmed while there is nothing to undo (cold #8: no 1 then infinity)", (await p.textContent("#pw-undo i")) === "∞" && await p.locator("#pw-undo i").isVisible() && (await p.getAttribute("#pw-undo", "aria-disabled")) === "true");
   ck("tray buttons are never disabled, only aria-disabled (R5)", await p.evaluate(() => [...document.querySelectorAll("#tray .pw")].every(b => !b.disabled)));
   ck("tray tooltips in the family voice", (await p.getAttribute("#pw-reveal", "title")) === "H: Reveal. Show the right digit for one cell.");
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= 375));
   ck("tray labels fit their buttons", await p.evaluate(() => [...document.querySelectorAll("#tray .pw")].every(b => b.scrollWidth <= b.clientWidth + 1)));
   ck("subtitle: Numberics link and a tagline, no live status (R6)", /^Numberics · [A-Z][^.]*\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a[href='../']").count() === 1);
   ck("empty Best reads 'none', not a hyphen (R11)", (await p.textContent("#best")) === "none");
+  ck("empty Best uses the family's one empty style: dimmed, weight 600, same size as values (TRIAGE3)", await p.evaluate(() => {
+    const b = getComputedStyle(document.getElementById("best")), t = getComputedStyle(document.getElementById("time"));
+    return b.fontWeight === "600" && b.fontSize === t.fontSize && b.color === "rgb(154, 155, 176)"; }));
   ck("New puzzle button is 16px like the family (F17)", await p.evaluate(() => getComputedStyle(document.getElementById("new")).fontSize) === "16px");
   ck("board grid has role=row children (valid ARIA)", await p.locator("#board > [role=row]").count() === 9 && await p.locator("#board [role=row] > [role=gridcell]").count() === 81);
 
@@ -76,6 +79,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("h");
   s = await st(p);
   ck("Reveal fills the selected cell with the true digit", s.grid[hole] === s.solution[hole] && s.stock.reveal === Math.max(0, s.stock.reveal) && s.used.reveal === 1);
+  ck("Reveal says what it did in a toast, like every power-up (craft #2)", await toastIs(p, new RegExp("^Revealed: " + s.solution[hole] + "$"), false), await p.textContent("#toast"));
   if (!s.stock.reveal) ck("Reveal slot is aria-disabled at zero", (await p.getAttribute("#pw-reveal", "aria-disabled")) === "true");
 
   // 5. Check: give charges, place a wrong digit, check by click
@@ -101,17 +105,37 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.locator(".c").nth(h3).click();
   s = await st(p);
   ck("Candidates fills notes in the tapped cell's box", s.notes[h3] !== 0 && (s.notes[h3] & (1 << s.solution[h3])) !== 0 && s.stock.cands === 0);
+  ck("Candidates says what it did in a toast (craft #2)", await toastIs(p, /^Box notes filled$/, false), await p.textContent("#toast"));
   ck("notes render in the box", await p.locator(".c .notes").count() >= 1);
   ck("pencil notes are readable on a phone (S3)", await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".c .notes")).fontSize) >= 10.5));
 
   // 7. solve: end card, no reward toast, locked (R1), clock stopped
   await p.evaluate(() => { const s = window.__sudoku.state; const hole = s.grid.findIndex(v => !v); s.solution.forEach((v, k) => { if (k !== hole) s.grid[k] = v; }); window.__sudoku.state = s; window.__sudoku.select(hole); });
   await p.evaluate(() => document.getElementById("toast").classList.remove("on"));
-  await p.keyboard.press(String(await p.evaluate(() => { const s = window.__sudoku.state; return s.solution[s.grid.findIndex(v => !v)]; })));
+  const newTop = await p.evaluate(() => document.getElementById("new").getBoundingClientRect().top);
+  const lastDigit = String(await p.evaluate(() => { const s = window.__sudoku.state; return s.solution[s.grid.findIndex(v => !v)]; }));
+  // TRIAGE3: the finished grid is seen, undimmed, for 1.5 s before the card. Measured in the page from the keypress.
+  await p.evaluate(() => {
+    window.__seen = null; window.__pressT = null;
+    addEventListener("keydown", () => { window.__pressT = performance.now(); }, { once: true, capture: true });
+    const w = document.getElementById("win");
+    new MutationObserver(() => { if (!w.hidden && window.__seen === null) window.__seen = performance.now() - window.__pressT; }).observe(w, { attributes: true });
+  });
+  await p.keyboard.press(lastDigit);
+  ck("the last digit: the board shows bright first, no card, no dim, no selection", (await st(p)).solved && await p.locator("#win").isHidden() && await p.locator(".c.sel, .c.peer, .c.same").count() === 0);
+  await shot(p, "solve-moment");
+  await p.waitForFunction(() => window.__seen !== null, null, { timeout: 4000 }).catch(() => null);
+  const seen = await p.evaluate(() => window.__seen);
+  ck("the card arrives 1.5 s after the last digit (measured " + Math.round(seen) + " ms)", seen >= 1450 && seen <= 1900, String(seen));
+  ck("the card's primary has the focus (one end-card pattern)", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  ck("the page's New puzzle is hidden while the card shows, its space kept (no gap jump)", await p.evaluate((t) => {
+    const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && Math.abs(n.getBoundingClientRect().top - t) < 1; }, newTop));
+  ck("the card offers See the board beside its primary", (await p.textContent("#win-view")) === "See the board" && await p.locator("#win .row #again").count() === 1);
   const used = await p.evaluate(() => { const u = window.__sudoku.state.used; return u.reveal + u.check + u.cands; });
   ck("solving shows the end card: headline, summary line, primary", await p.isVisible("#win") && (await p.textContent("#win h2")) === "Solved" &&
     new RegExp("^\\d+:\\d\\d on Medium · " + used + " power-ups used$").test(await p.textContent("#win-text")), await p.textContent("#win-text"));
-  ck("an assisted record is called out, the pure Best stays 'none'", (await p.textContent("#win-best")) === "New best with power-ups." && (await p.textContent("#best")) === "none");
+  ck("an assisted record is a plain fact that explains the empty Best (mechanics #2, craft #1)", (await p.textContent("#win-best")) === "Fastest with power-ups. Best counts only solves without them." &&
+    (await p.textContent("#best")) === "none" && !(await p.evaluate(() => document.getElementById("win-best").classList.contains("best"))));
   ck("the end card is a full-board scrim (R8)", await p.evaluate(() => { const a = document.getElementById("win").getBoundingClientRect(), b = document.getElementById("board").getBoundingClientRect(); return Math.abs(a.width - b.width) < 2 && Math.abs(a.height - b.height) < 2; }));
   ck("no toast with the end card: one channel per event (R7, F4)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("on"))));
   const g0 = (await st(p)).grid.join(""), t0 = await p.evaluate(() => window.__sudoku.elapsed);
@@ -126,8 +150,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.waitForTimeout(1300);
   ck("the clock is stopped on a solved board", (await p.evaluate(() => window.__sudoku.elapsed)) === t0);
   await shot(p, "solved");
+  // See the board: the card hides, the finished grid shows undimmed; a tap on the board brings the card back
+  await p.click("#win-view");
+  ck("See the board hides the card and shows the page's New puzzle again", await p.locator("#win").isHidden() && await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "visible"));
+  ck("See the board says how to get back", await toastIs(p, /^Tap the board for the summary\.$/, "info"), await p.textContent("#toast"));
+  await shot(p, "see-board");
+  await p.locator(".c").nth(40).click();
+  ck("a tap on the board brings the card back, focus on its primary", await p.isVisible("#win") && await p.evaluate(() => document.activeElement.id === "again") && (await st(p)).grid.join("") === g0);
+  await p.click("#win-view"); await p.keyboard.press("Escape");
+  ck("Esc brings the card back too", await p.isVisible("#win"));
   await p.reload();
-  ck("solved state survives reload and stays locked", (await st(p)).solved && await p.isVisible("#win") && (await p.textContent("#win-best")) === "New best with power-ups.");
+  ck("solved state survives reload and stays locked", (await st(p)).solved && await p.isVisible("#win") && /^Fastest with power-ups\./.test(await p.textContent("#win-best")));
   ck("no page errors", errs.length === 0, errs.join("|"));
   await ctx.close();
 
@@ -135,7 +168,27 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ({ ctx, p, errs } = await page());
   await p.evaluate(() => { const s = window.__sudoku.state; const hole = s.grid.findIndex(v => !v); s.solution.forEach((v, k) => { if (k !== hole) s.grid[k] = v; }); s.moves = 5; window.__sudoku.state = s; window.__sudoku.select(hole); });
   await p.keyboard.press(String(await p.evaluate(() => { const s = window.__sudoku.state; return s.solution[s.grid.findIndex(v => !v)]; })));
+  await p.locator(".c").nth(0).click(); // a tap on the finished board skips the rest of the hold
+  ck("a tap during the hold shows the card at once", await p.isVisible("#win"));
+  ck("a pure record is celebrated in gold", await p.evaluate(() => document.getElementById("win-best").classList.contains("best")));
   ck("a pure solve says New best. and fills the Best pill", (await p.textContent("#win-best")) === "New best." && /^\d+:\d\d$/.test(await p.textContent("#best")) && /No power-ups used$/.test(await p.textContent("#win-text")));
+    // a new puzzle during the hold: the old card never appears over it (the timer is guarded)
+  await p.click("#again");
+  await p.evaluate(() => { const s = window.__sudoku.state; const hole = s.grid.findIndex(v => !v); s.solution.forEach((v, k) => { if (k !== hole) s.grid[k] = v; }); s.moves = 5; window.__sudoku.state = s; window.__sudoku.select(hole); });
+  await p.keyboard.press(String(await p.evaluate(() => { const s = window.__sudoku.state; return s.solution[s.grid.findIndex(v => !v)]; })));
+  await p.click("#new");
+  await p.waitForTimeout(1800);
+  ck("New puzzle during the hold: a fresh unsolved board, no stale card", !(await st(p)).solved && await p.locator("#win").isHidden());
+  // a clash on the blue same-digit fill stays readable (craft nit 4)
+  ck("a red clash digit on the same-digit fill keeps 4.5:1", await p.evaluate(() => {
+    const s = window.__sudoku.state, c = s.grid.findIndex(v => !v), peer = window.NumbericsSudoku.PEERS[c].find(k => s.grid[k]);
+    const d = s.grid[peer]; s.grid[c] = d; window.__sudoku.state = s;
+    const other = s.grid.findIndex((v, k) => v === d && k !== c && k !== peer); window.__sudoku.select(other);
+    const el = document.querySelectorAll(".c")[c];
+    if (!el.classList.contains("bad") || !el.classList.contains("same")) return false;
+    const L = (rgb) => { const v = rgb.match(/\d+/g).slice(0, 3).map(x => { x = x / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    const cs = getComputedStyle(el), a = L(cs.color), b = L(cs.backgroundColor);
+    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.5; }));
   await ctx.close();
 
   // 9. difficulty switch asks first (R10); an untouched puzzle switches at once

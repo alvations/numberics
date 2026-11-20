@@ -80,7 +80,8 @@
 .help .btn{ min-width:120px; }
 .help .card:focus{ outline:none; }
 .help .gone{ width:28px; height:28px; border-radius:var(--tile-radius); border:2px dashed var(--line); flex:none; }
-#best.none{ color:var(--mute); font-weight:600; }
+/* the end card: See the board + New game side by side */
+.over .row{ margin:4px 0 0; }
 /* the board's focus and aiming rings sit inside the panel, never out toward the page edge */
 .board:focus-visible{ outline-offset:-2px; }
 .board.targeting{ box-shadow:inset 0 0 0 2px var(--accent); }

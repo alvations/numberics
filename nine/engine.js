@@ -85,8 +85,9 @@
   }
   function freshRound(s) {
     s.heaps = deal(s, s.level); s.dealt = s.heaps.slice(); s.turn = "you"; s.acted = false; s.added = false;
-    // R2: a side that used Add or Pass this round earns nothing for winning it; Pass is once per round per side
-    s.powered = { you: false, cpu: false }; s.passed = { you: false, cpu: false };
+    // R2: a side that used Add, Pass or Peek this round earns nothing for winning it (round 3: Peek counts as help,
+    // like Six's Hint); Pass is once per round per side. s.peeked survives Undo, so Peek + Undo cannot clear it.
+    s.powered = { you: false, cpu: false }; s.passed = { you: false, cpu: false }; s.peeked = { you: false, cpu: false };
     s.lastTurn = null; s.last = null; s.prev = null; s.roundOver = null; s.award = null;
   }
   // A new run: level 3 (or o.level), round 1 of a best of five, one Undo each side.
@@ -121,9 +122,9 @@
   function finishRound(s, taker) {
     var winner = s.misere ? other(taker) : taker;
     s.roundOver = winner; s.score[winner]++;
-    // Winning a round earns one power-up, unless the winner used Add or Pass in it (R2: a power-up never earns
+    // Winning a round earns one power-up, unless the winner used Add, Pass or Peek in it (R2: a power-up never earns
     // one). The computer earns too, on Hard only (it only plays them on Hard). s.noAward says why nothing paid:
-    // "power" (Add or Pass used) or "full" (every slot at the cap, R15).
+    // "power" (Add, Pass or Peek used) or "full" (every slot at the cap, R15).
     s.award = null; s.noAward = null;
     if (winner === "you" || s.diff === "hard") {
       if (s.powered && s.powered[winner]) s.noAward = "power";
@@ -178,7 +179,7 @@
   //   undo        restores the start of the player's last turn, stock included (no farming); spent Peeks stay spent
   //   add, tile   +1 to one live tile, never past 9; once per turn; you still take after it
   //   pass        skip this turn; once per round per side, and not right after the other side passed
-  //   peek        spends a charge and returns one winning move in .move (null when there is none)
+  //   peek        spends a charge and returns one winning move in .move (null when there is none); the round no longer pays
   function use(s0, name, tile) {
     var fail = { ok: false, state: s0 };
     if (name === "undo") {
@@ -186,6 +187,8 @@
       var u = clone(s0.prev); u.power.you.undo--; u.used = s0.used + 1; u.ply = s0.ply + 1;
       // Peek is information: a spent Peek stays spent after Undo, so Peek + Undo never shows a move for free.
       u.power.you.peek = Math.min(u.power.you.peek, s0.power.you.peek);
+      // ...and a round with a Peek in it stays unpaid (R2): Undo never clears what the Peek showed
+      if (s0.peeked && s0.peeked.you) { markPowered(u, "you"); u.peeked = u.peeked || { you: false, cpu: false }; u.peeked.you = true; }
       return { ok: true, state: u };
     }
     if (!live(s0)) return fail;
@@ -211,7 +214,9 @@
     }
     if (name === "peek") {
       if (!(s0.power[who].peek > 0)) return fail;
-      s = clone(s0); Power.spend(s.power[who], "peek"); s.ply++;
+      s = clone(s0); Power.spend(s.power[who], "peek"); s.ply++; markPowered(s, who);
+      if (!s.peeked) s.peeked = { you: false, cpu: false };
+      s.peeked[who] = true;
       if (who === "you") s.used++; else s.cpuUsed++;
       return { ok: true, state: s, move: peek(s.heaps, s.misere) };
     }

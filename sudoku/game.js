@@ -37,6 +37,9 @@
   var armed = null;            // "reveal" | "cands" while a power-up waits for a cell
   var marks = null, marksT = null; // Check result: {state, cells} shown briefly, only on the state it checked
   var levelArm = null, levelT = null; // a difficulty button waiting for its second tap
+  // The finished grid shows bright and undimmed for HOLD ms before the card (TRIAGE3: the result before the card);
+  // "See the board" hides the card again (viewing) and a tap on the board or Esc brings it back.
+  var HOLD = 1500, hold = false, holdT = null, viewing = false;
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), cells = [];
@@ -62,6 +65,7 @@
   function fresh(diff) {
     disarmLevel();
     disarm(); level = diff; sel = -1; elapsed = 0; last = null; marks = null; note = null;
+    clearTimeout(holdT); hold = false; viewing = false;
     state = S.newState(S.generate(freshSeed(), diff)); bank(); save(); startTimer(); render();
   }
   var fmt = Kit.clock;
@@ -130,11 +134,17 @@
     $("notes").textContent = "Notes: " + (notesMode ? "on" : "off"); $("notes").setAttribute("aria-pressed", String(notesMode));
     renderTray();
     boardEl.classList.toggle("targeting", !!armed);
-    $("win").hidden = !state.solved;
+    var card = state.solved && !hold && !viewing;
+    $("win").hidden = !card;
+    // one end-card pattern: while the card shows, its primary replaces the page button, whose space is kept
+    $("new").style.visibility = card ? "hidden" : "";
     if (state.solved) {
       var u = S.total(state.used);
       $("win-text").textContent = fmt(secs()) + " on " + cap(state.difficulty) + " · " + (u ? plural(u, "power-up") + " used" : "No power-ups used");
-      $("win-best").hidden = !note; $("win-best").textContent = note ? note.text : "";
+      // a pure record is celebrated in gold; an assisted one is a plain fact, since Best counts only pure solves
+      var pure = note && (note.pure === true || note.text === "New best.");
+      $("win-best").hidden = !note; $("win-best").textContent = note ? (pure ? "New best." : ASSISTED) : "";
+      $("win-best").classList.toggle("best", !!pure);
     }
   }
 
@@ -144,18 +154,19 @@
     Array.prototype.forEach.call($("tray").children, function (b, i) {
       var d = PW[i]; b.id = "pw-" + d.id; b.title = d.key + ": " + d.label + ". " + d.desc;
     });
-    var u = $("pw-undo"), badge = u.querySelector("i"); // Undo is free: an infinity badge, shown only while it can act
-    badge.textContent = "∞"; badge.hidden = !view.undo;
+    var u = $("pw-undo"), badge = u.querySelector("i"); // Undo is free: always an infinity badge (cold #8: a 1 then
+    badge.textContent = "∞";                            // an infinity read as a limit); the slot dims when it cannot act
     u.setAttribute("aria-label", "Undo, free" + (view.undo ? "" : ", not available now") + ". " + PW[0].desc);
   }
 
+  var ASSISTED = "Fastest with power-ups. Best counts only solves without them.";
   function record() { // a fresh solve: keep the best times and say whether this one is a record (R8)
     var d = state.difficulty, pw = S.total(state.used), t = secs();
     note = null;
-    if (!pw) { if (typeof bests[d] !== "number" || t < bests[d]) { bests[d] = t; note = { seed: state.seed, text: "New best." }; } }
+    if (!pw) { if (typeof bests[d] !== "number" || t < bests[d]) { bests[d] = t; note = { seed: state.seed, pure: true }; } }
     else if (!assisted[d] || t < assisted[d].t) {
       assisted[d] = { t: t, pw: pw };
-      note = { seed: state.seed, text: "New best with power-ups." };
+      note = { seed: state.seed, pure: false };
     }
   }
   function commit(next) {
@@ -165,9 +176,21 @@
     if (state.solved && !was) {
       bank(); clearInterval(tick); armed = null; record();
       $("toast").classList.remove("on"); // one channel per event: the end card speaks alone (R7)
+      // the finished grid first, bright and plain (no selection), then the card
+      sel = -1; marks = null; hold = true; viewing = false; clearTimeout(holdT);
+      var solvedState = state;
+      holdT = setTimeout(function () { if (state === solvedState && hold) showCard(); }, HOLD); // a newer puzzle wins
     } else if (state.gain && state.gain.length) toast(state.high + " cells filled: +" + PW_NAME[state.gain[0]]);
     save(); render();
-    if (state.solved && !was) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
+  }
+  function showCard() { // end the hold, or come back from "See the board"; focus goes to the card's primary
+    clearTimeout(holdT); hold = false; viewing = false; render();
+    try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ }
+  }
+  function seeBoard() {
+    viewing = true; render();
+    try { boardEl.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ }
+    toast("Tap the board for the summary.", "info");
   }
   function use(id) {
     if (why(id) || (id !== "undo" && !(state.stock[id] > 0))) return infoFor(id);
@@ -203,6 +226,8 @@
     var n = id === "reveal" ? S.reveal(state, c) : S.fillBox(state, c);
     if (n === state) return toast(id === "reveal" ? "Nothing to reveal there" : "Nothing to fill in that box", "bad");
     disarm(); commit(n);
+    // every power-up says what it did (craft: Reveal was silent); the solving Reveal leaves the card to speak
+    if (!state.solved) toast(id === "reveal" ? "Revealed: " + state.grid[c] : "Box notes filled");
   }
   function enter(d) {
     if (state.solved) return;
@@ -215,6 +240,7 @@
   }
 
   boardEl.addEventListener("click", function (e) {
+    if (state.solved) { if (hold || viewing) showCard(); return; } // the finished board: a tap shows the summary
     var t = e.target.closest(".c"); if (!t) return;
     sel = +t.dataset.i;
     if (armed) return target(armed, sel);
@@ -250,6 +276,7 @@
   $("erase").addEventListener("click", function () { enter(0); });
   Kit.twoStep($("new"), risky, function () { fresh(state.difficulty); }, "Sure? This ends the puzzle");
   $("again").addEventListener("click", function () { fresh(state.difficulty); });
+  $("win-view").addEventListener("click", seeBoard);
 
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -258,6 +285,7 @@
     // Enter and Space (they press it, R9). Digits and arrows still reach the board after a click on the pad.
     if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     if (tag === "BUTTON" && (k === "Enter" || k === " ")) return;
+    if (state.solved && (hold || viewing) && (k === "Escape" || k === "Enter" || k === " ")) { e.preventDefault(); return showCard(); }
     if (k >= "1" && k <= "9") return enter(+k);
     if (k === "Backspace" || k === "Delete" || k === "0") { e.preventDefault(); return enter(0); }
     var arrows = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };

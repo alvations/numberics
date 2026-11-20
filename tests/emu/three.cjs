@@ -19,9 +19,19 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("explainer teaches 1+2, equal, step, flush and rings", await p.locator("#help li").count() === 5 &&
     /1 and 2/.test(await p.textContent("#help")) && /Equal/.test(await p.textContent("#help")) &&
     /3 and 6 make 9/.test(await p.textContent("#help")) && /Flush/.test(await p.textContent("#help")) && /ring/.test(await p.textContent("#help")));
+  ck("cold #17: the help copy is exact (1 + 2 and 3 + 6 are the unequal pairs; 1s and 2s never pair; flush uses 3, 6, 9, 12)",
+    await p.evaluate(() => { const t = document.getElementById("help").textContent.replace(/\s+/g, " ");
+      return /1 \+ 2 and 3 \+ 6 are the only unequal pairs/.test(t) && /Two 1s or two 2s never merge/.test(t) &&
+        /From 3 up, equal tiles merge/.test(t) && /A flush uses only 3, 6, 9 and 12/.test(t) && !/only pair that is not equal/.test(t); }));
+  ck("the page's how-to says equal tiles merge from 3 up", /from 3 up equal tiles merge/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
   ck("explainer example tiles are drawn like the board", await p.locator("#help .tile.three[data-band='7']").count() === 1);
   ck("explainer's big tiles 24, 48, 96 wear three different colours", await p.evaluate(() => new Set([...document.querySelectorAll("#help .tile")].filter(t => +t.textContent >= 24).map(t => getComputedStyle(t).backgroundColor)).size === 3));
   ck("BEST is a dimmed none before any play (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
+  ck("craft #5: the empty value uses the shared .stat .none style (same size as values, weight 600, muted)", await p.evaluate(() => {
+    const n = getComputedStyle(document.getElementById("best")), v = getComputedStyle(document.getElementById("score")),
+      mute = getComputedStyle(document.documentElement).getPropertyValue("--mute").trim();
+    const probe = document.createElement("i"); probe.style.color = mute; document.body.appendChild(probe); const mc = getComputedStyle(probe).color; probe.remove();
+    return n.fontSize === v.fontSize && n.fontWeight === "600" && n.color === mc; }));
   ck("explainer fits at 375px", await p.evaluate(() => { const r = document.querySelector("#help .card").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth; }));
   await shot(p, "help");
   await p.keyboard.press("ArrowLeft");
@@ -114,7 +124,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await set(p, [1, 3, 0, 0, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12], { moves: 3, power: { undo: 1, smash: 2, swap: 1, third: 1 } });
   await p.focus("#board");
   await p.keyboard.press("2");
-  ck("keyboard arming shows a cursor on the first tile", await p.locator("#tiles .tile.cur").count() === 1 && /Arrows/.test(await p.textContent("#hint")));
+  ck("keyboard arming shows a cursor on the first tile", await p.locator("#tiles .tile.cur").count() === 1 && /arrows \+ Enter/.test(await p.textContent("#hint")));
+  ck("craft #13: keyboard targeting copy still says how to tap", /^Tap a tile to smash it, or arrows \+ Enter\. Esc cancels\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await shot(p, "kbd-targeting");
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown");
   ck("arrows move the cursor, not the tiles", (await st(p)).grid[5] === 2 && await p.evaluate(() => { const c = document.querySelector(".tile.cur"); return c && c.textContent === "2"; }));
@@ -154,6 +165,43 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.locator("#tray .pw").nth(0).click({ force: true });
   s = await st(p); ck("undo (tray click) rewinds the third, stock included", s.grid[5] === 2 && s.power.third === 1 && s.power.undo === 0);
 
+  // 4b. R15 (critic S2): a flush on a full stock says "Power-ups full"
+  await set(p, FLUSH, { score: 0, moves: 3, power: { undo: 9, smash: 9, swap: 9, third: 9 } });
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(150);
+  ck("R15: a flush on a full stock says Power-ups full", (await p.textContent("#toast")) === "Flush 3-6-9, +54. Power-ups full" &&
+    await p.evaluate(() => document.getElementById("toast").classList.contains("on")), await p.textContent("#toast"));
+  await p.waitForTimeout(700);
+  // craft #1: arming a power-up clears a toast that sat over the hint line
+  await p.keyboard.press("2"); await p.waitForTimeout(80);
+  ck("craft #1: arming a power-up clears the toast so the instruction reads in full", !(await p.evaluate(() => document.getElementById("toast").classList.contains("on"))));
+  await p.keyboard.press("Escape");
+
+  // 4c. craft #13 / #11: targeting copy names tapping, on phones and with a keyboard, and stays on one line at 375 px
+  const lines = [];
+  for (const desk of [false, true]) {
+    await p.evaluate((d) => { window.__three.desk = d; }, desk);
+    await set(p, [1, 3, 0, 0, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12], { moves: 3, power: { undo: 1, smash: 1, swap: 1, third: 1 } });
+    for (const k of ["2", "3", "4"]) {
+      await p.locator("#tray .pw").nth(+k - 1).click();
+      lines.push(await p.evaluate(() => { const h = document.getElementById("hint"); return [h.textContent, h.getBoundingClientRect().height]; }));
+      if (k === "3") { await tap(0); lines.push(await p.evaluate(() => { const h = document.getElementById("hint"); return [h.textContent, h.getBoundingClientRect().height]; })); }
+      await p.locator("#tray .pw").nth(+k - 1).click(); // tapping the armed button cancels
+    }
+  }
+  ck("every targeting line starts with Tap", lines.every(([t]) => /^(Tap|Now tap) /.test(t)), JSON.stringify(lines));
+  ck("phone copy says how to cancel by tapping; keyboard copy adds arrows + Enter and Esc", lines.slice(0, 4).every(([t]) => /Tap (Smash|Swap|Third) to cancel\.$/.test(t)) &&
+    lines.slice(4).every(([t]) => /Esc cancels\.$/.test(t)) && lines.slice(4).filter(([t]) => /arrows \+ Enter/.test(t)).length === 3, JSON.stringify(lines));
+  ck("every targeting line fits on one line at 375 px (the board never moves)", lines.every(([, h]) => h < 25), JSON.stringify(lines));
+  ck("tapping the armed button cancels", await p.locator("#board.targeting").count() === 0);
+  await p.evaluate(() => { window.__three.desk = matchMedia("(hover: hover) and (pointer: fine)").matches; });
+
+  // 4d. gameplay #1 / cold #19: stuck with only Undo left says so plainly
+  await set(p, [0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { next: 12, power: { undo: 1, smash: 0, swap: 0, third: 0 } });
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(300);
+  ck("stuck with only Undo: 'Undo a move, or start a new game.'", !(await st(p)).over && (await p.textContent("#hint")) === "Stuck. Undo a move, or start a new game.", await p.textContent("#hint"));
+  await set(p, [3, 12, 3, 12, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { power: { undo: 0, smash: 1, swap: 0, third: 0 } });
+  ck("stuck with another power-up: 'Use a power-up'", (await p.textContent("#hint")) === "Stuck. Use a power-up to keep going.", await p.textContent("#hint"));
+
   // 5. end of run: locked with an empty tray
   await p.evaluate(() => { window.__three.base = 1e9; });
   await set(p, [0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { next: 12, used: 0, power: { undo: 0, smash: 0, swap: 0, third: 0 } });
@@ -172,7 +220,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("no win text anywhere", !/you win|victory|congrat/i.test(await p.textContent("body")));
   ck("craft #2: the end card takes focus, so no gold ring frames the finished board", await p.evaluate(() => document.activeElement.id === "again") &&
     await p.locator("#board.targeting").count() === 0);
+  ck("craft #7: one New game on screen while the card shows; the page's button keeps its space", await p.evaluate(() => {
+    const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && n.getBoundingClientRect().height > 0; }));
+  ck("subline reads '<detail> · score N'", (await p.textContent("#over-text")) === "12 flushes · 7 power-ups · score 12,345", await p.textContent("#over-text"));
   await shot(p, "over");
+  await p.click("#over-view");
+  ck("See the board hides the card and shows the finished board", !(await p.isVisible("#over")) && await p.locator("#tiles .tile").count() === 16);
+  ck("See the board: the page's New game is back, and the hint says how to return", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "visible") &&
+    (await p.textContent("#hint")) === "Tap the board for the summary.");
+  await p.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  ck("a tap on the board brings the card back, focus on its primary", await p.isVisible("#over") && await p.evaluate(() => document.activeElement.id === "again"));
+  await p.click("#over-view"); await p.keyboard.press("Escape");
+  ck("Esc brings the card back too", await p.isVisible("#over"));
   await p.click("#again");
   ck("New game from the overlay starts fresh", !(await st(p)).over && await p.locator("#tiles .tile").count() === 9);
   ck("no page errors", errs.length === 0, errs.join("|"));

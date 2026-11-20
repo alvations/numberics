@@ -13,7 +13,7 @@
     { id: "pass", label: "Pass", desc: "Skip your turn (once per round)." },
     { id: "peek", label: "Peek", desc: "Show one winning move, if there is one." },
   ];
-  var EARN = "Win a round without Add or Pass to earn one.";
+  var EARN = "Win a round without Add, Pass or Peek to earn one.";
   var NAME = { undo: "Undo", add: "Add", pass: "Pass", peek: "Peek" };
 
   // ---- load and validate ----
@@ -36,6 +36,7 @@
 
   var sel = null, amount = 1, peekMark = null, targeting = null, timer = null, cpuMark = null, note = "", info = "", newBest = false;
   var hold = false, holdT = null, viewing = false; // R13: the finished board first, then the card; "See the board"
+  var cardWas = false; // the card just appeared: focus its primary button (round 3, one end-card pattern)
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), heapsEl = $("heaps");
 
@@ -151,6 +152,10 @@
     // Learn: the goal in plain words, then the live nim-sum, which Easy and Medium show and Hard does not
     var ln = $("learn"); ln.hidden = !prefs.learn; ln.textContent = "";
     if (prefs.learn) {
+      // round 3 (cold #30): one plain sentence first, before any binary
+      var plain = document.createElement("span"); plain.className = "plain";
+      plain.textContent = "Aim to leave the tiles balanced (two equal tiles are balanced): the Learn numbers show how.";
+      ln.appendChild(plain);
       var goal = document.createElement("span"); goal.className = "goal";
       goal.textContent = "To win, leave a nim-sum of 0 after your move" + (state.misere ? " (Mis\u00e8re: once every tile is 1 or gone, leave an odd number of 1s)" : "") +
         ". Nim-sum: add the binary columns, dropping every carry.";
@@ -170,32 +175,39 @@
     mb.setAttribute("aria-pressed", String(state.misere));
     drawOver();
   }
-  // End screens (R8): one-line headline, one summary line "<result> · <tally>", a note, a gold button.
+  // End screens (R8, round 3 one end-card pattern): headline "You win" / "The computer wins" (+ " round N"), one
+  // subline "<detail> · <tally>", a note, See the board and a gold primary. While the card shows, the page's New game
+  // is hidden with its space kept, and focus moves to the card's primary button.
   // A decided round or match is final: Undo never crosses it (R1), so no screen offers it.
   function drawOver() {
-    var over = $("over"); over.hidden = live() || hold || viewing;
+    var over = $("over"), up = !live() && !hold && !viewing; over.hidden = !up;
+    $("new").style.visibility = up ? "hidden" : "";
+    var was = cardWas; cardWas = up;
+    if (up && !was) setTimeout(function () { if (cardWas) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* a nicety */ } } }, 0);
     if (live()) return;
     var sc = state.score.you + "-" + state.score.cpu;
     // the reward line: what paid, or why nothing did (R2: Add or Pass used; R15: every slot full)
     var aw = state.award && state.award.who === "you" ? "+" + NAME[state.award.name] :
-      state.roundOver === "you" && state.noAward === "power" ? "No power-up: you used Add or Pass this round." :
+      state.roundOver === "you" && state.noAward === "power" ? "No power-up: you used Add, Pass or Peek this round." :
       state.roundOver === "you" && state.noAward === "full" ? "Power-ups full." : "";
     var bv = best[bestKey(state)];
     $("over-best").hidden = !(state.matchOver === "you" && newBest);
     if (state.matchOver === "you") {
-      $("over-title").textContent = "Match won";
+      $("over-title").textContent = "You win";
       $("over-text").textContent = "Match won " + sc + " · " + state.level + " tiles";
       $("over-note").textContent = (aw ? aw + (/\.$/.test(aw) ? " " : ". ") : "") + (state.level < N.MAX_TILES ? "Next match: " + (state.level + 1) + " tiles." : "Nine tiles again: the top level.");
       $("again").textContent = "Next match";
     } else if (state.matchOver === "cpu") {
-      $("over-title").textContent = "Run over";
+      $("over-title").textContent = "The computer wins";
       $("over-text").textContent = "Match lost " + sc + " · " + state.level + " tiles";
-      $("over-note").textContent = "Best: " + (bv ? bv + " tiles" : "none") + ".";
+      // cold #32: say what a run is when it ends
+      $("over-note").textContent = "Run over: the next run starts again at " + N.MIN_TILES + " tiles. Best: " + (bv ? bv + " tiles" : "none") + ".";
       $("again").textContent = "New game";
     } else {
-      $("over-title").textContent = state.roundOver === "you" ? "Round won" : "Round lost";
-      $("over-text").textContent = "You " + state.score.you + " : " + state.score.cpu + " Computer · first to " + N.WIN_ROUNDS;
-      $("over-note").textContent = state.roundOver === "you" ? aw : moveText(state.last, "cpu");
+      $("over-title").textContent = (state.roundOver === "you" ? "You win" : "The computer wins") + " round " + state.round;
+      var lastBy = state.last && state.last.who === "you" ? "You" : "The computer";
+      $("over-text").textContent = lastBy + " took the last tile · " + sc + ", first to " + N.WIN_ROUNDS;
+      $("over-note").textContent = state.roundOver === "you" ? aw : "";
       $("again").textContent = "Next round";
     }
   }
@@ -290,8 +302,10 @@
     var h = e.target.closest ? e.target.closest(".heap[data-i]") : null; if (!h) return;
     var i = +h.getAttribute("data-i"), v = state.heaps[i];
     if (targeting === "add") return addTo(i);
+    // a pip sets the take only on the chosen tile; the first tap on a tile picks it with a take of 1 (cold #31:
+    // a first tap that landed on a pip took 7 from an 8 by accident)
     var pip = e.target.closest(".pips i");
-    if (pip) { var k = +pip.getAttribute("data-k"); if (k < v) return select(i, v - k); }
+    if (pip && sel === i) { var k = +pip.getAttribute("data-k"); if (k < v) return select(i, v - k); }
     if (sel === i) return step(sel === i && amount >= v ? 1 - amount : 1); // tapping the chosen tile again takes one more (wraps)
     select(i, 1);
   });
@@ -309,7 +323,9 @@
     else if (state.matchOver === "cpu") state = N.newGame(K.freshSeed(), prefs);
     else if (state.roundOver) state = N.nextRound(state);
     else return;
+    var fromCard = $("over").contains(document.activeElement);
     clearPick(); cpuMark = null; note = ""; targeting = null; after(before);
+    if (fromCard) { try { boardEl.focus({ preventScroll: true }); } catch (e) { /* a nicety */ } }
   }
   var kb = false; // a keyboard player sees "(Esc cancels)"; a touch player does not
   window.addEventListener("pointerdown", function () { kb = false; }, true);

@@ -359,12 +359,86 @@ t("R2 property: random play mixing power-ups and claims never raises a side's st
       }
       const after = total(side === 1 ? next.power : next.cpuPower);
       // a power-up use never raises the stock (Undo only rewinds), and a powered round never pays
-      if (next.powered[side] || pre || (next.result && next.result.why === "powered")) { checked++; ok(after <= before, "seed " + seed + ": stock rose in a powered round " + before + " -> " + after); }
-      if (next.result && next.result.earned) { paid++; ok(!next.powered[next.result.winner], "a powered winner was paid"); }
+      const pk = (s.peeked && s.peeked[side]) || (next.peeked && next.peeked[side]);
+      if (next.powered[side] || pre || pk || (next.result && /^(powered|peeked)$/.test(next.result.why || ""))) { checked++; ok(after <= before, "seed " + seed + ": stock rose in a powered round " + before + " -> " + after); }
+      if (next.result && next.result.earned) { paid++; ok(!next.powered[next.result.winner] && !next.peeked[next.result.winner], "a powered or peeking winner was paid"); }
       s = next;
     }
   }
   ok(checked > 2000 && paid > 100, "coverage: powered steps " + checked + ", paid rounds " + paid);
+});
+// ---- Peek counts as help (TRIAGE3, mechanics #5) ----
+t("Peek is help: a round won after Peek earns nothing (why peeked); the same round without it pays", () => {
+  const base = () => { const s = at(B([2, 6], [1, 3]), 1, "medium"); s.power.peek = 1; return s; };
+  const plain = must(F.claim(base(), 7)); ok(plain.result.earned, "fixture pays without Peek"); eq(plain.result.why, null);
+  const p = must(F.use(base(), "peek")); eq(p.peeked[1], true);
+  const w = must(F.claim(p, 7)); eq(w.result.winner, 1); eq(w.result.earned, null); eq(w.result.why, "peeked");
+  eq(w.power.peek, 0, "the Peek is spent, nothing comes back");
+});
+t("Peek in an EARLIER turn of the round still stops the reward", () => {
+  let s = at(B([2], [1]), 1, "medium"); s.power.peek = 1;
+  s = must(F.use(s, "peek")); s = must(F.claim(s, 9));            // you 2 9, the computer to move
+  s.turn = 1; s.owner = B([2, 6], [1, 3]);                        // a later turn of the same round (forged board)
+  const w = must(F.claim(s, 7)); eq(w.result.winner, 1); eq(w.result.why, "peeked"); eq(w.result.earned, null);
+});
+t("Peek's mark survives Undo (R3 for the help, not only the charge), and a new round clears it", () => {
+  let s = F.newMatch(5, "medium"); s.power = { undo: 1, erase: 0, peek: 1, double: 0 };
+  s = must(F.claim(s, 5)); s = F.cpuTurn(s).state;
+  s = must(F.use(s, "peek")); s = must(F.use(s, "undo"));
+  eq(s.power.peek, 0, "spent"); eq(s.peeked[1], true, "still helped after the rewind");
+  s.owner = B([2, 6], [1, 3]); s.turn = 1;
+  const w = must(F.claim(s, 7)); eq(w.result.why, "peeked");
+  eq(F.nextRound(w).peeked, [false, false, false], "a fresh round starts clean");
+});
+t("Peek property: the same moves with and without Peek; with it a won round never pays (2,000 rounds)", () => {
+  let won = 0, paidPlain = 0;
+  for (let seed = 1; seed <= 2000; seed++) {
+    const diff = F.DIFFS[seed % 3];
+    const start = () => { const s = F.newMatch(seed, diff); s.power = { undo: 0, erase: 0, peek: 3, double: 0 }; return s; };
+    let r = seed * 2246822519 >>> 0; const rnd = (n) => { r = (r * 1103515245 + 12345) >>> 0; return (r >>> 8) % n; };
+    // play one round with random claims and a Peek before some of them; log the claims
+    let s = start(), log = [], peeks = 0;
+    while (!s.result) {
+      if (s.turn === 2) { s = F.cpuTurn(s).state; continue; }
+      if (F.canUse(s, "peek", 1) && rnd(3) === 0) { s = must(F.use(s, "peek")); peeks++; }
+      const f = F.free(s.owner), n = f[rnd(f.length)]; log.push(n); s = must(F.claim(s, n));
+    }
+    let q = start();
+    for (const n of log) { while (q.turn === 2 && !q.result) q = F.cpuTurn(q).state; q = must(F.claim(q, n)); }
+    while (!q.result) q = F.cpuTurn(q).state;          // the computer may make the last claim
+    eq(q.owner.join(), s.owner.join(), "seed " + seed + ": Peek changed the board");
+    eq(q.result.winner, s.result.winner);
+    if (s.result.winner === 1) {
+      won++; if (q.result.earned) paidPlain++;
+      if (peeks) { eq(s.result.earned, null, "seed " + seed + ": a peeked win paid"); eq(s.result.why, "peeked"); }
+      else eq(s.result.earned, q.result.earned);
+    }
+    ok(total(s.power) <= total(q.power) - peeks, "seed " + seed + ": Peek raised the stock");
+  }
+  ok(won > 200 && paidPlain > 100, "coverage: won " + won + ", paid without Peek " + paidPlain);
+});
+// the sensible player (TRIAGE3 re-measure): win if you can; with two threats against you, Double or Erase out of it;
+// block if you must; with a Peek in stock and nothing obvious, Peek and follow it; else any free number
+function sensibleTurn(s, rnd) {
+  const me = F.threats(s.owner, 1), them = F.threats(s.owner, 2);
+  if (me.length) return must(F.claim(s, me[0]));
+  if (them.length >= 2 && F.canUse(s, "double", 1)) { s = must(F.claim(must(F.use(s, "double")), them[0])); return s.result || s.turn !== 1 ? s : must(F.claim(s, them[1])); }
+  if (them.length >= 2 && F.canUse(s, "erase", 1)) for (const x of F.held(s.owner, 2)) {
+    const t = must(F.use(s, "erase", x)), th = F.threats(t.owner, 2).filter(n => n !== t.blocked);
+    if (th.length <= 1) return must(F.claim(t, th[0] || F.free(t.owner).filter(n => n !== t.blocked)[0]));
+  }
+  if (them.length) return must(F.claim(s, them[0]));
+  if (F.canUse(s, "peek", 1)) { const r = F.use(s, "peek"), b = r.info.best; return must(F.claim(r.state, b[rnd(b.length)])); }
+  const f = F.free(s.owner).filter(n => n !== s.blocked); return must(F.claim(s, f[rnd(f.length)]));
+}
+t("measured: with Peek counted as help, a sensible player still finds Hard harder than Medium, Medium harder than Easy", () => {
+  const rate = (diff) => { let won = 0, peekedWins = 0; for (let seed = 1; seed <= 200; seed++) {
+    let s = F.newMatch(seed, diff), r = seed * 2654435761 >>> 0; const rnd = (n) => { r = (r * 1103515245 + 12345) >>> 0; return (r >>> 8) % n; };
+    while (!s.match) { if (s.result) { if (s.result.why === "peeked") peekedWins++; s = F.nextRound(s); continue; } s = s.turn === 2 ? F.cpuTurn(s).state : sensibleTurn(s, rnd); }
+    if (s.match.winner === 1) won++; } return { w: won / 200, peekedWins }; };
+  const e = rate("easy"), m = rate("medium"), hd = rate("hard");
+  ok(e.w > 0.9, "Easy " + e.w); ok(m.w >= 0.35 && m.w <= 0.6, "Medium " + m.w); ok(hd.w >= 0.1 && hd.w <= 0.35, "Hard " + hd.w);
+  ok(hd.w < m.w && m.w < e.w, "order " + [e.w, m.w, hd.w]); ok(e.peekedWins + m.peekedWins > 0, "the Peek rule was exercised");
 });
 t("the round that decides the match pays nothing (a new match starts a fresh stock)", () => {
   let s = F.newMatch(1, "medium"); s.wins = [0, 2, 0]; s.rounds = [1, 1]; s.round = 3; s.owner = B([2, 6], [1, 3]);

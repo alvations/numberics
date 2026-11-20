@@ -23,6 +23,9 @@
   // only if this run already holds the record)
   var base = saved && Number.isFinite(saved.base) ? saved.base : (best.score > state.score ? best.score : 0);
   var seen = !!(saved && saved.seen);  // the first-run explainer was dismissed once
+  var desk = false;                // a mouse and keyboard: targeting copy adds the arrow keys
+  try { desk = window.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (e) { desk = false; }
+  var viewing = false;             // "See the board": the end card is hidden to look at the finished board
   var targeting = null;            // {name, picks:[], cur, kbd} while a power-up waits for a target
   var note = "";                   // a tray explanation in the hint line, until the next action
   var timers = [], gen = 0, finalFx = null;
@@ -79,10 +82,21 @@
     { id: "third", label: "Third", desc: "Turn a 1 or a 2 into a 3.", earn: EARN },
   ];
   var NAME = { undo: "Undo", smash: "Smash", swap: "Swap", third: "Third" };
-  var HINT = { smash: "Tap a tile to smash it.", swap: "Tap two neighbouring tiles to swap them.",
-               third: "Tap a 1 or a 2 to make it a 3." };
-  var KHINT = { smash: "Arrows pick a tile, Enter smashes it.", swap: "Arrows and Enter pick two neighbouring tiles.",
-                third: "Arrows pick a 1 or a 2, Enter makes it a 3." };
+  // targeting copy always says how to tap (phones aim by tapping); with a keyboard it adds arrows + Enter and Esc.
+  // Every line fits on one line at 375 px, so the hint never pushes the board down (craft #11, #13).
+  var HINT = { smash: "Tap a tile to smash it.", swap: "Tap two neighbours to swap.", third: "Tap a 1 or a 2 to make a 3." };
+  var KHINT = { smash: "Tap a tile to smash it, or arrows + Enter.", swap: "Tap two neighbours, or arrows + Enter.",
+                third: "Tap a 1 or a 2, or arrows + Enter." };
+  function targetHint() {
+    var keys = desk || targeting.kbd, n = targeting.name;
+    if (n === "swap" && targeting.picks.length) return keys ? "Now tap a neighbour to swap with. Esc cancels." : "Now tap a neighbour. Tap Swap to cancel.";
+    return keys ? KHINT[n] + " Esc cancels." : HINT[n] + " Tap " + NAME[n] + " to cancel.";
+  }
+  // stuck but not over: say what can still act (with only Undo left, say so plainly: gameplay #1, cold #19)
+  function stuckHint() {
+    var can = E.POWERS.filter(function (p) { return E.usable(state, p); });
+    return can.length === 1 && can[0] === "undo" ? "Stuck. Undo a move, or start a new game." : "Stuck. Use a power-up to keep going.";
+  }
   // why a charged power-up cannot act right now (false: it can, or it has no charge, so the tray says how to earn)
   function why(id) {
     if (state.over) return "The run is over.";
@@ -106,23 +120,27 @@
       onUse: activate,
       onInfo: function (id, text) { note = text; chrome(); },
     });
-    $("hint").textContent = targeting ? (targeting.kbd ? KHINT : HINT)[targeting.name] + " (Esc cancels)"
+    $("hint").textContent = targeting ? targetHint()
       : note ? note
-      : state.over ? ""
-      : !E.canMove(state) ? "Stuck. Use a power-up to keep going."
+      : state.over ? (viewing ? "Tap the board for the summary." : "")
+      : !E.canMove(state) ? stuckHint()
       : !state.moves ? "Swipe to start: every tile moves one step." : "";
     Array.prototype.forEach.call(cellsEl.children, function (c, k) {
       c.classList.toggle("sel", !!(targeting && targeting.picks.indexOf(k) >= 0));
       c.classList.toggle("cur", !!(targeting && targeting.kbd && targeting.cur === k));
     });
     boardEl.classList.toggle("targeting", !!targeting);
-    var wasOver = !$("over").hidden;
-    $("over").hidden = !state.over;
-    // the end card takes focus, so the board's focus ring never frames a finished run
-    if (state.over && !wasOver && !helpOpen()) $("again").focus({ preventScroll: true });
+    if (!state.over) viewing = false;
+    var wasOver = !$("over").hidden, card = !!state.over && !viewing;
+    $("over").hidden = !card;
+    // one end-card pattern (round 3): while the card shows, the page's New game is hidden with its space kept
+    // (no gap jump, one New game on screen), and the card's primary button takes focus
+    $("new").style.visibility = card ? "hidden" : "";
+    if (card && !wasOver && !helpOpen()) $("again").focus({ preventScroll: true });
     if (state.over) {
-      $("over-text").textContent = "Score " + K.fmt(state.score) + " · " + state.flushes + (state.flushes === 1 ? " flush" : " flushes") +
-        " · " + (state.used ? state.used + " power-up" + (state.used === 1 ? "" : "s") : "pure run");
+      // "<detail> · <score>", the family's subline form
+      $("over-text").textContent = state.flushes + (state.flushes === 1 ? " flush" : " flushes") + " · " +
+        (state.used ? state.used + " power-up" + (state.used === 1 ? "" : "s") : "pure run") + " · score " + K.fmt(state.score);
       $("over-best").hidden = !(state.score > base && state.score > 0);
     }
   }
@@ -147,7 +165,8 @@
   function announce(list) {
     if (!list.length) return;
     var f = list[0], tail = list.length > 1 ? "  (x" + list.length + " cascade)" : "";
-    var pays = f.power ? "  +" + NAME[f.power] : f.paid ? "" : " (no power-up)";
+    // R15: a flush on a full stock says so, never a silent missing reward
+    var pays = f.power ? "  +" + NAME[f.power] : f.full ? ". Power-ups full" : f.paid ? "" : " (no power-up)";
     K.toast("Flush " + f.values.join("-") + (f.value ? " = " + f.value : "") + ", +" + K.fmt(f.points) + pays + tail);
   }
   function play(list) {
@@ -212,6 +231,8 @@
     return (c < 0 || c > 3 || r < 0 || r > 3) ? -1 : r * 4 + c;
   }
   function pick(ev) {
+    if (ev.target && ev.target.closest && ev.target.closest("#over")) return; // the card's own buttons
+    if (viewing) return view(false);
     if (!targeting) return;
     var cell = cellAt(ev); if (cell < 0) return;
     targeting.kbd = false; targeting.cur = cell;
@@ -242,6 +263,7 @@
       if (e.key === "Escape" || ((e.key === "Enter" || e.key === " ") && !onButton)) { e.preventDefault(); closeHelp(); }
       return;
     }
+    if (viewing && (e.key === "Escape" || ((e.key === "Enter" || e.key === " ") && !onButton))) { e.preventDefault(); return view(false); }
     if (e.key === "Escape") { targeting = null; return render(); }
     if (targeting && (e.key === "Enter" || e.key === " ") && !onButton) {
       e.preventDefault(); if (targeting.cur < 0) { targeting.kbd = true; targeting.cur = firstTarget(targeting.name); return render(); }
@@ -256,8 +278,13 @@
   boardEl.addEventListener("click", pick);
   K.swipe(boardEl, doMove);
 
+  // "See the board" hides the card to look at the finished run; a tap on the board, Enter or Esc brings it back
+  function view(on) {
+    viewing = on; note = ""; render();
+    if (on) boardEl.focus({ preventScroll: true }); else $("again").focus({ preventScroll: true });
+  }
   function startNew() {
-    settle(); targeting = null; note = "";
+    settle(); targeting = null; note = ""; viewing = false;
     base = Math.max(best.score, state.score);
     state = E.newGame(K.freshSeed()); persist(); render();
   }
@@ -285,12 +312,13 @@
   $("help-open").addEventListener("click", function (e) { e.preventDefault(); openHelp(); });
   K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, startNew);
   $("again").addEventListener("click", startNew);
+  $("over-view").addEventListener("click", function () { view(true); });
 
   render();
   if (!seen) { helpBack = boardEl; showHelp(); }
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
-    settle(); targeting = null; note = ""; helpEl.hidden = true;
+    settle(); targeting = null; note = ""; viewing = false; helpEl.hidden = true;
     var s = E.newGame(2026);
     s.grid = [3, 6, 1, 2,
               9, 12, 3, 0,
@@ -301,5 +329,6 @@
     state = s; render();
   };
   window.__three = { get state() { return state; }, set state(s) { settle(); state = s; render(); }, render: render, settle: settle,
-    get base() { return base; }, set base(v) { base = v; }, openHelp: openHelp, closeHelp: closeHelp };
+    get base() { return base; }, set base(v) { base = v; }, openHelp: openHelp, closeHelp: closeHelp,
+    get viewing() { return viewing; }, set desk(v) { desk = !!v; render(); } };
 })();

@@ -11,6 +11,9 @@
  * - FLUSH: after a move, any straight line of FLUSH_MIN or more adjacent tiles in consecutive
  *   multiples of 3 (3-6-9, 12-9-6, 3-6-9-12, either direction) clears from the board. It scores
  *   sum x run length and earns one random power-up. Two runs at once both flush; every flush pays.
+ *   With step merges capped at 3 + 6, the ladder is 3, 6, 9, 12, 18, 24 ..., so 15 never exists and a flush
+ *   can only use 3, 6, 9 and 12 (3-6-9, 6-9-12 or 3-6-9-12). A flush on a full stock (all at 9) scores, pays
+ *   nothing and says so (full: true, R15).
  * - A power-up never earns one, not even indirectly (family rule R2). A run that Swap or Third lines up
  *   flushes at once inside use(), scoring its points but paying no power-up; and the swipe right after
  *   Smash, Swap or Third (state.free) pays no power-up for its flushes either, so a power-up cannot
@@ -188,7 +191,8 @@
         if (pts > s.best) s.best = pts;
         if (keep > s.top) s.top = keep;
         var got = pay ? award(s) : null;
-        out.push({ cells: run, values: values, at: at, value: keep, sum: total, points: pts, power: got, paid: !!pay, before: before });
+        // full: the flush earned a reward but every slot is at the cap, so the client says "Power-ups full" (R15)
+        out.push({ cells: run, values: values, at: at, value: keep, sum: total, points: pts, power: got, paid: !!pay, full: !!pay && !got, before: before });
       }
     }
 

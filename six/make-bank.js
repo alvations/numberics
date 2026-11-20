@@ -9,7 +9,7 @@ fs.writeFileSync(out, fs.readFileSync(out, "utf8").replace(/, \[[\s\S]*\]\);\s*$
 const E = require("./engine.js");
 const rep = (x, n) => Array(n).fill(String(x));
 // Tiers 1-3 (no joining) are banded by the tools a line needs (E.skill), so a tier never asks for less than the
-// one before it: Tier 1 + - x / and brackets, Tier 2 one sqrt or ! on a number, Tier 3 signs on groups, two
+// one before it: Tier 1 + - x / and one bracket group, Tier 2 one sqrt or ! on a number, Tier 3 signs on groups, two
 // signs or nested signs. Round 2 review: the old shape-based tiers put (1+1+1)! and nested roots in Tier 1
 // and made Tier 2 easier than Tier 1.
 const BAND = h => (h <= 1 ? 1 : h === 2 ? 2 : 3);
@@ -18,12 +18,15 @@ for (let d = 0; d <= 9; d++) for (const n of [3, 4, 5]) plainC.push([rep(d, n), 
 for (let x = 10; x <= 99; x++) for (const n of [3, 4, 5]) plainC.push([rep(x, n), "6"]);
 for (let d = 0; d <= 9; d++) for (const n of [3, 4, 5]) for (const g of ["66", "6.6"]) C[4].push([rep(d, n), g]);
 for (let x = 0; x <= 99; x++) for (const n of [3, 4, 5]) for (const g of ["666", "66.6"]) C[5].push([rep(x, n), g]);
-const bank = [], stats = {};
+const bank = [], stats = {}, dropped = [];
 const t0 = Date.now();
 const rows = { 1: [], 2: [], 3: [], 4: [], 5: [] };
 for (const [n, g] of plainC) {
   if (E.trivial(n, g) || !E.measure(n, g, 1)) continue;
-  const sk = E.skill(n, g), t = BAND(sk.h), m = E.measure(n, g, t);
+  const sk = E.skill(n, g);
+  // round 3: no Tier 1 line needs two bracket groups (E.skill re-bands those it can to Tier 2, the rest go)
+  if (sk.many) { dropped.push(n.join(" ")); continue; }
+  const t = BAND(sk.h), m = E.measure(n, g, t);
   // two-digit numbers four times: keep only lines with at least 10 answers, so the one generic pattern
   // ((x+x+x)/x)! does not crowd the tier
   if (n[0].length === 2 && n.length === 4 && m.count < 10) continue;
@@ -54,4 +57,4 @@ fs.writeFileSync(out, "/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 a
   " * d difficulty, h tools needed (E.skill: 0-4, 5 for joining tiers), s one shortest solution using only those tools. tests/test-six.js re-verifies every entry. */\n" +
   "(function (root, data) { if (typeof module === \"object\" && module.exports) module.exports = data; else root.NumbericsSixBank = data; })" +
   "(typeof self !== \"undefined\" ? self : this, [\n" + body + "\n]);\n");
-console.log(JSON.stringify(stats), bank.length, "entries", Date.now() - t0, "ms");
+console.log(JSON.stringify(stats), bank.length, "entries; left out (two groups):", dropped.join(", ") || "none", Date.now() - t0, "ms");

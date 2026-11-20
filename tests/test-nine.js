@@ -246,10 +246,51 @@ t("R2: a round won after Pass pays nothing (Easy [1,1,0], a lost start turned ro
   s = N.take(s, 1, 1).state; eq(s.roundOver, "you"); eq(s.award, null); eq(s.noAward, "power");
   eq(s.power.you.pass, 0, "Pass can never pay a Pass");
 });
-t("R2: Peek is information, so a round won after Peek still pays; the next round pays again after Add", () => {
+t("R2 (round 3): Peek counts as help, so a round won after Peek pays nothing; the next round pays again", () => {
   let s = forge({ heaps: [0, 2, 0], diff: "medium", you: { peek: 1, add: 1 } });
-  s = N.use(s, "peek").state; s = N.take(s, 1, 2).state; ok(s.award && s.award.who === "you", "peek round pays");
-  s = N.nextRound(s); eq(s.powered, { you: false, cpu: false }, "the flag is per round");
+  s = N.use(s, "peek").state; s = N.take(s, 1, 2).state;
+  eq(s.roundOver, "you"); eq(s.award, null, "peek round pays nothing"); eq(s.noAward, "power");
+  s = N.nextRound(s); eq(s.powered, { you: false, cpu: false }, "the flag is per round"); eq(s.peeked, { you: false, cpu: false });
+  s.heaps = [0, 2, 0]; s = N.take(s, 1, 2).state; ok(s.award && s.award.who === "you", "a clean round pays");
+});
+t("R2: a Peek that found no winning move still counts as help", () => {
+  let s = forge({ heaps: [1, 2, 3], diff: "easy", you: { peek: 1 } });
+  const r = N.use(s, "peek"); eq(r.move, null); ok(r.state.powered.you && r.state.peeked.you);
+});
+t("R2: Peek then Undo cannot wash the round clean (the Peek stays spent and the round stays unpaid)", () => {
+  // take, computer replies, Peek on the next turn, then Undo back to before the first take
+  let s = forge({ heaps: [0, 3, 1], diff: "easy", you: { undo: 1, peek: 1 } });
+  s = N.take(s, 2, 1).state; s = N.take(s, 1, 1).state; // the computer's reply, by hand: [0,2,0]
+  s = N.use(s, "peek").state; ok(s.powered.you);
+  const u = N.use(s, "undo").state; eq(u.heaps, [0, 3, 1]); eq(u.power.you.peek, 0); ok(u.powered.you && u.peeked.you, "still marked after Undo");
+  let w = N.take(u, 1, 2).state; w = N.take(w, 1, 1).state; w = N.take(w, 2, 1).state;
+  eq(w.roundOver, "you"); eq(w.award, null); eq(w.noAward, "power");
+});
+t("R2 counterfactual: the same moves with a Peek pay nothing, without it they pay (many seeds, Peek 0 to 5 turns before the win)", () => {
+  let pairs = 0;
+  for (const diff of ["easy", "medium", "hard"]) for (let seed = 1; seed <= 150; seed++) {
+    const base = N.newGame(seed * 104729 + 7, { diff, level: 3 + seed % 5 });
+    base.power.you = { undo: 0, add: 0, pass: 0, peek: 0 }; base.power.cpu = { undo: 0, add: 0, pass: 0, peek: 0 };
+    // record one round of the player's perfect play against the computer (no power-ups on either side)
+    let s = base, moves = [];
+    for (let k = 0; k < 200 && !s.roundOver; k++) {
+      if (s.turn === "you") { const m = perfect(s); moves.push(m); s = N.take(s, m.tile, s.heaps[m.tile] - m.to).state; }
+      else s = N.cpuTurn(s);
+    }
+    if (s.roundOver !== "you") continue;
+    ok(s.award && s.award.who === "you", diff + " seed " + seed + ": the clean line pays");
+    for (let gap = 0; gap <= 5; gap++) {
+      const at = moves.length - 1 - gap; if (at < 0) break;
+      let p = JSON.parse(JSON.stringify(base)); p.power.you.peek = 1; let i = 0;
+      for (let k = 0; k < 200 && !p.roundOver; k++) {
+        if (p.turn === "you") { if (i === at) p = N.use(p, "peek").state; const m = moves[i++]; p = N.take(p, m.tile, p.heaps[m.tile] - m.to).state; }
+        else p = N.cpuTurn(p);
+      }
+      eq(p.roundOver, "you", "same moves, same result"); eq(p.award, null, diff + " seed " + seed + " gap " + gap + ": peeked line paid"); eq(p.noAward, "power");
+      pairs++;
+    }
+  }
+  ok(pairs > 600, "pairs " + pairs);
 });
 t("R2: the computer's round won after its Pass or Add pays nothing either (Hard)", () => {
   let s = forge({ heaps: [1, 2, 3], turn: "cpu", diff: "hard", cpu: { pass: 1 } });
@@ -258,20 +299,21 @@ t("R2: the computer's round won after its Pass or Add pays nothing either (Hard)
   for (let k = 0; k < 40 && !s.roundOver; k++) s = s.turn === "cpu" ? N.cpuTurn(s) : N.take(s, s.heaps.findIndex(Boolean), 1).state;
   eq(s.roundOver, "cpu"); eq(s.award, null); eq(s.noAward, "power");
 });
-t("R2 property: in random play mixing power-ups and moves, a round won by a side that used Add or Pass never raises that side's stock", () => {
+t("R2 property: in random play mixing power-ups and moves, a round won by a side that used Add, Pass or Peek never raises that side's stock", () => {
   const tot = (p) => Object.values(p).reduce((a, b) => a + b, 0);
   let checked = 0, paid = 0;
   for (const diff of ["easy", "medium", "hard"]) for (let seed = 1; seed <= 120; seed++) {
     let s = N.newGame(seed * 7919, { diff, level: 3 + seed % 4 }), x = seed;
     s.power.you = { undo: 2, add: 3, pass: 3, peek: 2 }; s.power.cpu = { undo: 1, add: 2, pass: 2, peek: 0 };
     // an independent tracker: did each side use Add or Pass this round, and its stock right after that use
-    let trk = { you: null, cpu: null }, turnStart = null;
+    let trk = { you: null, cpu: null }, turnStart = null, peeked = false;
     for (let i = 0; i < 600 && !s.matchOver; i++) {
       if (s.roundOver) {
         const w = s.roundOver;
-        if (trk[w] !== null) { ok(tot(s.power[w]) <= trk[w], diff + " seed " + seed + ": " + w + " earned after a power-up"); ok(!s.award, "no award"); checked++; }
+        if (w === "you" && peeked) { ok(!s.award && s.noAward === "power", diff + " seed " + seed + ": a peeked round paid"); checked++; }
+        else if (trk[w] !== null) { ok(tot(s.power[w]) <= trk[w], diff + " seed " + seed + ": " + w + " earned after a power-up"); ok(!s.award, "no award"); checked++; }
         else if (s.award) paid++;
-        s = N.nextRound(s); trk = { you: null, cpu: null }; turnStart = null; continue;
+        s = N.nextRound(s); trk = { you: null, cpu: null }; turnStart = null; peeked = false; continue;
       }
       x = (x * 1103515245 + 12345) >>> 0;
       if (s.turn === "cpu") {
@@ -284,7 +326,7 @@ t("R2 property: in random play mixing power-ups and moves, a round won by a side
       const pick = x % 9, tile = (x >>> 4) % s.heaps.length;
       if (pick === 0) { const r = N.use(s, "add", tile); if (r.ok) { acted(); s = r.state; trk.you = tot(s.power.you); continue; } }
       if (pick === 1) { const r = N.use(s, "pass"); if (r.ok) { acted(); s = r.state; trk.you = tot(s.power.you); continue; } }
-      if (pick === 2) { const r = N.use(s, "peek"); if (r.ok) { s = r.state; if (trk.you !== null) trk.you--; continue; } }
+      if (pick === 2) { const r = N.use(s, "peek"); if (r.ok) { s = r.state; peeked = true; if (trk.you !== null) trk.you--; continue; } }
       if (pick === 3) { const r = N.use(s, "undo"); if (r.ok) { s = r.state; trk = turnStart; if (trk.you !== null) trk.you = Math.min(trk.you, tot(s.power.you)); continue; } }
       const ms = N.legalMoves(s.heaps), m = pick < 6 && N.peek(s.heaps, s.misere) || ms[(x >>> 9) % ms.length];
       acted(); s = N.take(s, m.tile, s.heaps[m.tile] - m.to).state;

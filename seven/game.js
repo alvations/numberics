@@ -24,6 +24,8 @@
       nat(s.bestChain) && nat(s.luckies) && nat(s.used) && typeof s.over === "boolean" &&
       (s.free === undefined || typeof s.free === "boolean") &&
       (s.out === undefined || (Array.isArray(s.out) && s.out.every(function (c) { return nat(c) && c < W; }))) &&
+      (s.overflow === undefined || s.overflow === null || (Array.isArray(s.overflow) && s.overflow.length > 0 &&
+        s.overflow.every(function (c) { return nat(c) && c < W; }) && !s.over)) &&
       !!s.power && N.POWERS.every(function (p) { return Number.isInteger(s.power[p]) && s.power[p] >= 0 && s.power[p] <= P.CAP; }) &&
       (s.prev === null || s.prev === undefined || (!inner && validState(s.prev, true)));
   }
@@ -46,7 +48,7 @@
   }
   function newRun(m) { if (m === "daily") checkDay(); start[m] = best[m]; return fresh(m); }
   var state = runs[mode] || newRun(mode);
-  var cursor = 3, targeting = null, aim = -1, viewing = false, note = "", revealing = false, revealT = null;
+  var cursor = 3, targeting = null, aim = -1, viewing = false, note = "", revealing = false, revealT = null, carded = false;
   var timers = [], busy = false, gen = 0, shownScore = state.score, shownBest = Math.max(best[mode], state.score);
 
   var $ = function (id) { return document.getElementById(id); };
@@ -55,7 +57,8 @@
   var els = {};
 
   function persist() {
-    runs[mode] = state; best[mode] = Math.max(best[mode], state.score);
+    runs[mode] = state;
+    if (!state.overflow) best[mode] = Math.max(best[mode], state.score); // a run on the brink is not a result yet
     store.save({ mode: mode, runs: runs, best: best, start: start, day: today });
   }
 
@@ -82,7 +85,7 @@
   function drawGrid(grid) {
     discsEl.textContent = ""; els = {};
     grid.forEach(function (v, cell) { if (v) els[cell] = makeDisc(v, cell); });
-    markOut(state.over ? state.out : null);
+    markOut(state.over ? state.out : state.overflow);
   }
   // the discs the rising eggs would push out of the top: ringed red on the final board
   function markOut(out) {
@@ -96,12 +99,12 @@
   }
   function drawGhost() {
     var old = discsEl.querySelector(".ghost"); if (old) old.remove();
-    if (state.over || targeting || busy) return;
+    if (state.over || state.overflow || targeting || busy) return;
     var r = N.landing(state.grid, cursor); if (r < 0) return;
     var g = makeDisc(state.next, r * W + cursor, "ghost"); g.setAttribute("aria-hidden", "true");
   }
   function drawCursor() {
-    Array.prototype.forEach.call(cellsEl.children, function (c, i) { c.classList.toggle("col", !targeting && !state.over && i % W === cursor); });
+    Array.prototype.forEach.call(cellsEl.children, function (c, i) { c.classList.toggle("col", !targeting && !state.over && !state.overflow && i % W === cursor); });
   }
   var EARN = "Earn one with a chain of 3 waves or a Lucky Seven, not on the drop right after a power-up.";
   var DEFS = [
@@ -131,6 +134,7 @@
   // why a power-up cannot act now (a reason string), or "" when it can (the count is checked by the tray)
   function why(id) {
     if (state.over) return "The run is over.";
+    if (state.overflow && id !== "undo") return "The well overflowed: Undo the last drop, or end the run.";
     if (id === "undo" && !state.prev) return "Nothing to take back yet.";
     if (id === "crack" && !N.crackable(state.grid)) return "No egg touches a disc right now.";
     if (id === "smash" && !state.grid.some(Boolean)) return "The well is empty.";
@@ -146,11 +150,13 @@
   function say(t) { note = t; $("hint").textContent = t; }
   function showScore() {
     shownBest = Math.max(shownBest, shownScore); // BEST never trails SCORE, even mid-animation
-    $("score").textContent = K.fmt(shownScore); $("best").textContent = K.fmt(shownBest);
+    var b = $("best"); $("score").textContent = K.fmt(shownScore);
+    b.textContent = shownBest ? K.fmt(shownBest) : "none"; b.classList.toggle("none", !shownBest); // R11: empty says none
   }
   function hintText() {
     if (note) return note;
     if (targeting) return targetHint();
+    if (state.overflow) return revealing ? "Overflowed: the ringed discs would be pushed out." : "";
     if (state.over) {
       if (revealing) return N.hasRoom(state.grid) ? "Overflowed: the ringed discs are pushed out." : "No room left, and no power-up can act.";
       return !viewing ? "" : N.hasRoom(state.grid) ? "Ringed discs were pushed out. Tap for the summary."
@@ -172,13 +178,26 @@
     $("hint").textContent = hintText();
     boardEl.classList.toggle("targeting", !!targeting);
     drawCursor(); drawGhost(); drawAim();
-    var over = $("over"); over.hidden = !state.over || viewing || revealing;
-    if (state.over) {
+    // one end-card pattern (TRIAGE3): while a card shows, the page's New game is hidden with its space kept, and
+    // focus moves to the card's primary button. On the brink (TRIAGE3 stuck-not-over) the card offers Undo or End.
+    var brink = !!state.overflow, over = $("over");
+    over.hidden = !(brink || (state.over && !viewing)) || revealing;
+    $("new").style.visibility = over.hidden ? "" : "hidden";
+    $("over-undo").hidden = $("over-end").hidden = !brink;
+    $("over-view").hidden = $("again").hidden = brink;
+    if (brink) {
+      $("over-title").textContent = "The well overflowed";
+      $("over-text").textContent = "Undo the last drop to keep going, or end the run.";
+      $("over-best").hidden = true;
+    } else if (state.over) {
       $("over-title").textContent = N.hasRoom(state.grid) ? "The well overflowed" : "No room left";
-      $("over-text").textContent = "Score " + K.fmt(state.score) + " · level " + state.level +
-        (state.used ? " · power-ups " + state.used : "");
+      var u = state.used;
+      $("over-text").textContent = "Level " + state.level + (u ? " · " + u + (u === 1 ? " power-up" : " power-ups") + " used" : "") +
+        " · score " + K.fmt(state.score);
       $("over-best").hidden = !(state.score > start[mode]);
     }
+    if (!over.hidden && !carded) { try { $(brink ? "over-undo" : "again").focus({ preventScroll: true }); } catch (e) { /* a nicety */ } }
+    carded = !over.hidden;
   }
   function render() { drawGrid(state.grid); shownScore = state.score; shownBest = Math.max(best[mode], state.score); renderChrome(); }
 
@@ -188,10 +207,11 @@
     if (!revealing) return false;
     revealing = false; renderChrome(); return true;
   }
-  // the done callback of every trace: draw the settled well, and if the run just ended, hold it in view first
+  // the done callback of every trace: draw the settled well, and if the run just ended (or overflowed with an Undo
+  // in stock), hold it in view first
   function settle() {
     render();
-    if (!state.over) return;
+    if (!state.over && !state.overflow) return;
     revealing = true; renderChrome();
     var g = gen; clearTimeout(revealT);
     revealT = setTimeout(function () { if (g !== gen) return; endReveal(); }, REVEAL);
@@ -274,6 +294,7 @@
   function doDrop(col) {
     flush(); note = "";
     if (targeting || state.over) return;
+    if (state.overflow) { endReveal(); return; } // on the brink a drop is refused: the card asks Undo or End
     cursor = col;
     var res = N.drop(state, col);
     if (!res.ok) { K.toast("That column is full", "bad"); return renderChrome(); }
@@ -321,7 +342,7 @@
   // ---- input ----
   boardEl.addEventListener("click", function (ev) {
     if (ev.target.closest && ev.target.closest(".over")) return;
-    if (state.over) { if (busy) return flush(); if (endReveal()) return; if (viewing) { viewing = false; note = ""; renderChrome(); } return; }
+    if (state.over || state.overflow) { if (busy) return flush(); if (endReveal()) return; if (viewing) { viewing = false; note = ""; renderChrome(); } return; }
     var p = cellAt(ev);
     if (targeting === "smash") { flush(); note = ""; smashAt(p.r * W + p.c); return; }
     if (targeting === "crack") { flush(); note = ""; crackNow(); return; }
@@ -353,7 +374,7 @@
     var go = e.key === "Enter" || e.key === " " || e.key === "ArrowDown";
     if (!go) return;
     e.preventDefault();
-    if (state.over) { if (busy) return flush(); if (endReveal()) return; if (viewing) { viewing = false; renderChrome(); } return; }
+    if (state.over || state.overflow) { if (busy) return flush(); if (endReveal()) return; if (viewing) { viewing = false; renderChrome(); } return; }
     note = "";
     if (targeting === "smash") { flush(); if (aim >= 0 && state.grid[aim]) smashAt(aim); else K.toast("Pick a disc", "bad"); return; }
     if (targeting === "crack") { flush(); return crackNow(); }
@@ -366,6 +387,13 @@
   }
   K.twoStep($("new"), function () { return state.drops > 0 && !state.over; }, startNew);
   $("again").addEventListener("click", startNew);
+  $("over-undo").addEventListener("click", function () {
+    activate("undo"); try { boardEl.focus({ preventScroll: true }); } catch (e) { /* a nicety */ } // its button is gone
+  });
+  $("over-end").addEventListener("click", function () {
+    var r = N.end(state); if (!r.ok) return renderChrome();
+    flush(); endReveal(); note = ""; state = r.state; persist(); carded = false; render();
+  });
   $("over-view").addEventListener("click", function () { viewing = true; note = ""; renderChrome(); boardEl.focus(); });
   Array.prototype.forEach.call($("modes").children, function (b) {
     b.addEventListener("click", function () {

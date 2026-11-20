@@ -126,7 +126,7 @@
       seed: seed >>> 0, level: LEVELS.indexOf(level) >= 0 ? level : "medium",
       tiles: [1, 1, 1, 1], turn: "c", starter: "c", round: 1, wins: { p: 0, c: 0 }, draws: 0,
       power: { p: freshPower("p"), c: freshPower("c") }, shield: null, quiet: 0, seen: {},
-      roundOver: null, matchOver: null, prev: null, midTurn: false, moves: 0, last: null, touched: false,
+      roundOver: null, matchOver: null, prev: null, midTurn: false, moves: 0, last: null, touched: false, earned: [],
     };
     s.seen[key(s)] = 1;
     return s;
@@ -138,7 +138,7 @@
     if (!state.roundOver || state.matchOver) return state;
     var s = clone(state);
     s.tiles = [1, 1, 1, 1]; s.turn = s.starter; s.round++; s.shield = null; s.quiet = 0; s.seen = {};
-    s.roundOver = null; s.prev = null; s.midTurn = false; s.last = null; s.moves++;
+    s.roundOver = null; s.prev = null; s.midTurn = false; s.last = null; s.moves++; s.earned = [];
     s.seen[key(s)] = 1;
     return s;
   }
@@ -179,7 +179,9 @@
   // in the same turn (midTurn), so a burst on that move pays nothing. Split and Nudge are the whole turn.
   function award(s) {
     var r = rand(s.seed); s.seed = r[1];
-    return Power.award(s.power.p, POWERS, r[0]);
+    var got = Power.award(s.power.p, POWERS, r[0]);
+    if (got) (s.earned = s.earned || []).push(got); // what this round paid, for the round card (cold #24)
+    return got;
   }
   function fail(state, why) { return { ok: false, state: state, why: why }; }
 
@@ -320,9 +322,10 @@
     return best;
   }
   // Medium: MEDIUM_CARE of the time it looks 3 turns ahead; otherwise it plays like a careful Easy (a random move that
-  // does not hand over a win in one). Tuned so a greedy player wins about a third of Medium matches (measured: 35%) (the default
+  // does not hand over a win in one). Tuned so a greedy player wins about a third of Medium matches (measured over 1,000
+  // matches with the varied opening: 35.5%) (the default
   // level must be winnable by a casual player). The "lookahead" bot is the full 3-turn search, for measuring.
-  var MEDIUM_CARE = 0.4;
+  var MEDIUM_CARE = 0.57;
   function mediumMove(s, who, care) {
     var r = rand(s.seed); s.seed = r[1];
     if (r[0] >= (care === undefined ? MEDIUM_CARE : care)) return easyMove(s, who, 1);
@@ -363,12 +366,29 @@
     var m = randomPick(s, pool);
     return [{ type: "move", from: m.from, to: m.to }];
   }
+  // The opening (round 3, mechanics #4): from 1 1 1 1 every move loses for the opener against perfect play, in the same
+  // 7 more turns, so every opening is equally good in theory and R4 holds whichever is played. The computer varies it
+  // (seeded): it adds onto your left or right tile (2 1 1 1), or onto its own other tile (1 1 2 1). The second kind
+  // leaves no losing first reply, so it is the gentler one: OPEN_OWN is how often each level plays it. Hard plays
+  // it least, so Hard stays the hardest level (measured in tests/test-five.js).
+  var BOTS = ["random", "greedy", "lookahead"];
+  var OPEN_OWN = { easy: 0.5, medium: 0.5, hard: 0.25 };
+  function isOpening(s, who) { return who === "c" && !s.shield && s.tiles.every(function (v) { return v === 1; }); }
+  function openingPlan(s, who, level) {
+    var r = rand(s.seed); s.seed = r[1];
+    var own = r[0] < (OPEN_OWN[level] || 0);
+    var pool = movesFor(s, who).filter(function (m) { return (side(m.to) === who) === own; });
+    var seen = {}, distinct = pool.filter(function (m) { var k = after(s, m).join(""); return seen[k] ? false : (seen[k] = 1); });
+    var m = randomPick(s, distinct);
+    return [{ type: "move", from: m.from, to: m.to }];
+  }
   // aiPlan(s): the actions the side to move takes this turn, as [{type:"move",from,to} | {type:"pass"}]
   // (the computer never plays a power-up, R4). It never touches the given state: `state` in the result is a copy
   // with the seed advanced, to apply the plan to with apply(). `level` overrides s.level (bots: random, greedy, lookahead).
   function aiPlan(state, level) {
     var s = clone(state), who = s.turn, plan; level = level || s.level;
     if (s.roundOver) plan = [];
+    else if (isOpening(s, who) && BOTS.indexOf(level) < 0) plan = openingPlan(s, who, level);
     else if (level === "hard") plan = hardPlan(s, who);
     else if (!movesFor(s, who).length) plan = [{ type: "pass" }];
     else {

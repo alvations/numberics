@@ -20,7 +20,7 @@
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
-      <div class="stat"><span>Best</span><b id="best">0</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
       <div class="stat" title="The next disc. A plain grey disc is an egg."><span>Next</span><b id="next" class="next"></b></div>
     </div>
   </header>
@@ -42,6 +42,8 @@
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden>New best.</p>
       <div class="row">
+        <button id="over-end" class="btn" type="button" hidden>End the run</button>
+        <button id="over-undo" class="btn primary" type="button" hidden>Undo the last drop</button>
         <button id="over-view" class="btn" type="button">See the well</button>
         <button id="again" class="btn primary" type="button">New game</button>
       </div>

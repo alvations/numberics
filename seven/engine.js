@@ -9,7 +9,15 @@
  * total cracks every egg one step and earns a power-up. All randomness comes from state.seed.
  * A power-up never earns one (family rule R2): chains a power-up sets off pay nothing, and the drop right after
  * Smash, Hold or Crack (state.free) still scores its chains and Lucky Sevens but pays no power-up.
- * Stock is capped: when every slot is full an award is skipped and reported (res.full, rule R15).
+ * Why one drop deep is enough here (TRIAGE3): in a drop game a power-up changes the well's shape (a disc gone, eggs
+ * cracked, the next disc swapped), not a tile's value, so there is nothing to mark on a disc. Only the drop right after
+ * the power-up is unpaid; a later drop pays as usual. The critic's two-move probe found 9 paying cases in 2,933 tries
+ * (it needs the right next disc), so this depth is the deliberate rule for Seven and Four, not an oversight.
+ * Stock is capped: when every slot is full an award is skipped and reported (res.full, rule R15). Undo is not dealt
+ * once three are held (RULES.undoKeep), so a long run cannot bank a pile of spare lives (mechanics #2, round 3).
+ * Stuck is not over while Undo is in stock (TRIAGE3): a rise that would push a disc out, with an Undo to spend, leaves
+ * the run on the brink (state.overflow names the columns); the player then spends Undo or calls end(). With no Undo,
+ * or after end(), the run is over and nothing can be used (R1).
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(require("../shared/kit.js"), require("../shared/power.js"));
@@ -33,6 +41,7 @@
     clearBonus: 7000,       // the well emptied by a chain
     luckyBonus: 777,        // a Lucky Seven
     chainEarn: 3,           // a chain of this many waves or more earns a power-up
+    undoKeep: 3,            // holding this many Undos, a reward is dealt among the other three
   };
 
   function clone(s) { return JSON.parse(JSON.stringify(s)); }
@@ -137,7 +146,8 @@
   // pay=false (the drop right after a power-up): the reward is noted as unpaid, nothing is added.
   function awardOne(s, why, res, pay) {
     if (!pay) { res.unpaid.push(why); return; }
-    var p = Power.award(s.power, EARNED, next01(s));
+    var names = s.power.undo >= RULES.undoKeep ? EARNED.filter(function (n) { return n !== "undo"; }) : EARNED;
+    var p = Power.award(s.power, names, next01(s));
     if (p) res.awarded.push({ power: p, why: why }); else res.full.push(why);
   }
   // A full chain from the current grid: waves, then a Lucky Seven check (once), then more waves.
@@ -161,7 +171,7 @@
     return waves;
   }
   function checkStuck(s) {
-    if (!s.over && !hasRoom(s.grid) && !canUseAny(s)) s.over = true;
+    if (!s.over && !s.overflow && !hasRoom(s.grid) && !canUseAny(s)) s.over = true;
   }
   function canUseAny(s) {
     return (s.power.undo > 0 && !!s.prev) || (s.power.smash > 0 && s.grid.some(Boolean)) || (s.power.crack > 0 && crackable(s.grid));
@@ -191,7 +201,7 @@
     var s = {
       v: 1, mode: mode, seed: seed >>> 0, grid: new Array(W * H).fill(0), next: 0, held: 0,
       score: 0, drops: 0, level: 1, left: dropsFor(mode, 1), over: false,
-      bestChain: 0, luckies: 0, used: 0, out: [], free: false,
+      bestChain: 0, luckies: 0, used: 0, out: [], free: false, overflow: null,
       power: Power.stock(POWERS, { undo: 1 }), prev: null,
     };
     // a random start: drop discs silently, settle every chain, score nothing
@@ -206,14 +216,16 @@
     return s;
   }
 
-  // Rising row: everything moves up one. If a disc sits in the top row the rise would push it out: the run ends
-  // and the well is left exactly as the player last saw it, with s.out naming the discs that would go (honest end).
+  // Rising row: everything moves up one. If a disc sits in the top row the rise would push it out: the well is left
+  // exactly as the player last saw it, naming the discs that would go (honest end). With an Undo to spend the run is
+  // only on the brink (s.overflow, pending: true in the trace); otherwise it ends (s.over, s.out).
   function rise(s, trace) {
     var g = s.grid, lost = [];
     for (var c = 0; c < W; c++) if (g[c]) lost.push(c);
     if (lost.length) {
-      s.over = true; s.out = lost;
-      trace.push({ type: "rise", level: s.level, overflow: true, out: lost.slice(), points: 0, grid: g.slice() });
+      var brink = s.power.undo > 0 && !!s.prev;
+      if (brink) s.overflow = lost; else { s.over = true; s.out = lost; }
+      trace.push({ type: "rise", level: s.level, overflow: true, pending: brink, out: lost.slice(), points: 0, grid: g.slice() });
       return true;
     }
     for (var i = 0; i < W * (H - 1); i++) g[i] = g[i + W];
@@ -229,7 +241,7 @@
   // trace is the wave-by-wave story: drop, wave..., [lucky, wave...], [clear], [rise, wave...]
   function drop(state, col) {
     var res = { ok: false, state: state, trace: [], waves: 0, popped: 0, lucky: false, awarded: [], unpaid: [], full: [], rose: false };
-    if (state.over || col < 0 || col >= W || (col | 0) !== col) return res;
+    if (state.over || state.overflow || col < 0 || col >= W || (col | 0) !== col) return res;
     var row = landing(state.grid, col); if (row < 0) return res;
     var s = clone(state); s.prev = snapshot(state);
     var pay = !state.free; s.free = false; // the drop right after a power-up pays no power-up (R2)
@@ -251,6 +263,7 @@
   function use(state, name, cell) {
     var fail = { ok: false, state: state, trace: [] };
     if (POWERS.indexOf(name) < 0 || !state.power[name] || state.over) return fail;
+    if (state.overflow && name !== "undo") return fail; // on the brink only Undo can act
     if (name === "undo") {
       if (!state.prev) return fail;
       var p = clone(state.prev);
@@ -282,8 +295,16 @@
     return { ok: true, state: s, trace: trace };
   }
 
+  // end(state) -> {ok, state}: the player declines to Undo an overflow. The run is over (R1) with the overflow's
+  // columns as the discs pushed out. Refused unless the run is on the brink.
+  function end(state) {
+    if (state.over || !state.overflow) return { ok: false, state: state };
+    var s = clone(state); s.over = true; s.out = s.overflow; s.overflow = null;
+    return { ok: true, state: s };
+  }
+
   return { W: W, H: H, EGG: EGG, CRACKED: CRACKED, POWERS: POWERS, MODES: MODES, RULES: RULES,
-           newGame: newGame, drop: drop, use: use, findPops: findPops, landing: landing, hasRoom: hasRoom,
+           newGame: newGame, drop: drop, use: use, end: end, findPops: findPops, landing: landing, hasRoom: hasRoom,
            dropsFor: dropsFor, wavePoints: wavePoints, crackable: crackable, crackTargets: crackTargets, canUseAny: canUseAny,
            danger: danger };
 });

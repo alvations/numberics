@@ -17,8 +17,8 @@
  * - Only the side that just claimed can complete a 15, and the round ends the instant it does, so both
  *   sides can never hold a 15 at the same time (Erase only ever removes an opponent number).
  * - A round won by a side that used Erase or Double at any point in that round earns nothing (a power-up
- *   never earns a power-up, not even a turn later: family rule R2). Peek only shows information, so it
- *   does not stop a round from earning.
+ *   never earns a power-up, not even a turn later: family rule R2). Peek counts as help too (TRIAGE3):
+ *   a round won by a side that used Peek in it earns nothing (why "peeked"), and that mark survives Undo.
  * - Undo (you only) rewinds to the start of your last turn, the computer's reply included, restoring the
  *   whole snapshot (stock, score, round) minus the Undo charge spent, and a Peek spent since then stays
  *   spent (R3). It never crosses a decided round or match (R1), nor into a new round.
@@ -156,9 +156,10 @@
       round: 1, starter: 1, turn: 1, owner: [0, 0, 0, 0, 0, 0, 0, 0, 0],
       claimsLeft: 1, usedPower: false, blocked: 0, acted: false,
       powered: [false, false, false], // [unused, you, computer]: used Erase or Double this round (R2)
+      peeked: [false, false, false],  // used Peek this round: help, so that round pays nothing (TRIAGE3)
       wins: [0, 0, 0],           // [draws, your rounds, computer rounds]
       rounds: [],                // winner of each finished round (0 draw)
-      result: null,              // {winner, line: [a,b,c] | null, earned: name|null, why: null|"powered"|"full"|"match"}
+      result: null,              // {winner, line: [a,b,c] | null, earned: name|null, why: null|"powered"|"peeked"|"full"|"match"}
       match: null,               // {winner: 0|1|2} once the match is decided
       // Hard is a solved draw: after a drawn Hard round you get an Erase to break it (nextRound)
       power: stock({ undo: 1 }), cpuPower: stock({}),
@@ -187,6 +188,7 @@
     decided(s);
     if (winner && earns(s, winner)) {
       if (s.usedPower || (s.powered && s.powered[winner])) why = "powered";   // R2
+      else if (s.peeked && s.peeked[winner]) why = "peeked";                   // Peek is help (TRIAGE3)
       else if (s.match) why = "match";                                         // nothing left to spend it on
       else { earned = award(s, winner); if (!earned) why = "full"; }            // R15
     }
@@ -241,6 +243,8 @@
       r.power.undo = Math.max(0, r.power.undo - 1);   // the rewind is paid for
       // an information power-up spent since the snapshot stays spent (R3): what was seen cannot be unseen
       r.power.peek = Math.min(r.power.peek, state.power.peek);
+      // and so does the help it gave: a round you peeked in still pays nothing after the rewind
+      r.peeked = [false, !!(state.peeked && state.peeked[1]) || !!(r.peeked && r.peeked[1]), !!(r.peeked && r.peeked[2])];
       r.prev = null; r.last = [];
       return { ok: true, state: r };
     }
@@ -250,7 +254,11 @@
     var s = clone(state);
     if (name !== "peek") begin(s);   // Peek is a free look: it never moves the Undo snapshot
     stockOf(s, side)[name]--;
-    if (name === "peek") return { ok: true, state: s, info: peekInfo(s.owner, side) };
+    if (name === "peek") {
+      if (!s.peeked) s.peeked = [false, false, false];
+      s.peeked[side] = true;
+      return { ok: true, state: s, info: peekInfo(s.owner, side) };
+    }
     s.usedPower = true;
     if (!s.powered) s.powered = [false, false, false];
     s.powered[side] = true;
@@ -330,7 +338,7 @@
     var s = clone(state), drawn = state.result.winner === 0;
     s.round++; s.starter = 3 - s.starter; s.turn = s.starter;
     s.owner = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-    s.claimsLeft = 1; s.usedPower = false; s.blocked = 0; s.acted = false; s.powered = [false, false, false];
+    s.claimsLeft = 1; s.usedPower = false; s.blocked = 0; s.acted = false; s.powered = [false, false, false]; s.peeked = [false, false, false];
     s.result = null; s.prev = null; s.last = [];
     if (s.diff === "hard" && drawn) s.power.erase = Math.max(s.power.erase, 1);   // a drawn Hard round hands you an Erase
     return s;

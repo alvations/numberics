@@ -193,6 +193,30 @@
     return out;
   }
 
+  // Round 3 (cold blocker, critic #1): what YOUR drop would open. For each column you can drop in now, the cells
+  // where the computer's shown disc would complete a line right after your drop that it could not use before
+  // (a hole your disc fills under, or a line your number adds to). Columns with nothing new are left out, and so is a
+  // column whose drop wins for you. Returns { col: { cells: [...], above: bool } }; above = it wins on top of your disc.
+  function playableWins(own, num, n) {
+    var out = {};
+    for (var c = 0; c < COLS; c++) { var h = height(own, c); if (h < ROWS && linesAt(own, num, h * COLS + c, 2, n).length) out[h * COLS + c] = 1; }
+    return out;
+  }
+  function opens(s) {
+    var res = {};
+    if (s.over || s.turn !== 1) return res;
+    var n = s.next[0], m = s.next[1], before = playableWins(s.own, s.num, m);
+    legal(s).forEach(function (c) {
+      var cell = height(s.own, c) * COLS + c;
+      if (linesAt(s.own, s.num, cell, 1, n).length) return; // your drop wins: nothing to warn about
+      var own = s.own.slice(), num = s.num.slice(); own[cell] = 1; num[cell] = n;
+      if (own.every(Boolean)) return; // the board is full: a draw
+      var after = playableWins(own, num, m), fresh = Object.keys(after).map(Number).filter(function (x) { return !before[x]; });
+      if (fresh.length) res[c] = { cells: fresh.sort(function (a, b) { return a - b; }), above: fresh.indexOf(cell + COLS) >= 0 };
+    });
+    return res;
+  }
+
   function use(state, name, arg) {
     var fail = { ok: false, state: state }, side = state.turn - 1;
     if (name === "undo") {
@@ -406,7 +430,13 @@
     if (col === undefined || col === null) {
       var r = analyse(s, {});
       col = r ? r.best : legal(s)[0];
-      if (loose && r && r.score < WINF - 64) {
+      var won = r && r.score >= WINF - 64;
+      var rest = won && lp.missTen ? missTens(s, r.scores) : null;
+      if (rest) { // Easy sometimes misses a ten-line it could finish, so a new player can win one (gameplay #9)
+        var rm = rand(s.aiSeed); s.aiSeed = rm[1];
+        if (rm[0] < lp.missTen) { won = false; loose = true; r = { scores: rest, score: 0 }; }
+      }
+      if (loose && r && !won) {
         // a loose turn: a found win is always played, otherwise a random column the search does not see losing
         // (or, on a blunder, any legal column)
         var all = Object.keys(r.scores).map(Number);
@@ -420,6 +450,23 @@
     var d = drop(s, col);
     actions.push({ type: "drop", arg: col, cell: d.cell });
     return { state: d.state, actions: actions, drop: d };
+  }
+  // the immediate wins open to the side to move: { c: "colour" | "ten" }
+  function winsNow(s) {
+    var out = {}, n = s.next[s.turn - 1];
+    legal(s).forEach(function (c) {
+      var ls = linesAt(s.own, s.num, height(s.own, c) * COLS + c, s.turn, n);
+      if (ls.length) out[c] = ls.some(function (l) { return l.type === "colour"; }) ? "colour" : "ten";
+    });
+    return out;
+  }
+  // Easy's miss: when its only wins in one are ten-lines, the scores without those columns (a colour four is never missed)
+  function missTens(s, scores) {
+    var w = winsNow(s), cols = Object.keys(w);
+    if (!cols.length || cols.some(function (c) { return w[c] === "colour"; })) return null;
+    var out = {}, any = false;
+    Object.keys(scores).forEach(function (k) { if (!w[k]) { out[k] = scores[k]; any = true; } });
+    return any ? out : null;
   }
   function immediateWin(s, n, own, num) {
     own = own || s.own; num = num || s.num;
@@ -464,7 +511,7 @@
   }
 
   return { COLS: COLS, ROWS: ROWS, TEN: TEN, CAP: CAP, MINE: MINE, BAG: BAG, POWERS: POWERS, LEVELS: LEVELS, WINDOWS: WIN,
-           newGame: newGame, drop: drop, use: use, legal: legal, height: height, canPop: canPop, threats: threats,
+           newGame: newGame, drop: drop, use: use, legal: legal, height: height, canPop: canPop, threats: threats, opens: opens,
            linesAt: linesAt, computerTurn: computerTurn, bestMove: bestMove, analyse: analyse, rand: rand,
            _setBag: setBag, _LV: LV };
 });

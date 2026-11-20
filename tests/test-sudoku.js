@@ -371,6 +371,21 @@ t("sudoku client: no hyphen as an empty value, no '-' Best (R11), no 'Unit compl
   const h = files.find(f => f[0] === "sudoku/index.html")[1], g = files.find(f => f[0] === "sudoku/game.js")[1];
   ok(!/<b id="best">-<\/b>/.test(h) && !/: "-"/.test(g)); ok(!/Unit complete/.test(g));
 });
+t("sudoku client: the solved grid holds 1.5 s before the card, guarded against a newer puzzle (TRIAGE3)", () => {
+  const g = files.find(f => f[0] === "sudoku/game.js")[1];
+  ok(/HOLD = 1500/.test(g), "hold length"); ok(/state === solvedState && hold/.test(g), "guarded timer");
+  ok(!/\$\("again"\)\.focus[^\n]*\n[^\n]*\}\s*\n\s*function use/.test(g), "focus moves only when the card shows");
+});
+t("sudoku end card: one pattern (See the board + primary; page button hidden, space kept)", () => {
+  const h = files.find(f => f[0] === "sudoku/index.html")[1], g = files.find(f => f[0] === "sudoku/game.js")[1];
+  ok(/id="win-view"[^>]*>See the board</.test(h) && /id="again" class="btn primary"/.test(h));
+  ok(/\$\("new"\)\.style\.visibility = card \? "hidden" : ""/.test(g), "visibility, not display (no gap jump)");
+});
+t("sudoku: empty Best uses the family empty style (weight 600, value size), assisted record is not gold", () => {
+  const c = files.find(f => f[0] === "sudoku/style.css")[1], g = files.find(f => f[0] === "sudoku/game.js")[1];
+  ok(/\.stat b\.none,\.stat \.none\{ color:var\(--mute\); font-weight:600; font-size:1\.1rem; \}/.test(c));
+  ok(!/New best with power-ups/.test(g) && /classList\.toggle\("best", !!pure\)/.test(g));
+});
 // theme.css would change the live look (owner rule), so the page check of conventions.js is skipped here
 require("./conventions")(t, ok, ["sudoku/engine.js", "sudoku/game.js", "sudoku/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
