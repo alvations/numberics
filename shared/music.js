@@ -106,7 +106,7 @@
 
     pulse: {
       name: "Pulse", blurb: "Four on the floor, a pumping pad and a bright hook.",
-      bpm: 124, swing: 0, beats: 4, root: 69, mode: "minor", level: 0.67, verb: 0.16, pump: 0.65,
+      bpm: 124, swing: 0, beats: 4, root: 69, mode: "minor", level: 0.72, verb: 0.16, pump: 0.65,
       echo: { beats: 0.75, fb: 0.32, mix: 0.2 },
       voices: {
         lead: { wave: "supersaw", gain: 0.085, a: 0.005, d: 0.2, s: 0.6, r: 0.12, lp: 3200, echo: 1 },
@@ -560,7 +560,12 @@
     function ensure() {
       if (ctx) { if (own && ctx.state === "suspended" && !paused) { try { var p = ctx.resume(); if (p && p.catch) p.catch(function () {}); } catch (x) { /* blocked */ } } return true; }
       var sh = null;
-      try { sh = w.NumbericsAudio && typeof w.NumbericsAudio.musicBus === "function" ? w.NumbericsAudio.musicBus() : null; } catch (x) { sh = null; }
+      // Shared-bus contract (MUSIC.md, One context): unlock() makes and resumes the SFX context inside this same gesture,
+      // then musicBus() returns { context, input } (null before a context exists).
+      try {
+        var A = w.NumbericsAudio;
+        if (A && typeof A.musicBus === "function") { if (typeof A.unlock === "function") A.unlock(); sh = A.musicBus(); }
+      } catch (x) { sh = null; }
       try {
         if (sh && sh.context && sh.input) { ctx = sh.context; dest = sh.input; own = false; }
         else {

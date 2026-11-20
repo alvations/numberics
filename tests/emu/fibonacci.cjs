@@ -228,14 +228,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("H1 is Fibonacci", (await p.textContent("h1")) === "Fibonacci");
   ck("subtitle starts with a Numberics link home", await p.evaluate(() => { const a = document.querySelector(".sub a"); return a && a.textContent === "Numberics" && a.getAttribute("href") === "../" && document.querySelector(".sub").firstElementChild === a; }));
   ck("subtitle tagline is one sentence with a full stop", /^Numberics · [A-Z0-9][^.]*\.$/.test((await p.textContent(".sub")).trim()));
-  // craft #6: the pills sit under the title, where Endless's are
+  // craft #6: the pills sit under the title, where Two's are
   const pills = (q) => q.evaluate(() => { const b = document.querySelector(".brand").getBoundingClientRect(), s = document.querySelector(".stats").getBoundingClientRect(), t = document.getElementById("tray").getBoundingClientRect();
     return { under: s.top >= b.bottom, left: Math.round(s.left - b.left), top: Math.round(s.top), tray: Math.round(t.top) }; });
   const fp = await pills(p), ep2 = await ctx.newPage(); await ep2.goto(url); const ep = await pills(ep2); await ep2.close();
-  ck("pills sit under the title at 1280, as in Endless", fp.under && ep.under && fp.left === ep.left && Math.abs(fp.top - ep.top) <= 2 && Math.abs(fp.tray - ep.tray) <= 2, JSON.stringify([fp, ep]));
+  ck("pills sit under the title at 1280, as in Two", fp.under && ep.under && fp.left === ep.left && Math.abs(fp.top - ep.top) <= 2 && Math.abs(fp.tray - ep.tray) <= 2, JSON.stringify([fp, ep]));
   // R17: Enter on a focused games-row link navigates and is never a game move
   const m0 = await p.evaluate(() => window.__fibonacci.state.moves);
-  const link = p.locator("#games a[href]").first(), href = await link.getAttribute("href");
+  const link = p.locator("#games a[href]:not([aria-current])").first(), href = await link.getAttribute("href");
   await link.focus();
   await Promise.all([p.waitForURL(u => !/\/fibonacci\/$/.test(u.toString()), { timeout: 3000 }).catch(() => {}), p.keyboard.press("Enter")]);
   ck("R17: Enter on a focused games-row link navigates", !/\/fibonacci\/$/.test(p.url()), p.url() + " " + href + " moves " + m0);

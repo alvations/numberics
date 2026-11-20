@@ -103,12 +103,24 @@ switches through every style. Compiling a style costs 0.3 to 5 ms, once per styl
 is the browser's own `new AudioContext()` (about 21 ms here); `shared/audio.js` makes a second one on the same tap,
 which is why a shared context (below) is worth doing.
 
-### Merge with `shared/audio.js` (one context)
-If `NumbericsAudio.musicBus()` exists and returns `{ context, input }`, the music uses that context and connects its
-output to `input` instead of making its own. The proposal for `audio.js`: make the context in the gesture as today;
-`musicBus()` returns the context and a gain node that feeds the compressor directly (not through the SFX master, so the
-SFX volume does not move the music). With a shared context the music never suspends it on a hidden tab (it only stops
-booking and fades), because the SFX own it.
+### One context, shared with `shared/audio.js` (decided)
+SFX and music share **one AudioContext**, owned by `audio.js`. Why: every `new AudioContext()` costs about 21 ms on
+the tap that makes it (measured), so two contexts double the work of the first tap; one context is one audio thread
+on low-end phones; and both outputs then go through the same compressor, so a loud SFX over the music can never clip.
+
+The contract (`audio.js` side, about six lines):
+- `NumbericsAudio.musicBus()` returns `null` until the SFX context exists, then `{ context, input }`, the same object
+  every time. `input` is a GainNode (gain 1) made once and connected **straight to the compressor**, not through the
+  SFX master, so the SFX volume and the Sound switch never move the music (Music has its own switch and volume).
+- The context is still made only inside a gesture, by `unlock()`. In its own capture listener the music calls
+  `NumbericsAudio.unlock()` and then `musicBus()`, so it never needs the two listeners to run in a given order.
+- `audio.js` owns the context: it may suspend it on a hidden tab or not. The music never suspends or closes a context it
+  does not own; on a hidden tab it fades out, stops booking and remembers where it was; on return it rewinds and fades in.
+
+The music side is built and tested both ways: with `musicBus()` it makes no context of its own
+(`tests/test-music.js` with a fake, and `tests/emu/shared-music.cjs` with a stand-in bus in a real browser); without it,
+it owns one context and suspends it while hidden (the fallback, also tested, so a page that loads `music.js` without
+`audio.js` still works).
 
 ## Levels (keep it this way)
 
@@ -121,13 +133,26 @@ booking and fades), because the SFX own it.
 The rule comes from melon-eight's AUDIO.md lesson: SFX are transients that must peak clearly above a steady bed; never
 RMS-match an SFX to the music. The SFX are the reference; the music is set under them.
 
-LEVELS_TABLE
+Measured (`tools/render-music.cjs`, one full pass each, 44.1 kHz stereo; "shipped" = default sliders, music 0.5):
+
+| Style | `level` | Unity LUFS | Unity peak dBFS | Crest dB | Centroid Hz | Shipped LUFS | Shipped peak dBFS |
+|---|---|---|---|---|---|---|---|
+| Chill | 0.39 | -20.06 | -6.99 | 15.1 | 679 | -62.0 | -48.9 |
+| Drift | 0.49 | -20.06 | -10.99 | 10.8 | 340 | -62.0 | -52.9 |
+| Pocket | 0.55 | -20.00 | -7.54 | 14.6 | 2548 | -61.9 | -49.5 |
+| Quest | 0.40 | -19.93 | -7.58 | 14.4 | 1548 | -61.9 | -49.5 |
+| Blocks | 0.55 | -19.99 | -6.04 | 15.8 | 3106 | -61.9 | -48.0 |
+| Pulse | 0.72 | -20.05 | -4.86 | 17.2 | 1696 | -62.0 | -46.8 |
+| Epic | 0.39 | -19.90 | -6.13 | 15.1 | 684 | -61.8 | -48.1 |
+
+Spread across styles 0.16 LU; no clipped samples; loudest shipped music peak -46.8 dBFS against the `merge` SFX at
+-39.3 dBFS: **7.5 dB of headroom** (need 6). Unmatched (every `level` 1) the styles spread 4.8 LU and Chill, Quest and
+Epic clipped, which is why `level` exists.
 
 **The SFX are quiet today.** At the default volume the `merge` SFX peaks at -39 dBFS and `tick` at -45 dBFS (sound
 in most web games peaks around -12 to -18 dBFS). The music is set under that, so at defaults it plays at about
--60 LUFS: the right balance, but faint on a phone speaker. The SFX notes below propose lifting the SFX by 12 dB. When
-that lands, multiply `SCALE` by the same factor (12 dB: x 3.98, so 0.064), re-run the render report and check the
-headroom line stays at 6 dB or more.
+-62 LUFS: the right balance, but faint on a phone speaker. The SFX notes below give new gains (merge +13.3 dB);
+`SCALE` goes from 0.016 to 0.07 in the same commit, which puts the music at about -49 LUFS at defaults, with its loudest peak 8 dB under the lifted merge.
 
 Reproduce:
 ```bash
@@ -195,26 +220,52 @@ Add to `DEF`, `FIELDS` and `normalize()` in `numberics_settings_v1`:
 Keep the list of ids in `settings.js` itself (do not read it from `music.js`, which may load later). The **Sound**
 switch stays the SFX switch; Music has its own. Erase keeps these (they live in the settings key).
 
-## SFX notes (for `shared/audio.js`)
+## SFX notes (for `shared/audio.js`): recommended gains
 
-1. **Lift the SFX about 12 dB.** Measured with `NumbericsAudio.render` at volume 0.5: merge -39.3, place -44.4, tick
-   -44.6, land -38.7, best -28.2, win -27.2 dBFS. Master `volume * 0.5` with recipe peaks of 0.035 to 0.1 leaves them
-   20 dB under typical web audio. Proposal: master `volume * 2` (merge about -27, win about -15 dBFS; the -18 dB
-   compressor then only touches wins and trophies). Then `SCALE` here goes up by the same factor (see Levels).
-2. **Close the spread.** The everyday sounds (tick, place, pip) sit 16 dB under win; under music they vanish first.
-   Proposal: tick .05 -> .07, place .05 -> .08, pip .035 -> .05, merge .08 -> .11; leave best, win, trophy.
-3. **Play in the music's key.** The ladder is C pentatonic; most styles are not in C, so a merge over Blocks (G
+The lead measured the SFX peaks at **100 % volume** with the spec's gains (REDESIGN.md 7.3). They span 27 dB (slide
+-48 to win -21 dBFS), and the everyday sounds sit near -38 dBFS: under any music they would vanish first, and on a phone
+speaker they are hard to hear at all. The new gains below bring every sound up to a band by its job, keep the order of
+importance, and leave the -18 dB compressor touching only the big moments. Change only the "Peak gain" column of 7.3;
+the recipes (waves, envelopes, notes) stay as they are.
+
+| Sound | Peak now (100 %) | dBFS now | Job | Target peak (100 %) | **New peak gain** (was) |
+|---|---|---|---|---|---|
+| `tick` | .012 | -38.4 | tap | .05 (-26) | **.21** (.05) |
+| `place` | .012 | -38.4 | tap | .05 (-26) | **.21** (.05) |
+| `pip` | .008 | -41.9 | tap | .05 (-26) | **.22** (.035) |
+| `bad` | .009 | -40.9 | tap, refused | .045 (-27) | **.20** (.04) |
+| `slide` | .004 | -48.0 | texture | .035 (-29) | **.35** (.04) |
+| `merge` | .022 | -33.2 | reward | .10 (-20) | **.36** (.08) |
+| `pop` | .022 | -33.2 | reward | .10 (-20) | **.36** (its merge, .08) |
+| `land` | .023 | -32.8 | reward | .10 (-20) | **.43** (.10) |
+| `burst` | .032 | -29.9 | reward | .10 (-20) | **.28** (.09) |
+| `power` | .030 | -30.5 | event | .16 (-16) | **.27** (.05) |
+| `best` | .078 | -22.2 | event | .18 (-15) | **.16** (.07) |
+| `lose` | .060 | -24.4 | end, soft | .13 (-18) | **.11** (.05) |
+| `trophy` | .087 | -21.2 | big | .20 (-14) | **.16** (.07) |
+| `win` | .088 | -21.1 | big | .20 (-14) | **.18** (.08) |
+
+New gain = old gain x target / measured peak (each sound scales linearly; the compressor only acts above -18 dBFS, so
+the big three land a little under their targets, which is the point). Spread after: 15 dB (slide to win) instead of 27.
+At the default volume (50 %) every peak is 6 dB lower: merge -26, win -20 dBFS.
+
+**Apply together with the music:** the music is set under the SFX (Levels), so the same commit sets `SCALE = 0.07` in
+`shared/music.js` (+13.3 dB, the same lift `merge` gets: -39.3 -> -26.0 dBFS at defaults). Then run
+`node tools/render-music.cjs`: its headroom line must read 6 dB or more, and it prints the exact SCALE for 6.5 dB.
+
+Other notes, in order of value:
+1. **Play in the music's key.** The ladder is C pentatonic; most styles are not in C, so a merge over Blocks (G
    harmonic minor) or Quest (Bb) clashes. Listen for `numberics:music` and shift the ladder: `note(k) * 2 ** (key / 12)`
-   (key -6..5, from `NumbericsMusic.key()`; minor styles use the relative major, whose pentatonic is the minor
+   (key -6..5, also `NumbericsMusic.key()`; minor styles use the relative major, whose pentatonic is the minor
    pentatonic). Shift the fixed chords (best, win, trophy, lose) by the same amount. With no music, key 0 (as today).
    A test checks the shifted ladder sits in every style's scale (one note off in harmonic minor at most).
-4. **Never quantise SFX to the beat.** Feedback must land on the action; the music adapts, the SFX do not wait.
-5. **Dip under the big ones.** In `best`, `power` and `trophy`, call `window.NumbericsMusic && NumbericsMusic.dip()`;
+2. **Never quantise SFX to the beat.** Feedback must land on the action; the music adapts, the SFX do not wait.
+3. **Dip under the big ones.** In `best`, `power` and `trophy`, call `window.NumbericsMusic && NumbericsMusic.dip()`;
    end cards (`win`, `lose`) use `duck(true)` from the page instead.
-6. **One context.** Add `musicBus()` (see Merge) so the first tap pays for one `new AudioContext()`, not two.
-7. **Two small additions** that fit the same synth: `whoosh(dir)` (filtered noise sweep, up when a sheet opens, down
-   when it closes or on Undo, peak .03) and `deal()` (two soft rising triangle notes, a fifth apart, on a new game,
-   peak .05). Both stay under the music's dip rule (no dip).
+4. **`musicBus()`** as specified above (one context).
+5. **Two small additions** that fit the same synth: `whoosh(dir)` (filtered noise sweep, up when a sheet opens, down
+   when it closes or on Undo, target peak .035) and `deal()` (two soft rising triangle notes a fifth apart on a new
+   game, target peak .05).
 
 ## Adding a style
 

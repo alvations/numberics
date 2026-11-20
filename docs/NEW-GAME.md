@@ -1,6 +1,6 @@
 # Adding a game to Numberics
 
-Every game follows the same contract, so it looks and plays like Endless. Read `CLAUDE.md` and
+Every game follows the same contract, so it looks and plays like Two (the root game). Read `CLAUDE.md` and
 `docs/ROADMAP.md` (your game's section and section 0a, power-ups) first.
 
 ## Files (all in `<id>/`, except the tests)
@@ -24,14 +24,14 @@ Every game follows the same contract, so it looks and plays like Endless. Read `
 <title>Numberics Seven</title>
 <meta name="description" content="One sentence.">
 <meta name="theme-color" content="#14151c">
-<link rel="icon" href="data:image/svg+xml,...a 7 in accent gold on #14151c, like the Endless icon...">
+<link rel="icon" href="data:image/svg+xml,...a 7 in accent gold on #14151c, like the Two icon...">
 <link rel="stylesheet" href="../shared/theme.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main id="app">
   <header>
-    <div class="brand"><h1>Seven</h1><p class="sub">One short line in the Endless voice.</p></div>
+    <div class="brand"><h1>Seven</h1><p class="sub">One short line in the Two voice.</p></div>
     <div class="stats"><div class="stat"><span>Score</span><b id="score">0</b></div> ...</div>
   </header>
   <section id="tray" class="tray" aria-label="Power-ups"></section>

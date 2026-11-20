@@ -220,6 +220,20 @@ t("live: stop() fades out and nothing more is booked", () => {
   ok(m.styles().length === IDS.length && m.styles().every(s => s.seconds >= 60 && s.seconds <= 120));
 });
 
+t("live: shared-bus contract: unlock() then musicBus(); no own context; hidden pauses without suspending it", () => {
+  const F = fakeWorld(); let unlocked = 0, shared = null;
+  F.w.NumbericsAudio = { unlock() { unlocked++; if (!shared) shared = { context: new F.AC(), input: { connect: n => n, disconnect() {} } }; return true; },
+    musicBus() { return shared; } };
+  const m = M.make(F.w, F.opt); m.start("sudoku");
+  ok(F.AC.n === 0 && unlocked === 0, "nothing before a gesture");
+  F.w.fire("pointerdown", { isTrusted: true }); F.run(1);
+  const s = m.state(); ok(unlocked >= 1 && F.AC.n === 1 && s.contexts === 0 && s.shared && s.playing && s.style === "drift", JSON.stringify(s));
+  F.run(2000); ok(m.state().notes > 0, "books on the shared clock");
+  F.w.vis(true); F.run(400); ok(m.state().paused && shared.context.state === "running", "music never suspends a context it does not own");
+  const n = m.state().notes; F.run(2000); ok(m.state().notes === n, "nothing booked while hidden");
+  F.w.vis(false); F.run(10); ok(!m.state().paused, "resumes");
+});
+
 require("./conventions")(t, ok, ["shared/music.js", "tools/render-music.cjs", "tools/music-measure.cjs", "tests/emu/shared-music.cjs", "tests/fixtures/music.html",
   "docs/design/MUSIC.md", "docs/design/MUSIC-PANEL.md"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

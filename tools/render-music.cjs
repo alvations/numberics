@@ -73,6 +73,7 @@ const root = path.join(__dirname, "..");
     const sDb = 20 * Math.log10(sfxMerge), mPk = Math.max(...rows.map(r => r.shipPeakDb));
     console.log("SFX peaks at default volume (dBFS): " + Object.entries(sfx).map(([k, v]) => k + " " + (20 * Math.log10(v)).toFixed(1)).join(", "));
     console.log("loudest music peak at default sliders " + mPk + " dBFS vs merge(4) " + sDb.toFixed(1) + " dBFS: headroom " + (sDb - mPk).toFixed(1) + " dB (need >= 6)");
+    console.log("SCALE that would give 6.5 dB of headroom with these SFX: " + (M.SCALE * Math.pow(10, (sDb - mPk - 6.5) / 20)).toFixed(4) + " (now " + M.SCALE + ")");
     if (!raw && sDb - mPk < 6) { bad++; console.log("FAIL music sits less than 6 dB under the SFX"); }
   }
   if (jsonOut) fs.writeFileSync(jsonOut, JSON.stringify({ target: M.TARGET_LUFS, scale: M.SCALE, defaults: M.DEF, sfx, rows: rows.map(r => Object.assign({}, r, { file: path.basename(r.file) })) }, null, 1));
