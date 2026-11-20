@@ -121,7 +121,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the computer took the match", s.matchOver === "c", JSON.stringify(s.tiles));
   const undoBtn = p.locator("#tray .pw").nth(0);
   ck("R1: Undo is aria-disabled after a lost match", (await undoBtn.getAttribute("aria-disabled")) === "true");
-  await undoBtn.click();
+  await undoBtn.click({ force: true }); // aria-disabled: a real tap still lands and explains
   s = await st(p);
   ck("R1: tapping it changes nothing and says why", s.matchOver === "c" && s.power.p.undo === 2 && /Undo: Take back.*Not once a round is decided\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("R8: the lost-match headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.textContent === "Match to the computer" && h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
@@ -130,7 +130,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click("#again"); await idle(p);
   // R5: an empty tray button explains itself in the hint line
   await forge(p, { tiles: [2, 1, 1, 1], power: { p: { undo: 1, split: 0, shield: 1, nudge: 1 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
-  await p.locator("#tray .pw").nth(1).click();
+  await p.locator("#tray .pw").nth(1).click({ force: true });
   ck("R5: empty Split explains what it does and how to earn it", /^Split: Move one point.*Burst a computer tile to earn one\./.test(await p.textContent("#hint")) && await p.locator("#board.targeting").count() === 0, await p.textContent("#hint"));
   ck("R5: tooltip voice '2: Split. ...'", /^2: Split\. Move one point/.test(await p.locator("#tray .pw").nth(1).getAttribute("title")));
   // R9: Enter on a focused tray button uses that button, not the board

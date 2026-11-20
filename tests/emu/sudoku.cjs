@@ -33,10 +33,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("board grid has role=row children (valid ARIA)", await p.locator("#board > [role=row]").count() === 9 && await p.locator("#board [role=row] > [role=gridcell]").count() === 81);
 
   // 2. tray info on a phone: tapping an empty slot explains it in a neutral toast
-  await p.click("#pw-check");
+  await p.click("#pw-check", { force: true });
   ck("tapping an empty Check explains it and how to earn it (R5)", await toastIs(p, /^Check: Mark wrong digits, briefly\. Earn one for every 9 cells you fill\.$/, true), await p.textContent("#toast"));
   ck("toast sits at the top, clear of the games row (F2)", await p.evaluate(() => document.getElementById("toast").getBoundingClientRect().top < 60));
-  await p.click("#pw-undo");
+  await p.click("#pw-undo", { force: true });
   ck("tapping Undo with nothing to undo says so", await toastIs(p, /Nothing to undo yet/, true));
 
   // 3. earn by progress: 9 filled cells pay one charge whether right or wrong

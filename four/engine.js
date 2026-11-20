@@ -219,8 +219,8 @@
   // Strength per level. loose: chance a turn picks at random among the columns the search does not see losing;
   // blunder: chance a loose turn ignores even that (any legal column). A win in one is always taken.
   // Tuned against a safe-move player (never leaves the computer an immediate line for its shown disc), see tests.
-  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.35 }, medium: { depth: 6, nodes: 20000, loose: 0.85, blunder: 0.2 },
-             hard: { depth: 14, nodes: 40000, loose: 0, blunder: 0 } };
+  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.5 }, medium: { depth: 6, nodes: 20000, loose: 0.85, blunder: 0.2 },
+             hard: { depth: 14, nodes: 40000, loose: 0.3, blunder: 0 } };
 
   function Search(own, num, toMove, masks, budget) {
     this.own = Int8Array.from(own); this.num = Int8Array.from(num);

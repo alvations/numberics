@@ -115,10 +115,10 @@
     });
     if (sel >= 0) boardEl.setAttribute("aria-activedescendant", "c" + sel); else boardEl.removeAttribute("aria-activedescendant");
     $("time").textContent = fmt(secs());
-    var pure = bests[state.difficulty], helped = assisted[state.difficulty];
+    var pure = bests[state.difficulty], helped = assisted[state.difficulty], hasPure = typeof pure === "number";
     // Best is the best pure solve (no power-ups); with none yet it says so (R11), and an assisted time is only a tooltip
-    $("best").textContent = pure ? fmt(pure) : "none"; $("best").classList.toggle("none", !pure);
-    $("best").title = pure ? "Best pure solve on " + cap(state.difficulty) + ", no power-ups" :
+    $("best").textContent = hasPure ? fmt(pure) : "none"; $("best").classList.toggle("none", !hasPure);
+    $("best").title = hasPure ? "Best pure solve on " + cap(state.difficulty) + ", no power-ups" :
       helped ? "No pure solve yet. Best with power-ups: " + fmt(helped.t) : "No solve yet on " + cap(state.difficulty);
     Array.prototype.forEach.call($("levels").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.l === state.difficulty)); });
     var counts = new Array(10).fill(0); state.grid.forEach(function (v) { counts[v]++; });
@@ -152,7 +152,7 @@
   function record() { // a fresh solve: keep the best times and say whether this one is a record (R8)
     var d = state.difficulty, pw = S.total(state.used), t = secs();
     note = null;
-    if (!pw) { if (!bests[d] || t < bests[d]) { bests[d] = t; note = { seed: state.seed, text: "New best." }; } }
+    if (!pw) { if (typeof bests[d] !== "number" || t < bests[d]) { bests[d] = t; note = { seed: state.seed, text: "New best." }; } }
     else if (!assisted[d] || t < assisted[d].t) {
       assisted[d] = { t: t, pw: pw };
       note = { seed: state.seed, text: "New best with power-ups." };
