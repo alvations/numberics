@@ -305,3 +305,9 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 @keyframes nmm-fade{ from{ opacity:0; } }
 @keyframes nmm-fadeout{ to{ opacity:0; } }
 /* ===== end B2 motion ===== */
+
+/* ===== B1 settings (shared/settings.js): the in-app Motion setting beats the OS query above (REDESIGN.md 5.12, 6).
+   html[data-motion] is set by boot.js and settings.js; "full" restores the slide even when the device asks for less. ===== */
+:root[data-motion="full"]{ --anim:var(--m-slide); }
+:root[data-motion="reduced"]{ --anim:0ms; }
+/* ===== end B1 settings ===== */
