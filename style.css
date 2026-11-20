@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) */
 :root{
-  --bg:#14151c; --panel:#1d1f2a; --cell:#262938; --ink:#ecebf1; --mute:#9a9bb0; --accent:#f2b84b;
+  --bg:#14151c; --panel:#1d1f2a; --cell:#262938; --ink:#ecebf1; --mute:#9a9bb0; --accent:#f2b84b; --line:#33364a;
   --gap:10px; --anim:110ms;
 }
 @media (max-width:520px){ :root{ --gap:7px; } }
@@ -72,6 +72,7 @@ a:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-rad
   width:max-content; max-width:calc(100vw - 32px); text-align:center; z-index:5; box-shadow:0 4px 18px rgba(0,0,0,.45); }
 .toast.on{ opacity:1; }
 .toast.bad{ background:var(--panel); color:var(--ink); border:1px solid #ff6b6b; font-weight:600; }
+.toast.info{ background:var(--panel); color:var(--ink); border:1px solid var(--line); font-weight:600; }
 @media (prefers-reduced-motion:reduce){
   :root{ --anim:0ms; }
   .tile.pop,.tile.new{ animation:none; }

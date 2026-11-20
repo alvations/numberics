@@ -21,7 +21,7 @@
     <div class="stats" aria-live="off">
       <div class="stat"><span id="round-label">Round</span><b id="round">1</b></div>
       <div class="stat"><span>Line</span><b id="lineno">1/6</b></div>
-      <div class="stat"><span>Best</span><b id="best">1</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
     </div>
   </header>
 
@@ -56,8 +56,8 @@
   </div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Tap a gap to cycle + &minus; &times; &divide;, tap a number for &radic; or !, drag across numbers (or use Brackets) to group them
-     (groups can sit inside groups), tap a bracket to give it a sign. Make the gold target; every step must be a whole number or a fraction. Three lines in a row without help earn a power-up.</p>
+  <p class="how">Tap a gap for + &minus; &times; &divide;, a number for &radic; or !. Drag across numbers to group them, tap a group
+     to give it a sign. Every step must be a whole number or a fraction. Three lines in a row without help earn a power-up.</p>
   <nav id="games" class="games" data-root="../" data-current="six" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

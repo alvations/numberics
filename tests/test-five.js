@@ -290,12 +290,89 @@ t("a round with only normal moves always ends within 16 turns", () => {
   }
 });
 
+// ---- round 2 ----
+const tot = (s) => Object.values(s.power.p).reduce((a, b) => a + b, 0);
+t("R2: a burst on the move after Shield (same turn) pays nothing; the same burst without Shield pays", () => {
+  const stock = { undo: 0, split: 0, shield: 1, nudge: 0 };
+  const plain = F.play(at([2, 1, 3, 2], "p", "medium", { power: { p: Object.assign({}, stock), c: { undo: 0, split: 0, shield: 0, nudge: 0 } } }), 0, 2);
+  ok(plain.burst && plain.awarded, "an honest burst pays"); eq(tot(plain.state), 2);
+  const sh = F.use(at([2, 1, 3, 2], "p", "medium", { power: { p: Object.assign({}, stock), c: { undo: 0, split: 0, shield: 0, nudge: 0 } } }), "shield", 1);
+  ok(sh.ok && sh.state.midTurn && tot(sh.state) === 0);
+  const m = F.play(sh.state, 0, 2);
+  ok(m.ok && m.burst, "the burst still happens"); eq(m.awarded, null, "but pays nothing"); ok(m.unpaid, "and says so"); eq(tot(m.state), 0);
+  // the next turn is a fresh turn: an honest burst there pays again
+  let s = m.state; while (s.turn === "c" && !s.roundOver) s = F.aiTurn(s, "easy").state;
+  ok(!s.midTurn, "the Shield mark lasts one turn");
+});
+t("R2 property: a power-up and the rest of its turn never raise the total stock (random matches)", () => {
+  let checked = 0, shieldMoves = 0;
+  for (let seed = 1; seed <= 120; seed++) {
+    let s = F.newMatch(seed, F.LEVELS[seed % 3]), x = (seed * 2654435761 >>> 0) || 1;
+    s.power.p = { undo: 2, split: 3, shield: 3, nudge: 3 };
+    for (let g = 0; g < 400 && !s.matchOver; g++) {
+      if (s.roundOver) { s = F.nextRound(s); continue; }
+      if (s.turn === "c") { s = F.aiTurn(s).state; continue; }
+      x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0; // xorshift32
+      if (x % 3 === 0) {
+        const name = F.POWERS[(x >>> 4) % 4], arg = (x >>> 7) % 4, before = tot(s), u = F.use(s, name, arg);
+        if (u.ok) {
+          checked++;
+          if (name === "undo") ok(tot(u.state) <= tot(s.prev), "undo returns at most the snapshot's stock, seed " + seed);
+          else ok(tot(u.state) === before - 1, name + " itself pays nothing, seed " + seed);
+          if (name === "undo") { // Undo rewinds to your last turn: a move there pays exactly what it paid from that turn
+            F.legalMoves(u.state).forEach(m => { const r = F.play(u.state, m.from, m.to), o = F.play(s.prev, m.from, m.to);
+              ok(tot(r.state) <= tot(o.state) && !!r.awarded === !!o.awarded, "move after undo pays as from the snapshot, seed " + seed); });
+          } else if (u.state.turn === "p" && !u.state.roundOver) { // Shield: you still move this turn
+            F.legalMoves(u.state).forEach(m => { const r = F.play(u.state, m.from, m.to); ok(tot(r.state) < before, "move after " + name + ", seed " + seed); shieldMoves++; });
+          }
+          s = u.state; continue;
+        }
+      }
+      const ms = F.legalMoves(s);
+      s = ms.length ? F.play(s, ms[(x >>> 9) % ms.length].from, ms[(x >>> 9) % ms.length].to).state : F.pass(s).state;
+    }
+  }
+  ok(checked > 300 && shieldMoves > 100, "exercised " + checked + " power-ups, " + shieldMoves + " moves after Shield");
+});
+t("R12: the match counts as played only once YOU move (the computer's opener is not you), until it is decided", () => {
+  let s = F.newMatch(3, "medium"); ok(!F.played(s), "fresh");
+  s = F.aiTurn(s).state; ok(s.turn === "p" && !F.played(s), "after the computer's opener");
+  const m = F.legalMoves(s)[0]; let p = F.play(s, m.from, m.to).state; ok(F.played(p), "after your move");
+  const u = F.use(p, "undo"); ok(u.ok && F.played(u.state), "Undo does not make a played match unplayed");
+  const sh = F.use(Object.assign(F.clone ? F.clone(s) : JSON.parse(JSON.stringify(s)), { power: { p: { undo: 0, split: 0, shield: 1, nudge: 0 }, c: s.power.c } }), "shield", 0);
+  ok(sh.ok && F.played(sh.state), "a power-up is playing too");
+  const pa = F.pass(Object.assign(JSON.parse(JSON.stringify(s)), { tiles: [1, 0, 0, 1], shield: { side: "c", idx: 3 } }));
+  ok(pa.ok && F.played(pa.state), "a forced pass is playing too");
+  // it carries across rounds and ends with the match
+  let r = Object.assign(JSON.parse(JSON.stringify(p)), { tiles: [1, 0, 0, 4], turn: "p" });
+  r = F.play(r, 0, 3).state; ok(r.roundOver === "p" && F.played(r)); r = F.nextRound(r); ok(F.played(r), "next round of the same match");
+  const done = Object.assign(JSON.parse(JSON.stringify(r)), { matchOver: "p" }); ok(!F.played(done), "a decided match is not live");
+  ok(F.played(Object.assign(JSON.parse(JSON.stringify(s)), { touched: undefined, moves: 3 })), "old save past the opener");
+  ok(!F.played(Object.assign(JSON.parse(JSON.stringify(s)), { touched: undefined, moves: 1, round: 1 })), "old save at the opener");
+});
+t("R13: the round-ending move is described on the state (what was added onto what)", () => {
+  const r = F.play(at([3, 0, 0, 2], "p"), 0, 3);
+  ok(r.state.roundOver === "p"); eq([r.state.last.add, r.state.last.prevTo, r.state.last.value, r.state.last.to], [3, 2, 5, 3]);
+  const n = F.use(at([1, 0, 0, 4], "p", "medium", { power: { p: { undo: 0, split: 0, shield: 0, nudge: 1 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } }), "nudge", 3);
+  ok(n.ok && n.state.roundOver === "p" && n.state.last.prevTo === 4);
+});
+
 // ---- UI copy ----
 t("the page never says hand or finger", () => {
   for (const f of ["five/index.html", "five/game.js"]) {
     const s = fs.readFileSync(path.join(__dirname, "..", f), "utf8");
     ok(!/\b(hand|hands|finger|fingers)\b/i.test(s), f);
   }
+});
+t("R5/R17 client: number keys click the tray slot; Enter on a link or button is never a game action", () => {
+  const g = fs.readFileSync(path.join(__dirname, "..", "five/game.js"), "utf8");
+  ok(/if \(pi >= 0\) return traySlot\(pi\)/.test(g), "keys go through the tray button");
+  ok(/closest\("a, button"\)/.test(g), "link and button guard");
+});
+t("how-to copy: 'at 5 or more' and 'you can always win', no jargon", () => {
+  const h = fs.readFileSync(path.join(__dirname, "..", "five/index.html"), "utf8"), how = h.match(/<p class="how">([\s\S]*?)<\/p>/)[1];
+  ok(/5 or more bursts/.test(how) && /you can always win/.test(how) && !/seat|solved|perfect play/i.test(how), how);
+  ok(/<span>Record<\/span>/.test(h) && !/Matches/.test(h), "R16 pill names");
 });
 t("client never re-implements a rule (no burst arithmetic in game.js)", () => {
   const g = fs.readFileSync(path.join(__dirname, "..", "five/game.js"), "utf8");

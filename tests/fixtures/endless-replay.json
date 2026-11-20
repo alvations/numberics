@@ -1,7 +1,7 @@
 [
  {
   "seed": 1,
-  "hash": "b73d1417ff2f9448640ed483c4c9998eba0d1a1e1b3906431bcd7f61b94ba3d7",
+  "hash": "b52805d13c61e29faa6f8b8b2909b90bcccde21cf7f553f8d47666cfb0ce8f9a",
   "games": 4,
   "final": {
    "grid": [
@@ -36,33 +36,33 @@
  },
  {
   "seed": 2,
-  "hash": "942ab9b5c098a1050493fd27c90c3cc09c50cafdf13d1309ee5b99bdfdfa5bd0",
+  "hash": "053d525f8bc58aa23bedbf30e0b142a7adfab1609aa541c36d3a0d6fbef0001f",
   "games": 4,
   "final": {
    "grid": [
-    8,
+    1,
     0,
+    4,
+    1,
     0,
-    0,
-    3,
-    3,
-    0,
-    0,
-    3,
+    6,
     7,
-    1,
-    1,
+    4,
     3,
-    1,
     5,
-    2
+    6,
+    2,
+    2,
+    8,
+    2,
+    3
    ],
-   "score": 3136,
+   "score": 3044,
    "top": 8,
-   "moves": 241,
+   "moves": 247,
    "power": {
     "undo": 0,
-    "smash": 1,
+    "smash": 2,
     "swap": 0,
     "boost": 0
    },
@@ -71,34 +71,34 @@
  },
  {
   "seed": 3,
-  "hash": "77f615094c498bbe62254adefb1316fa7035f3fb03d18d2aedb1c0f97b2f1b0d",
+  "hash": "4240f069f788e568369d47ce28a8be1e05df34a5a7feba4edfd4618a2c75b08a",
   "games": 4,
   "final": {
    "grid": [
-    3,
-    6,
+    0,
+    1,
+    2,
+    1,
+    2,
+    4,
+    5,
+    4,
+    2,
+    4,
     2,
     3,
-    1,
-    3,
     5,
-    3,
-    0,
     1,
-    4,
-    0,
-    0,
-    0,
-    0,
+    6,
     1
    ],
-   "score": 628,
+   "score": 644,
    "top": 6,
-   "moves": 80,
+   "moves": 87,
    "power": {
     "undo": 0,
-    "smash": 0,
-    "swap": 0,
+    "smash": 1,
+    "swap": 1,
     "boost": 1
    },
    "over": false
@@ -106,34 +106,34 @@
  },
  {
   "seed": 4,
-  "hash": "8301d63a52a0127cb3c227f9131a82167fe7d16ac5f4a654cf0a4927631ac31e",
-  "games": 3,
+  "hash": "dd25dfafce984f97df079d44abf55964efdb899bbe06fa099164d6501a64b259",
+  "games": 4,
   "final": {
    "grid": [
     2,
-    3,
-    2,
-    0,
-    2,
-    7,
-    4,
-    2,
-    4,
     6,
-    3,
     1,
+    1,
+    4,
+    5,
+    3,
+    0,
     1,
     2,
-    5,
-    2
+    1,
+    0,
+    4,
+    1,
+    0,
+    0
    ],
-   "score": 1196,
-   "top": 7,
-   "moves": 123,
+   "score": 500,
+   "top": 6,
+   "moves": 62,
    "power": {
-    "undo": 0,
-    "smash": 1,
-    "swap": 1,
+    "undo": 1,
+    "smash": 0,
+    "swap": 0,
     "boost": 0
    },
    "over": false
@@ -141,30 +141,30 @@
  },
  {
   "seed": 5,
-  "hash": "69d60cd0235bcbec8f349e21dc5873c9c8e14c53653b6118d75107c56c361141",
+  "hash": "2a3dcc3d21110510144f9336bf4cb25c601cfb02da44b2da2680a8bf9beb2219",
   "games": 4,
   "final": {
    "grid": [
     1,
-    2,
-    2,
-    0,
-    5,
-    6,
     5,
     3,
     2,
+    2,
+    3,
     5,
+    2,
+    3,
     7,
+    3,
+    4,
+    1,
     2,
-    2,
-    2,
-    0,
-    1
+    6,
+    2
    ],
-   "score": 1616,
+   "score": 1392,
    "top": 7,
-   "moves": 164,
+   "moves": 146,
    "power": {
     "undo": 0,
     "smash": 0,
@@ -176,7 +176,7 @@
  },
  {
   "seed": 6,
-  "hash": "31b0c71ddac7d607b9be89681ae4293559f85a59427a1e7838e119f61383b439",
+  "hash": "d0f4b354b4e14e663a7ea3a00b29035b3400a43fc4a9f3f196941149050a51f3",
   "games": 5,
   "final": {
    "grid": [
@@ -211,7 +211,7 @@
  },
  {
   "seed": 7,
-  "hash": "2788a4e0d3b724f4e6bba5d078bb7c7e741106031c12727b1c7a9969b80cdacd",
+  "hash": "d7b970b079b6f09a0291fc5ca24d7528769bb44864cc300a9f18062ebf307903",
   "games": 4,
   "final": {
    "grid": [
@@ -246,30 +246,30 @@
  },
  {
   "seed": 8,
-  "hash": "0ea61f27f7278c3f46c70442ea94f7c7f12efa3f13e486c5ec49c27a9e1f4ef9",
+  "hash": "94f8897e1ff51ce9abce8846ab60ad30aef8e34c2eb5f9e48daa7130bc5dbee7",
   "games": 5,
   "final": {
    "grid": [
-    0,
     1,
-    0,
-    1,
-    0,
-    4,
     5,
     2,
     1,
-    5,
+    2,
     6,
+    3,
     5,
-    3,
     1,
+    0,
+    4,
+    2,
+    2,
     3,
-    2
+    2,
+    1
    ],
-   "score": 812,
+   "score": 672,
    "top": 6,
-   "moves": 104,
+   "moves": 93,
    "power": {
     "undo": 0,
     "smash": 0,
@@ -281,7 +281,7 @@
  },
  {
   "seed": 9,
-  "hash": "c3d359c01bae1108f47586e9630162ab2c92762ccfbc761444c64b02493d935e",
+  "hash": "f5640bcc2b80b25f718830b904aa3810dc28d3671a9b855627d91441a7f66b1e",
   "games": 3,
   "final": {
    "grid": [
@@ -316,30 +316,30 @@
  },
  {
   "seed": 10,
-  "hash": "6bc39676cbe9a954187fbbdc271acdc714d4710476cfefaafe7fca5394022c60",
+  "hash": "4eae454a92985b25a420d322c7b6392c6622e6aab777dc18378e29429ad8392c",
   "games": 4,
   "final": {
    "grid": [
-    4,
-    2,
-    4,
     1,
+    2,
+    0,
+    0,
     1,
-    4,
-    6,
-    2,
-    2,
     3,
-    7,
-    4,
+    5,
     1,
+    3,
+    8,
+    1,
+    3,
     2,
-    4,
+    5,
+    2,
     1
    ],
-   "score": 1180,
-   "top": 7,
-   "moves": 130,
+   "score": 2272,
+   "top": 8,
+   "moves": 200,
    "power": {
     "undo": 0,
     "smash": 0,
@@ -351,7 +351,7 @@
  },
  {
   "seed": 11,
-  "hash": "69b87606b371c371acba357ffee725355a2082a1a8d72106d6004efdabda7bf3",
+  "hash": "02d28801ddc6e8a519cad7e97ed46380f4f0af033655fa25dfa143f5b8516ebb",
   "games": 3,
   "final": {
    "grid": [
@@ -386,7 +386,7 @@
  },
  {
   "seed": 12,
-  "hash": "4574536410c3abb9fbc83cad4a4ecd1fbe70eb36913aa3a4214ce9fd5d9a3b6c",
+  "hash": "145c919d8869bc630c6e95ddf37c63e59a0358d3fcaa38ff82bda067fe7f8c10",
   "games": 4,
   "final": {
    "grid": [
@@ -421,34 +421,34 @@
  },
  {
   "seed": 13,
-  "hash": "948dac57898b0618b04d516acce34500c4f6aa1547afd282b36caf186a370de9",
+  "hash": "4b4a34212698746333e0567f3c5683c09b74de0c8dafce1bf3919504a4f2451d",
   "games": 4,
   "final": {
    "grid": [
-    4,
-    4,
-    2,
-    1,
-    2,
-    1,
     3,
+    1,
+    2,
+    1,
+    6,
     0,
+    7,
+    2,
+    1,
     4,
+    4,
+    3,
+    7,
+    3,
     2,
-    1,
-    0,
-    1,
-    2,
-    0,
-    0
+    1
    ],
-   "score": 188,
-   "top": 4,
-   "moves": 41,
+   "score": 1800,
+   "top": 7,
+   "moves": 181,
    "power": {
     "undo": 1,
     "smash": 0,
-    "swap": 0,
+    "swap": 1,
     "boost": 0
    },
    "over": false
@@ -456,7 +456,7 @@
  },
  {
   "seed": 14,
-  "hash": "b7dc886c5e888a59e81d332eaba60e9fd8b91829f5bf2fd63ca17c7025434eb7",
+  "hash": "e3f1df4a53e587174f06cd96242533fda76c440f738ffe2df1c1ead1abc5cc87",
   "games": 2,
   "final": {
    "grid": [
@@ -491,34 +491,34 @@
  },
  {
   "seed": 15,
-  "hash": "d749ba64f41cb41baadbe6108e66e42c51f9a155ecb9b01669c11913e54b9bba",
-  "games": 3,
+  "hash": "89206754244bd850722cf2bae5787d187b76c1aa0db534eb6cf1f3daa322887d",
+  "games": 4,
   "final": {
    "grid": [
     1,
-    2,
-    3,
+    0,
+    0,
+    0,
     1,
-    2,
-    3,
-    6,
-    2,
+    4,
+    0,
+    0,
     3,
     7,
-    1,
-    5,
-    1,
     2,
-    3,
-    1
+    2,
+    1,
+    4,
+    5,
+    2
    ],
-   "score": 1636,
+   "score": 764,
    "top": 7,
-   "moves": 170,
+   "moves": 76,
    "power": {
     "undo": 1,
     "smash": 0,
-    "swap": 0,
+    "swap": 1,
     "boost": 0
    },
    "over": false
@@ -526,7 +526,7 @@
  },
  {
   "seed": 16,
-  "hash": "f8c1f45a45cfdede1b96b00a39e60c0d6c878d848824ca0e12c518b08677c901",
+  "hash": "11f06e25a65b43c3613be0ecc1637f5f2e62d4d2b10e8b04d982bd8bcb4702d8",
   "games": 4,
   "final": {
    "grid": [
@@ -561,7 +561,7 @@
  },
  {
   "seed": 17,
-  "hash": "42dadc1cdcc6091f7c27889c140704ca5f220a876def6bf0cd84a6e2f9d7fae5",
+  "hash": "231dff17b8d74b76b411b00fcc2a98951ca44e3dc29684ddf57f01116ed3f581",
   "games": 4,
   "final": {
    "grid": [
@@ -596,7 +596,7 @@
  },
  {
   "seed": 18,
-  "hash": "dea4668f9ddd944f6b64aa36a993d02ba9e84ba1e698182bbdeedbe7da3d039d",
+  "hash": "aa40235401ed2dcab0007fc12178700fdb595eb3c5f5ebbb2b97a18ba9b798be",
   "games": 4,
   "final": {
    "grid": [
@@ -631,30 +631,30 @@
  },
  {
   "seed": 19,
-  "hash": "1c1a6430ee69777eec71979018ecf6a4e469d3d8bec8e4ab2be00ed37ad2290f",
-  "games": 4,
+  "hash": "8a11654749751b5651c1e1bfb6edd11f0cb4573c834f5414a500ced5c5a9fa15",
+  "games": 3,
   "final": {
    "grid": [
-    1,
     3,
-    5,
+    1,
+    1,
     1,
     2,
     6,
-    3,
-    5,
-    3,
     5,
     2,
-    2,
-    2,
-    4,
     1,
-    1
+    5,
+    7,
+    5,
+    2,
+    3,
+    3,
+    0
    ],
-   "score": 624,
-   "top": 6,
-   "moves": 92,
+   "score": 1220,
+   "top": 7,
+   "moves": 135,
    "power": {
     "undo": 0,
     "smash": 0,
@@ -666,30 +666,30 @@
  },
  {
   "seed": 20,
-  "hash": "0dc42fc03d4cf2db5f6d29347b3e1f3ac718799bb83c5e719e91a0281332e5d4",
+  "hash": "911a9ffd8ad4385bbdc1180c971babf20612c51ec1fa121454d07df8f882905c",
   "games": 2,
   "final": {
    "grid": [
+    2,
+    4,
+    2,
     1,
+    4,
     3,
-    1,
-    2,
-    2,
     8,
-    3,
-    1,
-    4,
     5,
-    7,
+    3,
+    6,
     3,
     2,
+    0,
     1,
-    4,
+    2,
     1
    ],
-   "score": 2392,
+   "score": 2132,
    "top": 8,
-   "moves": 213,
+   "moves": 196,
    "power": {
     "undo": 0,
     "smash": 0,

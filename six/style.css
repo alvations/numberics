@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Six: only what shared/theme.css does not cover. */
-.six{ display:flex; flex-direction:column; justify-content:space-between; gap:6px; padding:14px; }
+/* the panel is as tall as its content (round 2: the square board left ~100px of dead space and the page scrolled at 390x844) */
+.six{ display:flex; flex-direction:column; justify-content:center; gap:10px; padding:14px; aspect-ratio:auto; container-type:inline-size; }
 .six .top{ display:flex; justify-content:space-between; align-items:center; color:var(--mute); font-size:.78rem;
   text-transform:uppercase; letter-spacing:.08em; }
 .pips{ display:flex; gap:6px; }
@@ -29,9 +30,11 @@
 .num.jr{ border-top-right-radius:2px; border-bottom-right-radius:2px; }
 .gp{ height:100%; min-height:44px; display:flex; align-items:center; justify-content:center; background:none; border:0; padding:0;
   color:var(--ink); font:inherit; font-size:1.2rem; font-weight:700; cursor:pointer; }
-.gp b{ display:flex; align-items:center; justify-content:center; width:min(28px,100%); aspect-ratio:1; border-radius:99px;
+.gp b{ display:flex; align-items:center; justify-content:center; width:min(32px,100%); aspect-ratio:1; border-radius:99px;
   background:var(--cell); border:1px solid var(--line); }
-.gp.empty b{ border-style:dashed; color:var(--mute); font-weight:400; }
+/* an empty gap is the main thing to tap: gold dashed ring and a bold "?" so it reads as live, not disabled (round 2) */
+.gp.empty b{ border:2px dashed var(--accent); color:var(--accent); font-weight:800; }
+.gp:hover b{ border-color:var(--accent); }
 .gp.j b{ background:none; border:0; color:var(--mute); }
 .gp.dot b{ background:none; border:0; font-size:1.6rem; line-height:0; padding-bottom:.4em; }
 /* brackets: a bar under the numbers it groups, stacked by depth; its sign sits in a chip */
@@ -52,3 +55,6 @@
 .six .tools .btn[hidden]{ display:none; }
 @media (max-width:380px){ .tile.goldt{ height:46px; font-size:1.5rem; } .six{ padding:10px; } }
 .six .over .answer{ color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums; }
+/* Show answer ends a Climb run: it looks like the run-ender it is, not a harmless helper (round 2) */
+.six .tools .btn.ender{ border-color:var(--bad); color:var(--bad); }
+#best.none{ color:var(--mute); font-weight:600; }

@@ -8,10 +8,13 @@
  *   - two tiles merge when they are consecutive in the sequence (|a - b| == 1), or both are 1;
  *     the result is the next Fibonacci number (max(a, b) + 1) and the score adds its value;
  *   - spawns are 1 (90%) and 2 (10%); there is no winning tile and no ceiling.
- * These are the well-known 2584 rules. The reference page (thereal23.github.io/2584) could not be
- * reached from the build network, so spawn odds and scoring were not checked against it.
+ * These are the well-known 2584 rules. The merge rule is confirmed by a published write-up; the
+ * reference page (thereal23.github.io/2584) could not be reached from the build network, so the spawn
+ * odds and scoring are assumed, not checked against it (docs/DESIGN.md, Fibonacci).
  * Power-ups are Endless's exactly; Boost moves a tile to the next Fibonacci number, and a NEW
- * highest tile from 34 up (index 8) awards one (docs/ROADMAP.md section 1 and 0a).
+ * highest tile from 55 up (index 9) awards one. The floor was 34 until round 2: with the same bot
+ * Fibonacci paid more rewards per game than Endless, so it moved up one step (docs/ROADMAP.md 1, 0a).
+ * R2 (a power-up never earns one, including the swipe right after it) lives in ../engine.js.
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(require("../engine.js"));
@@ -19,7 +22,7 @@
 })(typeof self !== "undefined" ? self : this, function (Endless) {
   "use strict";
 
-  var AWARD_FROM_INDEX = 8; // index 8 shows 34: the first milestone that pays out
+  var AWARD_FROM_INDEX = 9; // index 9 shows 55: the first milestone that pays out
   var SUB = "₀₁₂₃₄₅₆₇₈₉";
 
   // value(i): index -> its Fibonacci number. Exact while it fits a double (index < 78), then a

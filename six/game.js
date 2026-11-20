@@ -30,18 +30,21 @@
     daily: valid(saved.daily) && saved.daily.mode === "daily" && saved.daily.start === today ? saved.daily : E.newGame(today, "daily"),
   };
   var mode = saved.mode === "daily" ? "daily" : "climb";
-  var best = Math.max(1, saved.best | 0);
-  // the best round before this Climb run began, so the end screen can say "New best."
-  var runBest = saved.runBest >= 1 ? Math.min(saved.runBest | 0, best) : best;
+  // Best: the most Climb rounds cleared in one run, "none" before any (round 2: it read 1 before any play).
+  // Older saves kept the round reached, so a reached round 3 means 2 cleared.
+  var best = saved.cleared >= 0 ? saved.cleared | 0 : Math.max(0, (saved.best | 0) - 1);
+  // the best before this Climb run began, so the round-cleared card can say "New best."
+  var runBest = saved.runCleared >= 0 ? Math.min(saved.runCleared | 0, best) : best;
   var state = games[mode];
   var cursor = 0, anchor = -1, bracketMode = false, drag = null, kbd = false; // kbd: show the cursor only for keyboard play
   var note = ""; // a one-off hint line message (a power-up explaining itself, a confirm), cleared by the next action
 
   function persist() {
     games[mode] = state;
-    if (state.mode === "climb") best = Math.max(best, state.round);
-    store.save({ climb: games.climb, daily: games.daily, mode: mode, best: best, runBest: runBest });
+    if (state.mode === "climb") best = Math.max(best, cleared(state));
+    store.save({ climb: games.climb, daily: games.daily, mode: mode, cleared: best, runCleared: runBest });
   }
+  function cleared(s) { return s.round - 1 + (s.over && !s.ended ? 1 : 0); } // Climb rounds cleared in this run
   function toast(m, kind) { K.toast(m, kind); }
   function level(tok) { return (parseInt(tok, 10) % 11) + 1; }
   function ord(k) { return ["1st", "2nd", "3rd", "4th", "5th", "6th"][k] || (k + 1) + "th"; }
@@ -51,10 +54,6 @@
   function cols(n) {
     var c = []; for (var k = 0; k < n; k++) { c.push("minmax(0,3fr)"); if (k < n - 1) c.push("minmax(0,2fr)"); }
     return c.join(" ");
-  }
-  function depthOf(b, all) {
-    var inner = all.filter(function (x) { return x !== b && x[0] >= b[0] && x[1] <= b[1]; });
-    return 1 + inner.reduce(function (m, x) { return Math.max(m, depthOf(x, all)); }, 0);
   }
   function render() {
     var L = E.line(state), n = L.n.length, cur = state.cur, lits = E.literals(L.n, cur.g) || L.n.map(function (t, i) { return { i: i, j: i }; });
@@ -97,9 +96,12 @@
 
     barsEl.textContent = "";
     var bars = cur.b.slice(), rows = 1;
-    if (drag && drag.to >= 0 && drag.to !== drag.from) bars.push([Math.min(drag.from, drag.to), Math.max(drag.from, drag.to), 0, "ghost"]);
+    // the drag preview; over an existing bracket of the same span (dropping there removes it) none is added
+    var gl = drag && drag.to >= 0 && drag.to !== drag.from ? [Math.min(drag.from, drag.to), Math.max(drag.from, drag.to), 0, "ghost"] : null;
+    if (gl && !bars.some(function (b) { return b[0] === gl[0] && b[1] === gl[1]; })) bars.push(gl);
+    var depth = E.depths(bars);
     bars.forEach(function (br, x) {
-      var el = document.createElement(br[3] ? "div" : "button"), d = depthOf(br, bars);
+      var el = document.createElement(br[3] ? "div" : "button"), d = depth[x];
       rows = Math.max(rows, d);
       el.className = "bar" + (br[3] ? " ghost" : "");
       if (!br[3]) { el.type = "button"; el.dataset.x = x; el.setAttribute("aria-label", "bracket over numbers " + (br[0] + 1) + " to " + (br[1] + 1) + (br[2] ? ", sign " + SIGN[br[2]] : "") + ". Tap to change its sign."); }
@@ -127,11 +129,13 @@
     $("round-label").textContent = state.mode === "daily" ? "Made" : "Round";
     $("round").textContent = state.mode === "daily" ? String(state.solved) : String(state.round);
     $("lineno").textContent = (state.idx + 1) + "/6";
-    $("best").textContent = String(state.mode === "climb" ? Math.max(best, state.round) : best);
+    var bv = state.mode === "climb" ? Math.max(best, cleared(state)) : best;
+    $("best").textContent = bv ? String(bv) : "none"; $("best").classList.toggle("none", !bv);
     Array.prototype.forEach.call($("modes").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
 
     $("next").hidden = !state.done || state.over;
     $("brk").hidden = state.done; $("clear").hidden = state.done; $("reveal").hidden = state.done;
+    $("reveal").classList.toggle("ender", state.mode === "climb"); // in Climb it ends the run: styled as such
     $("brk").setAttribute("aria-pressed", String(bracketMode));
     P.tray($("tray"), PW, state.power, { disabled: function (id) { return E.why(state, id) || !E.useable(state, id); },
       onUse: activate, earn: EARN, onInfo: function (id, t) { note = t; render(); } });
@@ -162,12 +166,11 @@
         // the overlay covers the line, so the answer it ends on is printed here
         $("over-answer").textContent = "The answer: " + txt + " = " + L.g;
         $("over-answer").hidden = false;
-        $("over-best").hidden = !(state.round > runBest);
         $("again").textContent = "New game";
       } else {
         $("over-title").textContent = "Round " + state.round + " cleared";
         $("over-text").textContent = made + " · " + pw;
-        $("over-best").hidden = !(state.round + 1 > runBest);
+        $("over-best").hidden = !(state.round > runBest);
         $("again").textContent = "Next round";
       }
     }
@@ -176,14 +179,16 @@
   // ---------- actions ----------
   function apply(r, quiet) {
     if (!r.ok) {
+      if (!quiet && revealArmed && /cross|one|dot/.test(r.why)) disarmReveal(); // its warning never sits under a toast
       if (!quiet && r.why === "cross") toast("Brackets cannot cross", "bad");
       else if (!quiet && r.why === "one") toast("Group two numbers or more", "bad");
       else if (!quiet && r.why === "dot") toast("One number takes one decimal point", "bad");
       return false;
     }
-    state = r.state; note = "";
+    state = r.state; note = ""; disarmReveal();
     // a made line is said once, in the hint line (R7); only a reward gets the toast
     if (r.award) toast("Three clean lines: +" + NAME[r.award]);
+    else if (r.full) toast("Three clean lines. Power-ups full", "info"); // R15: a skipped reward is said
     persist(); render(); return true;
   }
   function doEdit(act, quiet) { return apply(E.edit(state, act), quiet); }
@@ -194,14 +199,14 @@
     }
     var r = E.use(state, id);
     if (!r.ok) return;
-    state = r.state; anchor = -1; bracketMode = false; note = "";
+    disarmReveal(); state = r.state; anchor = -1; bracketMode = false; note = "";
     if (id === "hint" && r.step) {
       var st = r.step, sol = E.line(state).sol;
       toast(st.kind === "gap" ? "Hint: the " + ord(st.i) + " gap is " + (sol.g[st.i] === "j" ? "joined" : sol.g[st.i] === "." ? "a decimal point" : E.SYM[sol.g[st.i]])
         : st.kind === "un" ? "Hint: the " + ord(st.i) + " number takes " + (SIGN[sol.u[st.i]] || "no sign")
-        : st.kind === "brx" ? "Hint: that bracket is not needed" : "Hint: group numbers " + (st.b[0] + 1) + " to " + (st.b[1] + 1));
-    } else if (id === "skip") { toast("New line"); cursor = 0; disarm(); }
-    else if (id === "undo") toast("Took back the last edit");
+        : st.kind === "brx" ? "Hint: that bracket is not needed" : "Hint: group numbers " + (st.b[0] + 1) + " to " + (st.b[1] + 1), "info");
+    } else if (id === "skip") { toast("New line", "info"); cursor = 0; disarm(); }
+    else if (id === "undo") toast("Took back the last edit", "info"); // gold is for rewards only (R7)
     persist(); render();
   }
   // an armed two-step never carries over to another line, mode or game
@@ -278,7 +283,7 @@
   function disarmClear() { if (clearArmed) clearTimeout(clearArmed); clearArmed = null; $("clear").textContent = "Clear"; }
   $("clear").addEventListener("click", function () {
     if (state.done || E.sameM(state.cur, E.blank(state.cur.u.length))) return disarmClear();
-    if (!clearArmed) { $("clear").textContent = "Sure? Clear"; clearArmed = setTimeout(disarmClear, 3000); return; }
+    if (!clearArmed) { K.clearToast(); $("clear").textContent = "Sure? Clear"; clearArmed = setTimeout(disarmClear, 3000); return; }
     disarmClear(); anchor = -1; bracketMode = false; doEdit({ k: "clear" }, true);
   });
   $("next").addEventListener("click", nextLine);
@@ -292,6 +297,7 @@
     var b = $("reveal");
     if (!revealArmed) {
       var climb = state.mode === "climb";
+      K.clearToast(); // a toast must never hide this warning (round 2: a Hint toast covered it and a run was lost)
       b.textContent = climb ? "Sure? Ends run" : "Sure? Show it";
       note = climb ? "This ends the Climb run. Tap again to show it." : "This gives up the line. Tap again to show it.";
       render();
@@ -311,9 +317,11 @@
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var n = E.line(state).n.length, max = 2 * n - 2, key = e.key;
-    // Enter or Space on a focused button or link is that control's own click, never a game action (R9)
+    // Enter or Space on a focused button or link is that control's own click, never a game action (R9, R17);
+    // a focused link or form field keeps every key (the gaps are buttons, so typing on them still edits)
     var tag = e.target && e.target.tagName;
-    if ((key === "Enter" || key === " ") && (tag === "BUTTON" || tag === "A")) return;
+    if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if ((key === "Enter" || key === " ") && tag === "BUTTON") return;
     kbd = true;
     var pi = ["1", "2", "3", "4"].indexOf(key);
     if (pi >= 0) { activate(PW[pi].id); return; }
@@ -328,7 +336,7 @@
       return;
     }
     if (OPKEY[key]) {
-      if ((key === "j" || key === ".") && !E.canJoin(state)) { toast("Joining digits arrives at Tier 4", "bad"); return; }
+      if ((key === "j" || key === ".") && !E.canJoin(state)) { disarmReveal(); toast("Joining digits arrives at Tier 4", "bad"); return; }
       e.preventDefault();
       var gi = onGap ? k : Math.min(k, n - 2);
       doEdit({ k: "gap", i: gi, op: OPKEY[key] }, true);

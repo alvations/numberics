@@ -72,8 +72,11 @@
       e.n = Math.min(CAP, e.n + cnt);
       if (c < e.c || (c === e.c && (c2 || 0) < e.c2)) { e.c = c; e.c2 = c2 || 0; e.w = w; }
     }
-    function withUnary(map, v, c, cnt, wf, c2) {
+    // opts.lu / opts.gu: the signs allowed on a number / on a group (default all); used to measure which tools a line needs
+    var LU = opts.lu || [0, 1, 2, 3, 4], GU = opts.gu || [0, 1, 2, 3, 4];
+    function withUnary(map, v, c, cnt, wf, c2, allow) {
       for (var u = 0; u < UN.length; u++) {
+        if (allow.indexOf(u) < 0) continue;
         var x = u ? unary(u, v) : v;
         if (!x || (u && same(x, v))) continue;
         if (u === 4 && same(x, unary(2, v))) continue;
@@ -95,7 +98,7 @@
           forms.forEach(function (f) {
             var v = literal(f.s); if (!v) return;
             var c = (j - i) + 0; // joins and the decimal point each fill one gap
-            withUnary(map, v, c, 1, function (u) { return { t: "L", i: i, j: j, dot: f.dot, u: u }; });
+            withUnary(map, v, c, 1, function (u) { return { t: "L", i: i, j: j, dot: f.dot, u: u }; }, 0, LU);
           });
         }
         for (var k = i; k < j; k++) {
@@ -108,12 +111,13 @@
                 if (top && !opts.all) {
                   // the whole line: only values that land on the target (after one optional sign) matter
                   for (var u = 0; u < UN.length; u++) {
+                    if (GU.indexOf(u) < 0) continue;
                     var x = u ? unary(u, v) : v;
                     if (x && same(x, target) && !(u && same(x, v))) put(map, x, c + UN_COST[u], cnt, { t: "B", op: op, k: k, a: a.w, b: b.w, u: u, i: i, j: j }, c2);
                   }
                   continue;
                 }
-                withUnary(map, v, c, cnt, (function (op, k, a, b) { return function (u) { return { t: "B", op: op, k: k, a: a.w, b: b.w, u: u, i: i, j: j }; }; })(op, k, a, b), c2);
+                withUnary(map, v, c, cnt, (function (op, k, a, b) { return function (u) { return { t: "B", op: op, k: k, a: a.w, b: b.w, u: u, i: i, j: j }; }; })(op, k, a, b), c2, GU);
               }
             });
           });
@@ -270,9 +274,9 @@
 
   // ---------- lines, tiers, difficulty ----------
   var TIERS = {
-    1: { join: false, label: "Tier 1", what: "make 6" },
-    2: { join: false, label: "Tier 2", what: "longer lines" },
-    3: { join: false, label: "Tier 3", what: "two-digit numbers" },
+    1: { join: false, label: "Tier 1", what: "+ − × ÷" },
+    2: { join: false, label: "Tier 2", what: "√ or !" },
+    3: { join: false, label: "Tier 3", what: "more signs" },
     4: { join: true, label: "Tier 4", what: "join digits" },
     5: { join: true, label: "Tier 5", what: "all tools" },
   };
@@ -289,6 +293,42 @@
     if (!r.count) return null;
     return { count: r.count, cost: r.cost, d: difficulty(tokens.length, join, r.count, r.cost), sol: treeToModel(tokens.length, r.tree) };
   }
+  // the tools a line needs (no joining, tiers 1-3), measured by solving with fewer tools:
+  //   0 + - x / alone, no brackets   1 + - x / and brackets   2 one sign (sqrt or !) on a number
+  //   3 at most two single signs, on numbers or on a group   4 more: nested signs (sqrt sqrt, (sqrt)!) or three signs
+  // skill(tokens, target) -> {h, sol}: sol is one shortest solution that uses only those tools (what Hint teaches)
+  function skill(tokens, target) {
+    var t = typeof target === "string" ? literal(target) : target, n = tokens.length;
+    for (var c = 0; c < Math.pow(4, n - 1); c++) {
+      var m = blank(n);
+      for (var k = 0, x = c; k < n - 1; k++, x = Math.floor(x / 4)) m.g[k] = OPS[x % 4];
+      if (same(value(tokens, m).v, t)) return { h: 0, sol: m };
+    }
+    var steps = [[{ lu: [0], gu: [0] }, 0], [{ lu: [0, 1, 2], gu: [0] }, 1], [{ lu: [0, 1, 2], gu: [0, 1, 2] }, 2], [{}, Infinity]];
+    for (var q = 0; q < steps.length; q++) {
+      var r = solve(tokens, t, steps[q][0]);
+      if (r.count && r.cost <= steps[q][1]) return { h: q + 1, sol: treeToModel(n, r.tree) };
+    }
+    return null;
+  }
+  // bracket rows for drawing: depth 1 is the innermost. Two bars on the same span (a drag preview over an
+  // existing bracket) are told apart by their order, so neither counts as inside the other (round 2: the old
+  // client recursion looped forever on that and threw "Maximum call stack size exceeded").
+  function depths(bars) {
+    var d = bars.map(function () { return 0; });
+    var inside = function (x, y) { // is bar x strictly inside bar y (or the same span, listed earlier)?
+      var a = bars[x], b = bars[y];
+      if (a[0] === b[0] && a[1] === b[1]) return x < y;
+      return b[0] <= a[0] && a[1] <= b[1];
+    };
+    var order = bars.map(function (b, x) { return x; }).sort(function (x, y) { return (bars[x][1] - bars[x][0]) - (bars[y][1] - bars[y][0]) || x - y; });
+    order.forEach(function (y) {
+      var m = 0;
+      order.forEach(function (x) { if (x !== y && inside(x, y)) m = Math.max(m, d[x]); });
+      d[y] = m + 1;
+    });
+    return d;
+  }
   // a line that is just its digits joined (6 6 6 -> 666, or 66.6) is no puzzle
   function trivial(tokens, target) {
     var t = literal(target), all = tokens.join("");
@@ -300,7 +340,7 @@
   (BANK || []).forEach(function (e, id) { (POOL[e.t] = POOL[e.t] || []).push(id); });
   function entry(id) {
     var e = BANK[id];
-    return { id: id, t: e.t, n: e.n.split(" "), g: e.g, d: e.d, sol: e.s };
+    return { id: id, t: e.t, n: e.n.split(" "), g: e.g, d: e.d, h: e.h, sol: e.s };
   }
 
   // ---------- game state ----------
@@ -321,16 +361,18 @@
     if (!pool.length) pool = POOL[1].filter(function (id) { return plain(entry(id)); });
     return pool[Math.floor(rnd(s) * pool.length)];
   }
+  function order(a, b) { return a.t - b.t || (a.h || 0) - (b.h || 0) || a.d - b.d; }
   function deal(s) {
     var t = s.mode === "daily" ? 0 : climbTier(s);
     var tiers = s.mode === "daily" ? DAILY : [t, t, t, t, t, t];
     var ids = [];
     tiers.forEach(function (t) { ids.push(draw(s, t, ids.concat(s.recent))); });
-    var lines = ids.map(entry).sort(function (a, b) { return a.t - b.t || a.d - b.d; });
+    // easiest first: by tier, then the tools a line needs, then measured difficulty (the draw is seeded, so the slots vary)
+    var lines = ids.map(entry).sort(order);
     // the very first line of a run (Climb round 1, every Daily) needs only + - x /: the tools come one at a time
     if (s.round === 1) {
       var first = lines.findIndex(function (l) { return l.t === 1 && plain(l); });
-      if (first < 0) { var pid = drawPlain(s, ids.concat(s.recent)); lines[0] = entry(pid); ids.push(pid); }
+      if (first < 0) { var pid = drawPlain(s, ids.concat(s.recent)); ids[ids.indexOf(lines[0].id)] = pid; lines[0] = entry(pid); }
       else if (first > 0) lines.unshift(lines.splice(first, 1)[0]);
     }
     s.lines = lines; s.idx = 0; s.recent = s.recent.concat(ids).slice(-24);
@@ -361,7 +403,7 @@
     if (s.helped) s.streak = 0;
     else if (++s.streak >= STREAK) {
       s.streak = 0;
-      var got = Power.award(s.power, POWERS, rnd(s)); if (got) out.award = got;
+      var got = Power.award(s.power, POWERS, rnd(s)); if (got) out.award = got; else out.full = true; // R15
     }
     return out;
   }
@@ -471,6 +513,8 @@
     if (!useable(state, name)) return { ok: false, state: state };
     if (name === "undo") {
       var r = clone(state.prev); r.power.undo = Math.max(0, r.power.undo - 1); r.prev = null; r.used = state.used + 1;
+      // R2: Undo is help too, so a line finished after an Undo is not a clean line and cannot pay a reward
+      r.helped = true;
       return { ok: true, state: r };
     }
     var s = clone(state), out = { ok: true, state: s };
@@ -524,8 +568,8 @@
   return { fr: fr, add: add, sub: sub, mul: mul, div: div, sqrt: sqrt, fact: fact, same: same, show: show, literal: literal,
            UN: UN, unary: unary, solve: solve, tokenize: tokenize, parse: parse, evaluate: evaluate, calc: calc,
            OPS: OPS, JOPS: JOPS, SYM: SYM, blank: blank, literals: literals, normalize: normalize, text: text, value: value,
-           treeToModel: treeToModel, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial,
-           BANK: BANK, POOL: POOL, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK,
+           treeToModel: treeToModel, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial, skill: skill, depths: depths,
+           BANK: BANK, POOL: POOL, order: order, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK,
            newGame: newGame, line: line, target: target, current: current, onTarget: onTarget, canJoin: canJoin,
            edit: edit, use: use, useable: useable, why: why, plain: plain, sameM: sameM, next: next, nextRound: nextRound, reveal: reveal, hintStep: hintStep, parts: parts };
 });

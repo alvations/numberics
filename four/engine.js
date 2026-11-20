@@ -4,7 +4,9 @@
  * A drop wins for the side that dropped it when it completes four of its colour in a row, or a
  * ten-line: any four in a row, any colours, whose numbers sum to exactly 10 and that hold at least TWO discs
  * of the side completing it (the new disc counts). A full board is a draw.
- * Cells are r*7+c with r = 0 the BOTTOM row. own: 0 empty, 1 player, 2 computer. num: 1-4 (0 empty). */
+ * Cells are r*7+c with r = 0 the BOTTOM row. own: 0 empty, 1 player, 2 computer. num: 1-4 (0 empty).
+ * R2: a power-up never earns a power-up, including the next drop after it. Pop, Hold and Tune mark the side
+ * (state.free[side]); that side's next drop still reports what it would have earned but pays nothing. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.NumbericsFour = factory();
@@ -48,6 +50,7 @@
       own: s.own.slice(), num: s.num.slice(), turn: s.turn,
       bag: [s.bag[0].slice(), s.bag[1].slice()], next: s.next.slice(), held: s.held.slice(),
       power: [Object.assign({}, s.power[0]), Object.assign({}, s.power[1])], used: s.used.slice(),
+      free: s.free ? [s.free[0] ? 1 : 0, s.free[1] ? 1 : 0] : [0, 0],
       moves: s.moves, last: s.last, over: s.over ? JSON.parse(JSON.stringify(s.over)) : null, prev: s.prev,
     };
   }
@@ -69,7 +72,7 @@
       seed: seed >>> 0, aiSeed: (seed ^ 0x9e3779b9) >>> 0,
       own: new Array(N).fill(0), num: new Array(N).fill(0), turn: 0,
       bag: [[], []], next: [0, 0], held: [0, 0],
-      power: [{ undo: 1, pop: 0, hold: 0, tune: 0 }, { undo: 0, pop: 0, hold: 0, tune: 0 }], used: [0, 0],
+      power: [{ undo: 1, pop: 0, hold: 0, tune: 0 }, { undo: 0, pop: 0, hold: 0, tune: 0 }], used: [0, 0], free: [0, 0],
       moves: 0, last: -1, over: null, prev: null,
     };
     s.turn = s.first;
@@ -148,11 +151,16 @@
     s.own[cell] = s.turn; s.num[cell] = n;
     s.next[side] = deal(s, side);
     s.moves++; s.last = cell;
-    var res = { ok: true, state: s, cell: cell, num: n, side: s.turn, win: win, earned: null, award: null };
+    var free = !!s.free[side]; s.free[side] = 0; // R2: the drop right after this side's power-up pays nothing
+    var res = { ok: true, state: s, cell: cell, num: n, side: s.turn, win: win, earned: null, award: null, free: false, full: false };
     if (win) { s.over = { winner: s.turn, type: win.type, line: win.line, cells: win.cells }; return res; }
     if (s.own.every(Boolean)) { s.over = { winner: 0, type: "draw", line: [], cells: [] }; return res; }
     var why = earnReason(s, cell, side);
-    if (why && (side === 0 || s.level === "hard")) { res.earned = why; res.award = award(s, side); } // only Hard's computer spends
+    if (why && (side === 0 || s.level === "hard")) { // only Hard's computer spends, so only it earns
+      res.earned = why;
+      if (free) res.free = true;
+      else { res.award = award(s, side); res.full = !res.award; } // R15: every slot full, the reward is skipped
+    }
     s.turn = 3 - s.turn;
     return res;
   }
@@ -176,6 +184,14 @@
     return { own: o, num: m };
   }
   function canPop(s, cell) { return !s.over && !!popResult(s.own, s.num, cell); }
+  // Every empty cell (playable now or not) where the computer's SHOWN next disc would complete a line if it
+  // landed there. The client rings these on Easy and Medium so a ten-line is never an ambush (round 2, cold #5).
+  function threats(s) {
+    if (s.over) return [];
+    var out = [], n = s.next[1];
+    for (var cell = 0; cell < N; cell++) if (!s.own[cell] && linesAt(s.own, s.num, cell, 2, n).length) out.push(cell);
+    return out;
+  }
 
   function use(state, name, arg) {
     var fail = { ok: false, state: state }, side = state.turn - 1;
@@ -198,7 +214,7 @@
       if (!(arg >= 1 && arg <= 4) || arg === s.next[side] || !Number.isInteger(arg)) return fail;
       s.next[side] = arg;
     }
-    s.power[side][name]--; s.used[side]++;
+    s.power[side][name]--; s.used[side]++; s.free[side] = 1;
     return { ok: true, state: s };
   }
 
@@ -448,7 +464,7 @@
   }
 
   return { COLS: COLS, ROWS: ROWS, TEN: TEN, CAP: CAP, MINE: MINE, BAG: BAG, POWERS: POWERS, LEVELS: LEVELS, WINDOWS: WIN,
-           newGame: newGame, drop: drop, use: use, legal: legal, height: height, canPop: canPop,
+           newGame: newGame, drop: drop, use: use, legal: legal, height: height, canPop: canPop, threats: threats,
            linesAt: linesAt, computerTurn: computerTurn, bestMove: bestMove, analyse: analyse, rand: rand,
            _setBag: setBag, _LV: LV };
 });

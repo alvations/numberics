@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Three: only what shared/theme.css does not cover. The rainbow scale is the identity:
- * k = value / 3 picks the band (3 red .. 21 violet); each octave up adds a brighter ring. */
+ * each rung of the value ladder has its own colour (3 red .. 384 white); past that each lap adds a ring. */
 .cells,.tiles{ position:absolute; inset:var(--gap); }
 .cells{ display:grid; grid-template-columns:repeat(4,1fr); gap:var(--gap); }
 .cells div{ background:var(--cell); border-radius:var(--tile-radius); }
@@ -16,13 +16,17 @@
 .tile[data-len="3"]{ font-size:8cqw; } .tile[data-len="4"]{ font-size:6.6cqw; }
 .tile[data-len="5"]{ font-size:5.4cqw; } .tile[data-len="6"]{ font-size:4.6cqw; }
 
-/* rainbow bands: hue and lightness tuned so dark ink stays readable on every band */
-.tile[data-band="0"]{ --h:4;   --l:62%; } .tile[data-band="1"]{ --h:28;  --l:60%; }
-.tile[data-band="2"]{ --h:50;  --l:58%; } .tile[data-band="3"]{ --h:140; --l:50%; --s:48%; }
-.tile[data-band="4"]{ --h:205; --l:62%; } .tile[data-band="5"]{ --h:238; --l:72%; }
-.tile[data-band="6"]{ --h:282; --l:70%; }
+/* colour ladder (engine.js colour()): 3 6 9 12 18 24 36 48 72 96 144 192 288 384, one colour per rung so no two
+   values on a board look alike; hue and lightness tuned so dark ink stays readable on every rung */
+[data-band="0"]{ --h:4;   --l:62%; } [data-band="1"]{ --h:28;  --l:60%; }
+[data-band="2"]{ --h:50;  --l:58%; } [data-band="3"]{ --h:140; --l:50%; --s:48%; }
+[data-band="4"]{ --h:205; --l:62%; } [data-band="5"]{ --h:238; --l:72%; }
+[data-band="6"]{ --h:282; --l:70%; } [data-band="7"]{ --h:328; --l:72%; --s:70%; }
+[data-band="8"]{ --h:174; --l:46%; --s:52%; } [data-band="9"]{ --h:84; --l:55%; --s:55%; }
+[data-band="10"]{ --h:222; --l:80%; --s:16%; } [data-band="11"]{ --h:36; --l:76%; --s:48%; }
+[data-band="12"]{ --h:186; --l:76%; --s:80%; } [data-band="13"]{ --h:40; --l:94%; --s:30%; }
 .tile.three{ background:hsl(var(--h) var(--s,62%) var(--l)); box-shadow:0 2px 0 hsl(var(--h) 50% 34%); }
-/* octave rings: the spectrum repeats one octave up, each octave one more bright ring */
+/* lap rings: past 384 the ladder colours repeat, each lap one more bright ring */
 .tile.three[data-oct="1"]{ box-shadow:inset 0 0 0 3px rgba(255,255,255,.85), 0 2px 0 hsl(var(--h) 50% 34%); }
 .tile.three[data-oct="2"]{ box-shadow:inset 0 0 0 3px #fff, inset 0 0 0 6px hsl(var(--h) var(--s,62%) var(--l)), inset 0 0 0 8px rgba(255,255,255,.85), 0 2px 0 hsl(var(--h) 50% 34%); }
 .tile.three[data-oct="3"]{ box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 0 6px #fff, 0 0 10px var(--accent), 0 2px 0 hsl(var(--h) 50% 34%); }
@@ -37,9 +41,6 @@
   border-radius:6px; font-size:.95rem; font-weight:800; color:#15151d; }
 .mini.one{ background:hsl(230 10% 78%); } .mini.two{ background:hsl(230 8% 64%); }
 .mini.three{ background:hsl(var(--h) var(--s,62%) var(--l)); }
-.mini[data-band="0"]{ --h:4; --l:62%; } .mini[data-band="1"]{ --h:28; --l:60%; } .mini[data-band="2"]{ --h:50; --l:58%; }
-.mini[data-band="3"]{ --h:140; --l:50%; --s:48%; } .mini[data-band="4"]{ --h:205; --l:62%; } .mini[data-band="5"]{ --h:238; --l:72%; }
-.mini[data-band="6"]{ --h:282; --l:70%; }
 
 /* Flush: a rainbow sweeps along the run, then the run collapses */
 .tile.run{ z-index:2; }

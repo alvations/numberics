@@ -33,3 +33,6 @@
   .ghost{ animation:five-fade 320ms ease-out forwards; }
 }
 @keyframes five-fade{ to{ opacity:0; } }
+.stat b.none{ color:var(--mute); font-weight:600; } /* R16: an empty Record reads "none", dimmed */
+.slot.dead.hit::after{ border-color:var(--accent); } /* R13: the tile that burst to end the round */
+.over .row{ margin:4px 0 0; }

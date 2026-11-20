@@ -83,15 +83,39 @@ t("bank lines follow the tier table", () => {
   E.BANK.forEach(e => {
     const n = e.n.split(" "), same = n.every(x => x === n[0]), tools = e.s.g.join("");
     ok(same, "copies of one number " + e.n);
-    if (e.t <= 3) { eq(e.g, "6"); ok(!/[j.]/.test(tools), "no joins below tier 4 " + e.n); }
-    if (e.t === 1) ok(n.length === 3 && n[0].length === 1, e.n);
-    if (e.t === 2) ok((n.length === 4 || n.length === 5) && n[0].length === 1, e.n);
-    if (e.t === 3) ok(n[0].length === 2, e.n);
+    if (e.t <= 3) { eq(e.g, "6"); ok(!/[j.]/.test(tools), "no joins below tier 4 " + e.n); ok(n[0].length <= 2 && n.length >= 3 && n.length <= 5, e.n); }
+    if (e.t === 1) ok(e.h <= 1, "tier 1 needs only + - x / and brackets " + e.n);
+    if (e.t === 2) eq(e.h, 2, "tier 2 needs one sign on a number " + e.n);
+    if (e.t === 3) ok(e.h >= 3 && e.h <= 4, "tier 3 needs more signs " + e.n);
     if (e.t === 4) ok(["66", "6.6"].includes(e.g) && n[0].length === 1 && n.length >= 3 && n.length <= 5, e.n);
     if (e.t === 5) ok(["666", "66.6"].includes(e.g) && n.length >= 3 && n.length <= 5, e.n);
   });
-  for (const tier of [1, 2, 3, 4, 5]) ok((E.POOL[tier] || []).length >= 10, "tier " + tier + " pool");
-  eq(E.BANK.filter(e => e.t === 1).length, 10, "all ten digits at tier 1");
+  for (const tier of [1, 2, 3, 4, 5]) ok((E.POOL[tier] || []).length >= 15, "tier " + tier + " pool " + (E.POOL[tier] || []).length);
+  for (let d = 0; d <= 9; d++) ok(E.BANK.some(e => e.n === rep(d, 3).join(" ")), "the classic " + d + " " + d + " " + d + " is in the bank");
+});
+t("skill: the tools a line needs, measured by solving with fewer tools", () => {
+  eq(E.skill(rep(3, 3), "6").h, 0); // 3 x 3 - 3
+  eq(E.skill(rep(4, 4), "6").h, 1); // needs a bracket
+  eq(E.skill(rep(4, 3), "6").h, 2); // 4 + 4 - sqrt 4
+  eq(E.skill(rep(1, 3), "6").h, 3); // (1 + 1 + 1)!
+  eq(E.skill(rep(8, 3), "6").h, 4); // nested signs
+  eq(E.skill(rep(0, 3), "6").h, 4); // four signs
+  E.BANK.filter(e => e.t <= 3).forEach(e => {
+    const n = e.n.split(" "), k = E.skill(n, e.g);
+    eq(k.h, e.h, "stored tools of " + e.n); eq(E.value(n, e.s).v, E.literal(e.g), "solution of " + e.n);
+    const signs = e.s.u.filter(Boolean).length + e.s.b.filter(b => b[2]).length;
+    ok(e.s.u.concat(e.s.b.map(b => b[2])).every(u => u <= (e.h <= 3 ? 2 : 4)), "the stored solution uses only that tier's signs " + e.n);
+    if (e.h <= 1) eq(signs, 0, e.n);
+    if (e.h === 0) eq(e.s.b.length, 0, "a plain line's solution has no brackets " + e.n);
+    if (e.h === 2) ok(signs === 1 && !e.s.b.some(b => b[2]), e.n);
+  });
+});
+t("round 2 review: Tier 2 is never easier than Tier 1 (every line of a tier needs more tools than every line below)", () => {
+  const H = k => E.BANK.filter(e => e.t === k).map(e => e.h);
+  ok(Math.max(...H(1)) < Math.min(...H(2)), "tier 1 below tier 2");
+  ok(Math.max(...H(2)) < Math.min(...H(3)), "tier 2 below tier 3");
+  // the cold-player repro: 1 1 1 needs a factorial on a bracket, 8 8 8 nested roots; neither is in Tier 1 or 2
+  ["1 1 1", "8 8 8", "0 0 0"].forEach(n => eq(E.BANK.find(e => e.n === n).t, 3, n));
 });
 t("tiers are ordered by measured difficulty (median rises tier to tier)", () => {
   const med = [1, 2, 3, 4, 5].map(k => { const d = E.BANK.filter(e => e.t === k).map(e => e.d).sort((a, b) => a - b); return d[d.length >> 1]; });
@@ -113,7 +137,7 @@ function solveLine(s) {
 t("a new game is deterministic by seed, six lines of one tier, easiest first", () => {
   const a = E.newGame(42, "climb"), b = E.newGame(42, "climb");
   eq(a, b); eq(a.lines.length, 6); ok(a.lines.every(l => l.t === 1));
-  for (let k = 2; k < 6; k++) ok(a.lines[k].d >= a.lines[k - 1].d, "sorted after the plain first line");
+  for (let k = 2; k < 6; k++) ok(E.order(a.lines[k - 1], a.lines[k]) <= 0, "sorted after the plain first line");
   eq(new Set(a.lines.map(l => l.id)).size, 6, "distinct lines");
   eq(a.power, { hint: 1, skip: 0, peek: 0, undo: 1 });
 });
@@ -234,7 +258,7 @@ t("used rises by exactly one per power-up, Undo included", () => {
 t("the first line of a run needs only + - x / (no signs, no brackets), on every seed and Daily", () => {
   for (let seed = 1; seed <= 400; seed++) {
     const a = E.newGame(seed, "climb"); ok(E.plain(a.lines[0]), "climb seed " + seed + " " + a.lines[0].n.join(" "));
-    eq(a.lines[0].t, 1); for (let k = 2; k < 6; k++) ok(a.lines[k].d >= a.lines[k - 1].d, "rest sorted " + seed);
+    eq(a.lines[0].t, 1); for (let k = 2; k < 6; k++) ok(E.order(a.lines[k - 1], a.lines[k]) <= 0, "rest sorted " + seed);
     eq(new Set(a.lines.map(l => l.id)).size, 6, "distinct " + seed);
     const v = E.value(a.lines[0].n, a.lines[0].sol).v; eq(v, E.literal(a.lines[0].g), "the plain solution works");
   }
@@ -276,6 +300,95 @@ t("power-ups cap at 9", () => {
   let s = E.newGame(41, "climb"); s.power = { hint: 9, skip: 9, peek: 9, undo: 9 };
   for (let k = 0; k < 3; k++) { s = solveLine(s); if (k < 2) s = E.next(s).state; }
   eq(s.power, { hint: 9, skip: 9, peek: 9, undo: 9 });
+});
+t("R15: a reward skipped by a full stock says so (full flag on the edit)", () => {
+  let s = E.newGame(41, "climb"); s.power = { hint: 9, skip: 9, peek: 9, undo: 9 }; s.streak = 2;
+  const L = E.line(s), m = JSON.parse(JSON.stringify(L.sol)), last = m.g.length - 1, op = m.g[last];
+  m.g[last] = ""; s.cur = m;
+  const r = E.edit(s, { k: "gap", i: last, op }); ok(r.ok && r.solved); ok(r.full && !r.award, "full, no award");
+});
+t("round 2 review: Climb deals vary by seed, no line owns a slot (rounds 1 and 2)", () => {
+  const slots = [[], []].map(() => Array.from({ length: 6 }, () => ({})));
+  const SEEDS = 300;
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    let s = E.newGame(seed * 7919, "climb");
+    for (let r = 0; r < 2; r++) {
+      s.lines.forEach((l, k) => { slots[r][k][l.n.join(" ")] = (slots[r][k][l.n.join(" ")] || 0) + 1; });
+      s.over = true; s = E.nextRound(s).state;
+    }
+  }
+  slots.forEach((round, r) => round.forEach((m, k) => {
+    const top = Math.max(...Object.values(m));
+    ok(Object.keys(m).length >= 4, "round " + (r + 1) + " line " + (k + 1) + " only " + JSON.stringify(m));
+    ok(top <= SEEDS * 0.6, "round " + (r + 1) + " line " + (k + 1) + " is almost fixed " + JSON.stringify(m));
+  }));
+  // the reviewer's repro: round 2 line 1 was 4 4 4 4 on every run
+  ok((slots[1][0]["4 4 4 4"] || 0) === 0, "4 4 4 4 needs no sign, so it is a Tier 1 line now");
+});
+t("round 2 review: rounds 1 and 2 never ask for a sign on a bracket or nested signs (every seed)", () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    let s = E.newGame(seed, "climb");
+    for (let r = 1; r <= 2; r++) {
+      s.lines.forEach((l, k) => {
+        ok(l.h <= (r === 1 ? 1 : 2), "seed " + seed + " round " + r + " line " + (k + 1) + " " + l.n.join(" "));
+        ok(!l.sol.b.some(b => b[2]) && l.sol.u.every(u => u <= 2), "its solution uses no bracket sign or nested sign " + l.n.join(" "));
+        if (r === 1) ok(l.sol.u.every(u => !u), "round 1 needs no sign at all " + l.n.join(" "));
+      });
+      s.over = true; s = E.nextRound(s).state;
+    }
+  }
+});
+t("bracket rows: a drag preview on the same span as a bracket never loops (round 2 stack overflow)", () => {
+  // 3 ? 3 ? 3: bracket 1-2 exists; dragging 1 to 3 passes tile 2, so the preview is [0,1] on top of [0,1]
+  eq(E.depths([[0, 1, 0], [0, 1, 0, "ghost"]]), [1, 2]);
+  eq(E.depths([[0, 2, 0], [0, 1, 0]]), [2, 1]);
+  eq(E.depths([[0, 2, 0], [0, 1, 0], [0, 2, 0, "ghost"]]), [2, 1, 3]);
+  eq(E.depths([[0, 1, 0], [2, 3, 0], [0, 3, 0]]), [1, 1, 2]);
+  eq(E.depths([]), []);
+  // the engine side of the repro: add 1-2, add 1-3, remove 1-3, remove 1-2
+  let s = E.newGame(9, "climb");
+  s.lines[0] = Object.assign({}, s.lines[0], { n: ["3", "3", "3"], g: "6" }); s.cur = E.blank(3);
+  s = E.edit(s, { k: "br", i: 0, j: 1 }).state; s = E.edit(s, { k: "br", i: 0, j: 2 }).state;
+  eq(s.cur.b, [[0, 2, 0], [0, 1, 0]]); eq(E.text(s.lines[0].n, s.cur), "((3 ? 3) ? 3)");
+  s = E.edit(s, { k: "br", i: 0, j: 2 }).state; eq(s.cur.b, [[0, 1, 0]]);
+  s = E.edit(s, { k: "br", i: 0, j: 1 }).state; eq(s.cur.b, []);
+});
+const tot = p => p.hint + p.skip + p.peek + p.undo;
+t("R2: a line finished after an Undo is not clean and pays nothing", () => {
+  let s = E.newGame(11, "climb"); s.streak = 2; s.power.undo = 1;
+  const L = E.line(s);
+  s = E.edit(s, { k: "gap", i: 0, op: L.sol.g[0] === "+" ? "-" : "+" }).state;
+  s = E.use(s, "undo").state; ok(s.helped, "Undo is help");
+  const before = tot(s.power); s = solveLine(s);
+  ok(s.done); eq(tot(s.power), before, "no reward"); eq(s.streak, 0);
+});
+t("R2 property: a power-up followed by any edit never raises the total stock (random play)", () => {
+  let checked = 0, awards = 0;
+  for (let seed = 1; seed <= 120; seed++) {
+    let s = E.newGame(seed, "climb"), x = seed, assisted = false;
+    s.power = { hint: 3, skip: 2, peek: 3, undo: 3 };
+    for (let i = 0; i < 400; i++) {
+      x = (x * 1103515245 + 12345) >>> 0;
+      if (s.over) { if (s.ended) break; s = E.nextRound(s).state; assisted = false; continue; }
+      if (s.done) { s = E.next(s).state; assisted = false; continue; }
+      const L = E.line(s), r = x % 9;
+      if (r === 0) {
+        const name = E.POWERS[(x >>> 4) % 4], before = tot(s.power), u = E.use(s, name);
+        if (u.ok) { ok(tot(u.state.power) < before, name + " pays nothing, seed " + seed); s = u.state; assisted = true; }
+        continue;
+      }
+      // mostly steer toward the known solution (so lines get made and streaks build), sometimes a random edit
+      let act;
+      if (r <= 6) { const h = E.hintStep(L.n, s.cur, L.sol); if (!h) continue; act = h.act.k === "brs" ? { k: "br", i: h.act.b[0], j: h.act.b[1] } : h.act.k === "brx" ? { k: "br", i: s.cur.b[h.act.x][0], j: s.cur.b[h.act.x][1] } : h.act; }
+      else act = { k: "gap", i: (x >>> 6) % (L.n.length - 1) };
+      const before = tot(s.power), e = E.edit(s, act);
+      if (!e.ok) continue;
+      if (e.award) awards++;
+      if (assisted) { ok(tot(e.state.power) <= before, "an edit after a power-up on the same line paid, seed " + seed); checked++; }
+      s = e.state;
+    }
+  }
+  ok(checked > 500, "exercised " + checked); ok(awards > 20, "clean lines still pay: " + awards);
 });
 t("engine and client never eval or build functions from strings", () => {
   ["six/engine.js", "six/game.js", "six/bank.js", "six/make-bank.js"].forEach(f => {

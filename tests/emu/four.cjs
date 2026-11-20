@@ -28,6 +28,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   ck("R11: the opponent is 'Computer', never 'CPU'", !/\bCPU\b/.test(await p.textContent("body")) && /Computer/.test(await p.textContent("header")));
   ck("R11: an empty Held reads 'none'", (await p.textContent("#held")) === "none");
+  ck("R16: pills are You, Held, Computer, Record", JSON.stringify(await p.$$eval(".stat > span", e => e.map(x => x.textContent))) ===
+     JSON.stringify(["You", "Held", "Computer", "Record"]));
+  ck("R11/R16: an empty Record is a dimmed 'none'", (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
   ck("R6: H1 is the game name, subtitle is the Numberics link and a tagline", (await p.textContent("h1")) === "Four" &&
      /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a[href='../']").count() === 1);
   ck("the rule stays in the hint line", /with two of yours/.test(await p.textContent("#hint")));
@@ -119,9 +122,19 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("1");
   s = await st(p);
   ck("R1: pressing Undo after a win changes nothing and says why", s.over && s.over.winner === 1 && /Not after a result/.test(await p.textContent("#hint")));
+  ck("R13: the winning line shows on the bare board before the card", await p.isHidden("#over"));
   await p.waitForSelector("#over:not([hidden])", { timeout: 3000 });
+  ck("R13: the card offers See the board", await p.isVisible("#over-view") && (await p.textContent("#over-view")) === "See the board");
+  await p.click("#over-view");
+  ck("R13: See the board hides the card and keeps the line marked", await p.isHidden("#over") && await p.locator(".disc.win").count() === 4 &&
+     /Tap the board for the summary/.test(await p.textContent("#hint")));
+  await shot(p, "see-board");
+  [x, y] = await colX(p, 5, 3); await p.mouse.click(x, y);
+  ck("R13: a tap on the board brings the card back, and drops nothing", await p.isVisible("#over") && (await st(p)).over.winner === 1);
+  await p.click("#over-view"); await p.keyboard.press("Escape");
+  ck("R13: Esc brings the card back too", await p.isVisible("#over"));
   ck("result overlay shows", /You win/.test(await p.textContent("#over")));
-  ck("R8: the summary spells out the ten and the tally", /4 \+ 1 \+ 2 \+ 3 = 10 · won 1, lost 0/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  ck("R8/R16: the summary spells out the ten and the tally", /^4 \+ 1 \+ 2 \+ 3 = 10 · You 1 : 0 Computer$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
   ck("the record counts the win once", (await p.textContent("#rec")) === "1-0");
   await shot(p, "won");
   await p.click("#again");
@@ -140,23 +153,94 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R1: no Undo after a loss, the record keeps the loss", (await st(p)).over && (await p.textContent("#rec")) === "1-1");
   await shot(p, "lost");
   // difficulty switch
+  const firstB = (await st(p)).first;
   await p.click("#again");
   s = await st(p);
-  ck("the opener alternates: the computer opens the next game", s.first === 2);
+  ck("the opener alternates after a finished game", s.first === 3 - firstB, firstB + " then " + s.first);
+  if (s.first !== 2) { // play to a game the computer opens: a quick forged win, then New game from the card
+    await forge(p, [[0, 0, 2, 4], [0, 1, 1, 1], [0, 2, 2, 2]], { next: [3, 1], first: 1 });
+    [x, y] = await colX(p, 3, 0); await p.mouse.click(x, y);
+    await p.waitForSelector("#over:not([hidden])", { timeout: 3000 }); await p.click("#again");
+  }
+  // no re-rolling who opens (critic nit): New game before your first disc keeps the same opener, and costs nothing
+  await myTurn(p);
+  const recBefore = await p.textContent("#rec");
+  await p.click("#new");
+  s = await st(p);
+  ck("no re-roll: New game before your first disc is one tap and the computer still opens", s.first === 2 && (await p.textContent("#new")) === "New game");
+  ck("no re-roll: and it records nothing", (await p.textContent("#rec")) === recBefore);
   await myTurn(p);
   ck("the computer dropped first", (await st(p)).moves === 1);
   await p.click('#levels button[data-level="easy"]');
   ck("a level switch before your first disc needs no confirmation", (await st(p)).level === "easy");
+  await myTurn(p);
+  ck("a level switch before your first disc keeps the opener (the computer opens again)", (await st(p)).first === 2);
   [x, y] = await colX(p, 0); await p.mouse.click(x, y); await myTurn(p);
   await p.click('#levels button[data-level="hard"]');
   s = await st(p);
-  ck("R10: a level switch mid-game asks 'Sure?' first", s.level === "easy" && (await p.textContent('#levels button[data-level="hard"]')) === "Sure?");
+  ck("R10/R12: a level switch mid-game asks first and says it counts as a loss", s.level === "easy" &&
+     (await p.textContent('#levels button[data-level="hard"]')) === "Sure?" && /counts this game as a loss/.test(await p.textContent("#hint")));
+  const easyLost = await p.evaluate(() => window.__four.rec.easy.l);
   await p.click('#levels button[data-level="hard"]');
   s = await st(p);
   ck("Hard starts a Hard game", s.level === "hard" && await p.locator('#levels button[data-level="hard"][aria-pressed="true"]').count() === 1);
+  ck("R12: the abandoned Easy game is a loss on Easy", await p.evaluate(() => window.__four.rec.easy.l) === easyLost + 1);
+  // R12: New game mid-game: "Sure? Counts as a loss", then the loss is recorded
+  await myTurn(p);
+  if ((await st(p)).turn === 1) { [x, y] = await colX(p, 6); await p.mouse.click(x, y); await myTurn(p); }
+  const hardRec = await p.evaluate(() => JSON.stringify(window.__four.rec.hard));
+  await p.click("#new");
+  ck("R12: New game mid-game warns 'Sure? Counts as a loss'", (await p.textContent("#new")) === "Sure? Counts as a loss");
+  ck("R12: the warning is not covered by a toast", !(await p.locator("#toast.on").count()));
+  await p.click("#new");
+  ck("R12: quitting counts as a loss", await p.evaluate(() => window.__four.rec.hard.l) === JSON.parse(hardRec).l + 1 &&
+     (await p.textContent("#rec")) === "0-" + (JSON.parse(hardRec).l + 1), await p.textContent("#rec"));
   await p.reload();
   ck("level survives reload", (await st(p)).level === "hard");
   ck("no page errors", errs.length === 0, errs.join("|"));
+  await ctx.close();
+
+  // threat marks (round 2, cold #5): Easy and Medium ring a hole where the computer's shown next disc wins
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); await p.goto(page);
+  const threatBoard = [[0, 0, 2, 2], [0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1], [1, 3, 2, 1], [0, 5, 1, 1], [0, 6, 1, 1], [1, 5, 2, 1], [1, 6, 2, 1]];
+  for (const lv of ["easy", "medium", "hard"]) {
+    await forge(p, threatBoard, { level: lv, next: [1, 3] });
+    const marked = await p.evaluate(() => [...document.querySelectorAll(".slot")].map((e, i) => e.classList.contains("threat") ? i : -1).filter(i => i >= 0));
+    const cells = await p.evaluate(() => window.NumbericsFour.threats(window.__four.state).sort());
+    if (lv === "hard") ck("threat marks: Hard shows none", marked.length === 0, JSON.stringify(marked));
+    else {
+      // slots are drawn top row first, so the n-th .slot is cell (5 - floor(n/7))*7 + n%7
+      const asCells = marked.map(i => (5 - Math.floor(i / 7)) * 7 + i % 7).sort();
+      ck("threat marks: " + lv + " rings the ten-line hole (0,4) and the floating colour hole (1,4)",
+         cells.includes(4) && cells.includes(11) && JSON.stringify(asCells) === JSON.stringify(cells), JSON.stringify({ asCells, cells }));
+      ck("threat marks: " + lv + " says what the ring means", /Blue ring/.test(await p.textContent("#hint")));
+    }
+  }
+  await forge(p, threatBoard, { level: "medium", next: [1, 3] });
+  await shot(p, "threats");
+  // R17: Enter on a focused games-row link navigates and never drops a disc
+  await forge(p, [], { level: "medium" });
+  await p.focus("#games a");
+  const href = await p.getAttribute("#games a", "href");
+  await Promise.all([p.waitForNavigation({ timeout: 5000 }).catch(() => null), p.keyboard.press("Enter")]);
+  ck("R17: Enter on a games-row link navigates", !/\/four\/$/.test(p.url()), p.url() + " (" + href + ")");
+  await ctx.close();
+
+  // 320px (craft #5): the pills wrap, no sideways scroll, even with the long "Sure?" armed
+  ctx = await browser.newContext({ viewport: { width: 320, height: 568 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); await p.goto(page);
+  ck("320px: no horizontal scroll", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+     await p.evaluate(() => document.documentElement.scrollWidth));
+  await myTurn(p);
+  await p.focus("#board"); await p.keyboard.press("Enter"); await myTurn(p);
+  await p.click('#levels button[data-level="hard"]'); await p.click("#new");
+  ck("320px: both warnings armed", (await p.textContent("#new")) === "Sure? Counts as a loss" &&
+     (await p.textContent('#levels button[data-level="hard"]')) === "Sure?" && /counts this game as a loss/.test(await p.textContent("#hint")));
+  await p.evaluate(() => scrollTo(0, 0));
+  ck("320px: no horizontal scroll with Sure? armed", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+     await p.evaluate(() => document.documentElement.scrollWidth));
+  await shot(p, "320-sure");
   await ctx.close();
 
   // 5. storage blocked

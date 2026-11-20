@@ -235,6 +235,107 @@ t("a power-up never earns a power-up, and the computer earns only on Hard", () =
     eq(c.roundOver, "cpu"); eq(!!c.award, diff === "hard", diff);
   }
 });
+t("R2: a round won after Add pays nothing (the critic's repro, Medium [1,0,0])", () => {
+  let s = forge({ heaps: [1, 0, 0], diff: "medium", you: { add: 1 } });
+  s = N.use(s, "add", 0).state; s = N.take(s, 0, 2).state;
+  eq(s.roundOver, "you"); eq(s.award, null); eq(s.noAward, "power"); eq(s.power.you, { undo: 1, add: 0, pass: 0, peek: 0 });
+});
+t("R2: a round won after Pass pays nothing (Easy [1,1,0], a lost start turned round)", () => {
+  let s = forge({ heaps: [1, 1, 0], diff: "easy", you: { pass: 1 } });
+  s = N.use(s, "pass").state; s = N.take(s, 0, 1).state; eq(s.turn, "you");
+  s = N.take(s, 1, 1).state; eq(s.roundOver, "you"); eq(s.award, null); eq(s.noAward, "power");
+  eq(s.power.you.pass, 0, "Pass can never pay a Pass");
+});
+t("R2: Peek is information, so a round won after Peek still pays; the next round pays again after Add", () => {
+  let s = forge({ heaps: [0, 2, 0], diff: "medium", you: { peek: 1, add: 1 } });
+  s = N.use(s, "peek").state; s = N.take(s, 1, 2).state; ok(s.award && s.award.who === "you", "peek round pays");
+  s = N.nextRound(s); eq(s.powered, { you: false, cpu: false }, "the flag is per round");
+});
+t("R2: the computer's round won after its Pass or Add pays nothing either (Hard)", () => {
+  let s = forge({ heaps: [1, 2, 3], turn: "cpu", diff: "hard", cpu: { pass: 1 } });
+  s = N.cpuTurn(s); eq(s.last.kind, "pass"); ok(s.powered.cpu);
+  s = N.take(s, 0, 1).state; // the player is now lost: nim-sum of [0,2,3] for the computer to move is not 0
+  for (let k = 0; k < 40 && !s.roundOver; k++) s = s.turn === "cpu" ? N.cpuTurn(s) : N.take(s, s.heaps.findIndex(Boolean), 1).state;
+  eq(s.roundOver, "cpu"); eq(s.award, null); eq(s.noAward, "power");
+});
+t("R2 property: in random play mixing power-ups and moves, a round won by a side that used Add or Pass never raises that side's stock", () => {
+  const tot = (p) => Object.values(p).reduce((a, b) => a + b, 0);
+  let checked = 0, paid = 0;
+  for (const diff of ["easy", "medium", "hard"]) for (let seed = 1; seed <= 120; seed++) {
+    let s = N.newGame(seed * 7919, { diff, level: 3 + seed % 4 }), x = seed;
+    s.power.you = { undo: 2, add: 3, pass: 3, peek: 2 }; s.power.cpu = { undo: 1, add: 2, pass: 2, peek: 0 };
+    // an independent tracker: did each side use Add or Pass this round, and its stock right after that use
+    let trk = { you: null, cpu: null }, turnStart = null;
+    for (let i = 0; i < 600 && !s.matchOver; i++) {
+      if (s.roundOver) {
+        const w = s.roundOver;
+        if (trk[w] !== null) { ok(tot(s.power[w]) <= trk[w], diff + " seed " + seed + ": " + w + " earned after a power-up"); ok(!s.award, "no award"); checked++; }
+        else if (s.award) paid++;
+        s = N.nextRound(s); trk = { you: null, cpu: null }; turnStart = null; continue;
+      }
+      x = (x * 1103515245 + 12345) >>> 0;
+      if (s.turn === "cpu") {
+        const b = s.power.cpu, n = N.cpuTurn(s);
+        if (n.power.cpu.add < b.add || n.power.cpu.pass < b.pass) trk.cpu = tot(n.power.cpu);
+        s = n; continue;
+      }
+      // Undo goes back to the start of the player's last acted turn, so remember the tracker there
+      const snap = s.acted ? null : JSON.parse(JSON.stringify(trk)), acted = () => { if (snap) turnStart = snap; };
+      const pick = x % 9, tile = (x >>> 4) % s.heaps.length;
+      if (pick === 0) { const r = N.use(s, "add", tile); if (r.ok) { acted(); s = r.state; trk.you = tot(s.power.you); continue; } }
+      if (pick === 1) { const r = N.use(s, "pass"); if (r.ok) { acted(); s = r.state; trk.you = tot(s.power.you); continue; } }
+      if (pick === 2) { const r = N.use(s, "peek"); if (r.ok) { s = r.state; if (trk.you !== null) trk.you--; continue; } }
+      if (pick === 3) { const r = N.use(s, "undo"); if (r.ok) { s = r.state; trk = turnStart; if (trk.you !== null) trk.you = Math.min(trk.you, tot(s.power.you)); continue; } }
+      const ms = N.legalMoves(s.heaps), m = pick < 6 && N.peek(s.heaps, s.misere) || ms[(x >>> 9) % ms.length];
+      acted(); s = N.take(s, m.tile, s.heaps[m.tile] - m.to).state;
+    }
+  }
+  ok(checked > 300 && paid > 150, "exercised " + checked + " power-up rounds, " + paid + " paid rounds");
+});
+t("Pass: at most once per round per side, restored by Undo, fresh next round", () => {
+  let s = forge({ heaps: [3, 5, 6], diff: "easy", you: { pass: 3, undo: 1 } });
+  s = N.use(s, "pass").state; s = N.cpuTurn(s); ok(!s.roundOver);
+  ok(!N.canPass(s) && !N.use(s, "pass").ok, "a second Pass in the round is refused");
+  const u = N.use(s, "undo").state; ok(N.canPass(u), "Undo gives the Pass back");
+  let c = forge({ heaps: [1, 2, 3, 4, 5], turn: "cpu", diff: "hard", cpu: { pass: 3 }, you: { pass: 3 } });
+  c = N.cpuTurn(c); eq(c.last.kind, "take", "the computer is winning here, so it takes");
+  c.heaps = [1, 2, 3, 0, 0]; c.turn = "cpu"; c = N.cpuTurn(c); eq(c.last.kind, "pass");
+  c = N.take(c, 0, 1).state; eq(c.heaps, [0, 2, 3, 0, 0]); c.heaps = [0, 2, 2, 0, 0];
+  c = N.cpuTurn(c); eq(c.last.kind, "take", "no second computer Pass this round"); eq(c.power.cpu.pass, 2);
+  s.roundOver = "you"; const nx = N.nextRound(s); ok(N.canPass(nx), "a new round allows a Pass again");
+});
+t("consecutive rounds use fresh deals: never the same start twice in a row (every level, every difficulty)", () => {
+  let rounds = 0;
+  for (const diff of N.DIFFS) for (const mis of [false, true]) for (let lv = 3; lv <= 9; lv++) for (let i = 0; i < 40; i++) {
+    let s = N.newGame(i * 104729 + lv, { diff, level: lv, misere: mis });
+    for (let r = 0; r < 6; r++) {
+      const d = s.heaps.slice(); eq(s.dealt, d);
+      s.roundOver = r % 2 ? "you" : "cpu"; s.matchOver = null; s = N.nextRound(s); rounds++;
+      ok(s.heaps.join() !== d.join(), diff + " " + lv + " repeated deal " + d);
+      ok(N.winning(s.heaps, mis) || diff === "hard", "Easy and Medium still deal winning starts");
+    }
+  }
+  // the real flow too: a lost round, then the next deal (the mechanics lead: 4,3,7 then 4,3,7)
+  for (let seed = 1; seed <= 400; seed++) {
+    let s = N.newGame(seed, { diff: "hard" }); const d = s.heaps.slice();
+    s = playRound(s, (st) => N.legalMoves(st.heaps)[0], N.cpuTurn);
+    if (!s.matchOver) ok(N.nextRound(s).heaps.join() !== d.join(), "seed " + seed);
+  }
+  ok(rounds > 5000);
+});
+t("R12: started() is false before the first move of a match and true after it", () => {
+  let s = N.newGame(3, { diff: "easy" }); ok(!N.started(s));
+  ok(!N.started(N.use(forge({ heaps: [1, 2, 4], you: { peek: 1 } }), "peek").state), "a Peek is not a move");
+  ok(N.started(N.take(s, 0, 1).state));
+  ok(N.started(N.use(forge({ heaps: [1, 2, 4], you: { add: 1 } }), "add", 0).state), "an Add starts it");
+  let w = forge({ heaps: [0, 0, 1] }); w = N.take(w, 2, 1).state; ok(N.started(w), "a decided round"); w = N.nextRound(w); ok(N.started(w), "round 2");
+  let m = forge({ heaps: [0, 0, 1] }); m.score = { you: 2, cpu: 0 }; m = N.take(m, 2, 1).state; ok(!N.started(m), "a decided match is not live");
+  ok(!N.started(N.nextMatch(m)), "the next match before its first move");
+});
+t("R15: a full stock skips the reward and says so (noAward: full)", () => {
+  const s = N.take(forge({ heaps: [0, 1, 0], you: { undo: 9, add: 9, pass: 9, peek: 9 } }), 1, 1).state;
+  eq(s.award, null); eq(s.noAward, "full");
+});
 t("stock caps at 9", () => {
   let s = forge({ heaps: [0, 1, 0], you: { undo: 9, add: 9, pass: 9, peek: 8 } });
   s = N.take(s, 1, 1).state; eq(s.power.you.peek, 9); eq(s.award.name, "peek");
@@ -280,15 +381,15 @@ function hardMatches(player, count, mis) {
   }
   return won / count;
 }
-t("Hard is winnable, not guaranteed: perfect play with Pass and Add wins about two matches in three", () => {
+t("Hard is clearly winnable, not guaranteed: perfect play with Pass and Add wins most matches (round 2, after R2 and Pass once)", () => {
   for (const mis of [false, true]) {
     const r = hardMatches((s) => perfectPow(s), 400, mis);
     if (process.env.NINE_REPORT) console.log("Hard perfect+power-ups", mis ? "misere" : "normal", r.toFixed(3));
-    ok(r >= 0.55 && r <= 0.85, (mis ? "misere " : "") + "perfect+power-ups Hard match win rate " + r.toFixed(3));
+    ok(r >= 0.75 && r <= 0.95, (mis ? "misere " : "") + "perfect+power-ups Hard match win rate " + r.toFixed(3));
   }
   const plain = hardMatches((s) => { const m = N.peek(s.heaps, s.misere); if (m) return N.take(s, m.tile, s.heaps[m.tile] - m.to).state; const i = s.heaps.findIndex(Boolean); return N.take(s, i, 1).state; }, 400, false);
   if (process.env.NINE_REPORT) console.log("Hard perfect, no power-ups", plain.toFixed(3));
-  ok(plain > 0.3 && plain < hardMatches((s) => perfectPow(s), 400, false), "power-ups must matter on Hard: " + plain.toFixed(3));
+  ok(plain > 0.5 && plain < hardMatches((s) => perfectPow(s), 400, false), "power-ups must matter on Hard: " + plain.toFixed(3));
 });
 t("state is plain JSON (saveable)", () => {
   let s = N.newGame(4, { level: 5 }); s = N.take(s, 0, 1).state; s = N.cpuTurn(s);

@@ -69,7 +69,8 @@
       tilesEl.appendChild(el); els[cell] = el;
     });
     $("score").textContent = fmt(state.score);
-    $("best").textContent = fmt(Math.max(best.score, state.score));
+    var bs = Math.max(best.score, state.score), bestEl = $("best");
+    bestEl.textContent = bs ? fmt(bs) : "none"; bestEl.classList.toggle("none", !bs); // R11: an empty stat says none
     renderTray();
     var aim = targeting && kbd ? cur : -1;
     Array.prototype.forEach.call(cellsEl.children, function (c, i) {
@@ -106,20 +107,29 @@
     var t = targeting.name === "swap" && targeting.picks.length ? "Now tap the cell to swap it with." : PW_HINT[targeting.name];
     return t + (desk ? " Arrows + Enter aim, Esc cancels." : " Tap " + PW[targeting.name] + " to cancel.");
   }
+  // The tray is rebuilt only when what it shows changes. Rebuilding it on every redraw (the animation's
+  // final draw lands ~110 ms after a swipe) replaced the button under a finger mid-tap, so the tap was
+  // lost (round 2, cold #1).
+  var trayKey = "";
+  function trayWhy(id) {
+    if (state.over) return "The run is over.";
+    if (id === "undo" && state.power.undo && !state.prev) return "Undo goes back one move at a time. Make a move first.";
+    return false;
+  }
   function renderTray() {
+    var key = JSON.stringify([state.power, targeting && targeting.name, N.POWERS.map(trayWhy)]);
+    if (key !== trayKey) { trayKey = key; drawTray(); }
+    $("hint").textContent = targeting ? targetHint()
+      : note || (!N.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
+  }
+  function drawTray() {
     P.tray($("tray"), DEFS, state.power, {
       armed: targeting && targeting.name,
       earn: EARN,
-      disabled: function (id) {
-        if (state.over) return "The run is over.";
-        if (id === "undo" && state.power.undo && !state.prev) return "Undo goes back one move at a time. Make a move first.";
-        return false;
-      },
+      disabled: trayWhy,
       onUse: activate,
       onInfo: function (id, text) { flush(); targeting = null; note = text; render(); }
     });
-    $("hint").textContent = targeting ? targetHint()
-      : note || (!N.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
   }
 
   function toast(msg, kind) { K.toast(msg, kind); }
@@ -140,10 +150,14 @@
       if (t.merge) merged[t.to] = true;
     });
     state = r.state; pendingFx = { merged: merged, spawned: r.spawned };
-    if (r.milestones.length) {
-      var top = r.milestones[r.milestones.length - 1];
-      toast("New tile " + N.label(top) + (r.awarded.length ? "  +" + PW[r.awarded[0].power] : ""));
+    // only reward-sized tiles are news (round 2: "New tile 4, 8, 16" was noise before the rewards begin)
+    var top = r.milestones.length ? r.milestones[r.milestones.length - 1] : 0;
+    if (top >= N.AWARD_FROM_LEVEL) {
+      if (r.awarded.length) toast("New tile " + N.label(top) + "  +" + PW[r.awarded[0].power]);
+      else if (r.free) toast("New tile " + N.label(top) + ". No reward right after a power-up.", "info");
+      else toast("New tile " + N.label(top));
     }
+    renderTray(); // the tray and hint follow the move at once, so a quick tap meets the final buttons
     persist();
     if (ANIM) { var gen = state.moves; timer = setTimeout(function () { if (state.moves === gen) { timer = null; finalize(); } }, ANIM); }
     else finalize();
@@ -205,7 +219,9 @@
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = e.target && e.target.tagName;
-    // Enter or Space on a focused button or link activates that control, never a game action
+    // R17: a key typed into a field belongs to the field; Enter or Space on a focused button or link
+    // activates that control (a link navigates), never a game action
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     if ((e.key === "Enter" || e.key === " ") && (tag === "BUTTON" || tag === "A")) return;
     if (e.key === "Escape") { if (targeting) { targeting = null; render(); } return; }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);

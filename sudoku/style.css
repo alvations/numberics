@@ -10,6 +10,7 @@ header{ display:flex; justify-content:space-between; align-items:flex-end; gap:1
 h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
 .sub{ margin:0; color:var(--mute); font-size:.85rem; text-wrap:balance; } .sub a{ color:var(--mute); }
 .brand{ flex:1 1 0; min-width:0; } /* the pills stay beside the title; a long line wraps inside the brand */
+@media (max-width:359px){ .brand{ flex-basis:100%; } } /* 320: the pills drop under the title so the tagline keeps one line (craft #3) */
 .stats{ display:flex; gap:8px; }
 .stat{ background:var(--panel); border-radius:10px; padding:6px 12px; min-width:64px; text-align:center; }
 .stat span{ display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
@@ -28,7 +29,7 @@ h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
 .c:nth-child(9n+4),.c:nth-child(9n+7){ box-shadow:-2px 0 0 var(--line); }
 .r{ display:contents; } /* role="row" wrappers for valid grid ARIA; the cells stay items of the board grid */
 .r:nth-child(3) .c,.r:nth-child(6) .c{ border-bottom:2px solid var(--line); }
-.notes{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,1fr); font-size:3.2cqw; color:var(--mute); line-height:1; } /* readable on a phone (S3) */
+.notes{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,1fr); font-size:3.6cqw; color:var(--mute); line-height:1; } /* readable on a phone (S3, craft #4) */
 .notes i{ font-style:normal; display:flex; align-items:center; justify-content:center; }
 /* power-up tray: the Endless tray (shared/theme.css), sitting where the old tools row was */
 .tray{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:10px 0 8px; }
@@ -68,6 +69,7 @@ h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
   width:max-content; max-width:calc(100vw - 32px); text-align:center; z-index:5; box-shadow:0 4px 18px rgba(0,0,0,.45); }
 .toast.on{ opacity:1; }
 .toast.bad{ background:var(--panel); color:var(--ink); border:1px solid var(--bad); font-weight:600; }
+.toast.info{ background:var(--panel); color:var(--ink); border:1px solid var(--line); font-weight:600; } /* a plain explanation (R7) */
 /* hover and press feedback (desktop), no movement (F5) */
 .btn:hover:not(:disabled),.pw:hover,.levels button:hover,.pad button:hover:not(:disabled){ background:#262a3a; border-color:#4b4f6a; }
 .btn:active:not(:disabled),.pw:active,.levels button:active,.pad button:active:not(:disabled){ background:#2f3349; }

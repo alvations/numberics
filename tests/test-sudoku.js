@@ -22,6 +22,12 @@ t("clue counts honour the difficulty ladder", () => {
   ok(c("easy") > c("medium") && c("medium") >= c("hard"), c("easy") + "," + c("medium") + "," + c("hard"));
   ok(c("hard") <= 30);
 });
+t("the clue ladder holds exactly: easy 40, medium 32, hard 26 on every seed (mechanics nit: one Hard had 27)", () => {
+  for (let seed = 1; seed <= 150; seed++) for (const d of ["easy", "medium", "hard"]) {
+    const g = S.generate(seed, d); eq(g.clues, S.CLUES[d], d + "/" + seed); eq(g.puzzle.filter(Boolean).length, g.clues);
+  }
+  for (const seed of [31, 121]) eq(S.countSolutions(S.generate(seed, "hard").puzzle, 2), 1, "a re-dug Hard puzzle (seed " + seed + " stopped at 27 before) is still unique");
+});
 t("deterministic: same seed, same puzzle; different seed, different puzzle", () => {
   eq(S.generate(5, "medium").puzzle, S.generate(5, "medium").puzzle);
   ok(JSON.stringify(S.generate(5, "medium").puzzle) !== JSON.stringify(S.generate(6, "medium").puzzle));
@@ -85,15 +91,48 @@ t("progress pays one charge at every new multiple of 9 filled cells, and only th
     eq(s.gain.length, i % 9 === 0 ? 1 : 0, "gain flag at " + i);
   }
 });
-t("a reward reveals nothing: wrong digits earn exactly like right ones", () => {
+// a wrong digit that clashes with nothing on the board (0 if the cell has none)
+const quiet = (s, c) => { const m = S.candidates(s.grid, c) & ~(1 << s.solution[c]); for (let d = 1; d <= 9; d++) if (m & (1 << d)) return d; return 0; };
+// place `n` quiet wrong digits, then the same cells right on a fresh copy; returns [wrongState, rightState]
+function quietPair(seed, d, n) {
+  let w = S.newState(S.generate(seed, d)), r = S.newState(S.generate(seed, d)); const used = [];
+  for (const c of emptiesOf(w)) { if (used.length === n) break; const q = quiet(w, c); if (!q) continue; w = S.place(w, c, q); used.push(c); }
+  used.forEach(c => { r = S.place(r, c, r.solution[c]); });
+  return [w, r, used];
+}
+t("a reward reveals nothing: wrong digits that clash with nothing earn exactly like right ones", () => {
   for (const seed of [3, 7, 21]) {
-    const a = fillN(S.newState(S.generate(seed, "medium")), 18, right), b = fillN(S.newState(S.generate(seed, "medium")), 18, wrongD);
-    eq(S.total(a.stock), S.total(b.stock)); eq(a.stock, b.stock, "same kinds, same order");
+    const [b, a, used] = quietPair(seed, "medium", 18); eq(used.length, 18, "enough quiet cells");
+    eq(S.conflicts(b.grid), [], "no clash shown"); eq(S.total(a.stock), S.total(b.stock)); eq(a.stock, b.stock, "same kinds, same order");
   }
-  // the old leak (mechanics #3): fill the last cell of a unit right or wrong; the stock must not differ
+  // the old leak (mechanics #3): the last cell of a unit right or wrong. A wrong digit there always clashes, and the
+  // clash is already painted red, so the only difference in pay is one the board already shows.
   let s = S.newState(S.generate(3, "medium")); const u = openUnit(s), last = S.UNIT[u].filter(c => !s.grid[c]).pop();
   s = fillUnit(s, u, last);
-  eq(S.place(s, last, s.solution[last]).stock, S.place(s, last, wrongD(s, last)).stock);
+  const w = S.place(s, last, wrongD(s, last));
+  ok(S.conflicts(w.grid).indexOf(last) >= 0, "the wrong last digit is shown red");
+  eq(S.progress(w), emptiesOf(w).filter(c => w.grid[c] && S.conflicts(w.grid).indexOf(c) < 0).length, "progress is read off the visible board");
+});
+t("junk fill earns nothing (TRIAGE2 Sudoku, mechanics #2): only filled cells with no conflict count", () => {
+  for (const d of ["easy", "medium", "hard"]) for (const seed of [1, 2, 3]) {
+    let s = S.newState(S.generate(seed, d)); const t0 = S.total(s.stock);
+    emptiesOf(s).forEach(c => { s = S.place(s, c, 1); }); // the repro: type 1 into every empty cell
+    ok(S.total(s.stock) - t0 <= 1, d + "/" + seed + ": junk paid " + (S.total(s.stock) - t0));
+    // the paid count matches what the board shows: cells filled and not red
+    const shown = emptiesOf(s).filter(c => s.grid[c] && S.conflicts(s.grid).indexOf(c) < 0).length;
+    eq(S.progress(s), shown, "progress is exactly the filled cells not painted red");
+    emptiesOf(s).forEach(c => { s = S.place(s, c, 0); });
+    ok(S.total(s.stock) - t0 <= 1, "erasing it all keeps at most the honest part");
+  }
+});
+t("progress counts each digit only while it clashes with nothing; the mark keeps what was reached", () => {
+  let s = S.newState(S.generate(41, "medium")); const e = emptiesOf(s);
+  s = fillN(s, 8, right); eq(S.progress(s), 8); eq(s.high, 8);
+  const c = e.find(k => !s.grid[k]), peer = S.PEERS[c].find(k => !s.grid[k]);
+  const x = S.place(S.place(s, c, s.solution[c]), peer, s.solution[c]); // a clash: both cells turn red
+  eq(S.progress(x), 8, "both clashing cells drop out (10 filled, 8 count)"); eq(x.high, 9, "the mark keeps 9"); eq(S.total(x.stock), S.total(s.stock) + 1);
+  const y = S.place(x, peer, 0); eq(S.progress(y), 9, "erase the clash: the other cell counts again");
+  const z = fillN(y, 1, right); eq(S.progress(z), 10); eq(z.high, 10); eq(S.total(z.stock), S.total(x.stock), "10: no new step");
 });
 t("the high-water mark never drops: Erase and Undo cannot farm a charge twice", () => {
   let s = S.newState(S.generate(24, "medium")); s = fillN(s, 8, right);
@@ -106,17 +145,18 @@ t("the high-water mark never drops: Erase and Undo cannot farm a charge twice", 
   let x = S.place(e2, c, 0); x = fillN(x, 9, right); eq(S.total(x.stock), t0 + 1, "back at 17 filled: no new step");
   x = fillN(x, 1, right); eq(S.total(x.stock), t0 + 2);
 });
-t("a cell filled by Reveal raises the mark but never pays (R2), and Reveal spends its charge", () => {
+t("a cell filled by Reveal never counts and never pays (R2), and Reveal spends its charge", () => {
   let s = S.newState(S.generate(23, "medium")); s = fillN(s, 8, right);
   const c = emptiesOf(s).find(k => !s.grid[k]), t0 = S.total(s.stock);
   const n = S.reveal(s, c);
-  eq(n.grid[c], s.solution[c]); eq(n.high, 9); eq(n.gain, []); eq(n.stock.reveal, s.stock.reveal - 1); eq(S.total(n.stock), t0 - 1); eq(n.hints, 1);
+  eq(n.grid[c], s.solution[c]); eq(n.high, 8); eq(S.progress(n), 8); eq(n.revealed, [c]); eq(n.gain, []);
+  eq(n.stock.reveal, s.stock.reveal - 1); eq(S.total(n.stock), t0 - 1); eq(n.hints, 1); eq(n.free, false, "an empty-cell Reveal cannot help a later move");
   ok(S.reveal(Object.assign({}, n, { stock: { reveal: 0, check: 0, cands: 0 } }), emptiesOf(n).find(k => !n.grid[k])).grid, "refused without a charge");
   // Reveal then Undo then type the shown digit: no reward (mechanics #4)
   const back = S.undo(n), typed = S.place(back, c, s.solution[c]);
   eq(typed.gain, []); eq(S.total(typed.stock), t0 - 1);
 });
-t("the move that solves the board never pays (R7: no power-up on the final move)", () => {
+t("the move that solves the board never pays (a charge would be useless)", () => {
   for (const seed of [3, 4, 5, 6, 40, 41, 42]) for (const d of ["easy", "medium", "hard"]) {
     let s = S.newState(S.generate(seed, d)); const e = emptiesOf(s), c = e[e.length - 1];
     e.forEach(k => { if (k !== c) s = S.place(s, k, s.solution[k]); });
@@ -142,12 +182,73 @@ t("property: no sequence of moves, erases and undos earns more than one charge p
     const rand = () => { r = (Math.imul(r, 1103515245) + 12345) >>> 0; return r / 4294967296; };
     const start = S.total(s.stock);
     for (let i = 0; i < 600 && !s.solved; i++) {
-      const e = emptiesOf(s), c = e[Math.floor(rand() * e.length)], x = rand();
+      const e = emptiesOf(s), c = e[Math.floor(rand() * e.length)], x = rand(), was = s;
       s = x < 0.15 ? S.undo(s) : x < 0.25 ? S.place(s, c, 0) : S.place(s, c, rand() < 0.7 ? s.solution[c] : 1 + Math.floor(rand() * 9));
       ok(S.total(s.stock) - start <= Math.floor(s.high / 9), "seed " + seed + " step " + i);
-      ok(s.high >= S.filled(s), "the mark is never below the board");
+      if (x >= 0.25 && s !== was) ok(s.high >= S.progress(s), "after a digit, the mark is never below the board");
     }
   }
+});
+t("R2 property: a power-up never pays, and never helps the next digit pay (random games, every power-up)", () => {
+  let uses = 0, paidAlone = 0, filledReveals = 0;
+  for (let seed = 1; seed <= 30; seed++) {
+    let s = S.newState(S.generate(seed, ["easy", "medium", "hard"][seed % 3])), r = seed * 2654435761 >>> 0;
+    const rand = () => { r = (Math.imul(r, 1103515245) + 12345) >>> 0; return r / 4294967296; };
+    for (let i = 0; i < 260 && !s.solved; i++) {
+      const open = emptiesOf(s), c = open[Math.floor(rand() * open.length)], x = rand();
+      if (x < 0.22) { // a power-up, with charges to spend
+        const g = Object.assign({}, s, { stock: { reveal: 3, check: 3, cands: 3 } }), kind = rand();
+        const u = kind < 0.6 ? S.reveal(g, c) : kind < 0.8 ? S.fillBox(g, c) : S.check(g).state;
+        if (u === g) continue;
+        uses++; if (kind < 0.6 && g.grid[c]) filledReveals++;
+        ok(S.total(u.stock) === S.total(g.stock) - 1 && !u.gain.length, "a power-up pays nothing, seed " + seed + " step " + i);
+        // every next digit, against the same digit without the power-up
+        for (let k = 0; k < 40; k++) {
+          const m = open[Math.floor(rand() * open.length)], d = 1 + Math.floor(rand() * 9);
+          const g0 = S.total(S.place(g, m, d).stock) - S.total(g.stock), g1 = S.total(S.place(u, m, d).stock) - S.total(u.stock);
+          if (g0 > 0) paidAlone++;
+          ok(g1 <= g0, "digit " + d + " at " + m + " after a power-up paid where it alone does not, seed " + seed + " step " + i);
+        }
+        s = u; continue;
+      }
+      const v = rand();
+      s = x < 0.3 ? S.undo(s) : x < 0.38 ? S.place(s, c, 0) :
+        S.place(s, c, v < 0.6 ? s.solution[c] : v < 0.85 ? (quiet(s, c) || s.solution[c]) : 1 + Math.floor(rand() * 9));
+    }
+  }
+  ok(uses > 300 && filledReveals > 30 && paidAlone > 30, "exercised " + uses + " uses, " + filledReveals + " reveals over a digit, " + paidAlone + " paying digits");
+});
+t("R2: a Reveal over a digit can clear a clash, so the next digit placed pays nothing", () => {
+  // build: 7 counted cells, then a wrong digit at c that clashes with a typed digit at x, so neither counts
+  let found = false;
+  for (let seed = 60; seed < 90 && !found; seed++) {
+    let s = S.newState(S.generate(seed, "medium")); const e = emptiesOf(s);
+    for (const c of e) {
+      const x = S.PEERS[c].find(k => !s.puzzle[k] && s.solution[k] !== s.solution[c]);
+      if (x === undefined) continue;
+      let t = S.place(s, x, s.solution[x]); t = S.place(t, c, s.solution[x]); // c clashes with x
+      if (S.progress(t) !== 0) continue;
+      const rest = e.filter(k => k !== c && k !== x && !S.PEERS[k].includes(c) && !S.PEERS[k].includes(x));
+      if (rest.length < 9) continue;
+      for (let i = 0; i < 7; i++) t = S.place(t, rest[i], t.solution[rest[i]]);
+      if (S.progress(t) !== 7 || t.high !== 7) continue;
+      t.stock = { reveal: 1, check: 0, cands: 0 };
+      const rv = S.reveal(t, c); // x is free again: progress 8, absorbed by the mark, and `free` is set
+      eq(S.progress(rv), 8); eq(rv.high, 8); ok(rv.free); eq(rv.gain, []);
+      const next = S.place(rv, rest[7], t.solution[rest[7]]);
+      eq(S.progress(next), 9); eq(next.gain, [], "the digit after the Reveal pays nothing"); ok(!next.free);
+      eq(S.total(S.place(t, rest[7], t.solution[rest[7]]).stock), S.total(t.stock), "and alone it would not pay either");
+      const after = S.place(next, rest[8], t.solution[rest[8]]); eq(after.gain, [], "10: below the next step");
+      found = true; break;
+    }
+  }
+  ok(found, "built the case");
+});
+t("R2: a revealed cell never counts, even after Erase and typing it again", () => {
+  let s = S.newState(S.generate(43, "easy")); s = fillN(s, 8, right);
+  const c = emptiesOf(s).find(k => !s.grid[k]), n = S.reveal(s, c);
+  const again = S.place(S.place(n, c, 0), c, s.solution[c]); eq(S.progress(again), 8); eq(again.gain, []);
+  const undone = S.place(S.undo(n), c, s.solution[c]); eq(S.progress(undone), 8, "Undo keeps the mark of a revealed cell"); eq(undone.revealed, [c]);
 });
 t("the stock caps at 9 per kind and stays deterministic per seed", () => {
   const run = (seed) => { let s = S.newState(S.generate(seed, "hard")); emptiesOf(s).forEach(c => { s = S.place(s, c, s.solution[c]); }); return s.stock; };
@@ -209,6 +310,7 @@ t("old saves (before power-ups) upgrade cleanly and keep their progress", () => 
   eq(u.grid, s.grid); eq(u.stock, S.START); eq(u.used, { reveal: 2, check: 0, cands: 0 }); eq(u.high, 1, "progress so far pays nothing again");
   eq(S.undo(u).grid[e[0]], 0, "old history entries still undo");
   const bad = Object.assign({}, s, { stock: { reveal: 40, check: 0, cands: 0 } }); eq(S.upgrade(bad).stock.reveal, 9, "clamped to the cap");
+  eq(u.revealed, [], "no revealed list in an old save"); eq(u.free, false);
 });
 t("saves from the unit-reward version (paid mask, stock in history, a debt) load and play on", () => {
   let s = S.newState(S.generate(30, "medium")); s = fillN(s, 12, right);
@@ -222,6 +324,11 @@ t("saves from the unit-reward version (paid mask, stock in history, a debt) load
   x = fillN(x, 2, right); eq(S.total(x.stock), S.total(u.stock) + 1, "18 filled pays");
   const solvedOld = JSON.parse(JSON.stringify(old)); solvedOld.grid = solvedOld.solution.slice(); solvedOld.solved = true;
   ok(S.upgrade(solvedOld).solved && S.undo(S.upgrade(solvedOld)).solved, "an old solved save stays locked");
+  // a save made under the any-digit rule with junk on the board keeps its mark and stock, and pays nothing more for it
+  let j = S.newState(S.generate(31, "hard")); emptiesOf(j).forEach(c => { j = S.place(j, c, 1); });
+  const junk = JSON.parse(JSON.stringify(j)); junk.high = S.filled(j); delete junk.revealed; delete junk.free;
+  const ju = S.upgrade(junk); eq(ju.high, S.filled(j), "the old mark is never lowered"); eq(ju.stock, j.stock);
+  const jp = S.place(S.place(ju, emptiesOf(ju)[0], 0), emptiesOf(ju)[0], ju.solution[emptiesOf(ju)[0]]); eq(jp.gain, []);
 });
 t("uniqueness still holds across many seeds (power-ups never touch the generator)", () => {
   for (let seed = 100; seed < 112; seed++) eq(S.countSolutions(S.generate(seed, ["easy", "medium", "hard"][seed % 3]).puzzle, 2), 1);

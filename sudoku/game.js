@@ -16,7 +16,7 @@
     { id: "check", key: "C", label: "Check", desc: "Mark wrong digits, briefly." },
     { id: "cands", key: "F", label: "Candidates", desc: "Fill the notes of one 3x3 box." },
   ];
-  var EARN = "Earn one for every 9 cells you fill.";
+  var EARN = "Earn one for every 9 cells you fill with no clash.";
   var PW_NAME = { reveal: "Reveal", check: "Check", cands: "Candidates" };
   var PW_TARGET = { reveal: "Tap a cell to reveal", cands: "Tap a cell in the box to fill" };
   function ok81(a) { return Array.isArray(a) && a.length === 81 && a.every(function (v) { return Number.isInteger(v) && v >= 0; }); }
@@ -61,7 +61,7 @@
   function secs() { return Math.floor(elapsed); }
   function fresh(diff) {
     disarmLevel();
-    level = diff; sel = -1; elapsed = 0; last = null; armed = null; marks = null; note = null;
+    disarm(); level = diff; sel = -1; elapsed = 0; last = null; marks = null; note = null;
     state = S.newState(S.generate(freshSeed(), diff)); bank(); save(); startTimer(); render();
   }
   var fmt = Kit.clock;
@@ -88,7 +88,7 @@
     S.KINDS.forEach(function (k) { view[k] = Math.max(0, state.stock[k]); });
     return view;
   }
-  function info(id, text) { toast(text, "bad"); } // phones have no hover: the tap explains the slot (R5)
+  function info(id, text) { toast(text, "info"); } // phones have no hover: the tap explains the slot (R5), in the neutral info toast (R7)
   function infoFor(id) {
     var d = PW.filter(function (x) { return x.id === id; })[0];
     info(id, Power.info(d, trayView(), why(id) || false, { earn: EARN }));
@@ -165,15 +165,15 @@
     if (state.solved && !was) {
       bank(); clearInterval(tick); armed = null; record();
       $("toast").classList.remove("on"); // one channel per event: the end card speaks alone (R7)
-    } else if (state.gain && state.gain.length) toast(state.high + " cells filled: +1 " + PW_NAME[state.gain[0]]);
+    } else if (state.gain && state.gain.length) toast(state.high + " cells filled: +" + PW_NAME[state.gain[0]]);
     save(); render();
     if (state.solved && !was) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
   }
   function use(id) {
     if (why(id) || (id !== "undo" && !(state.stock[id] > 0))) return infoFor(id);
-    if (id === "undo") { armed = null; return commit(S.undo(state)); }
+    if (id === "undo") { disarm(); return commit(S.undo(state)); }
     if (id === "check") {
-      armed = null;
+      disarm();
       var r = S.check(state);
       if (r.state === state) return toast("Place a digit first", "bad");
       commit(r.state);
@@ -183,15 +183,26 @@
       if (r.wrong.length) toast(plural(r.wrong.length, "wrong digit") + " marked", "bad"); else toast("Every placed digit is right");
       return render();
     }
-    if (armed === id) { armed = null; return render(); } // tapping an armed slot again cancels
+    if (armed === id) { disarm(); return render(); } // tapping an armed slot again cancels
     if (sel >= 0) return target(id, sel);
-    armed = id; toast(PW_TARGET[id] + (finePointer() ? " (Esc cancels)" : ". Tap " + PW_NAME[id] + " again to cancel")); render();
+    armed = id; render(); aimToast(PW_TARGET[id] + (finePointer() ? " (Esc cancels)" : ". Tap " + PW_NAME[id] + " again to cancel"));
+  }
+  // leaving aiming mode takes its instruction with it (craft #2: a stale "Tap a cell" toast stayed after Esc)
+  function disarm() { if (armed) Kit.clearToast(); armed = null; }
+  // The aiming instruction never sits on the cells it asks for (craft #1): the kit puts a toast just above the board,
+  // and when the page is scrolled so that there is no room, this one moves just below the board instead.
+  function aimToast(m) {
+    Kit.toast(m);
+    try {
+      var t = $("toast"), b = boardEl.getBoundingClientRect(), r = t.getBoundingClientRect();
+      if (r.bottom > b.top && r.top < b.bottom) t.style.top = Math.max(12, Math.min(window.innerHeight - r.height - 12, b.bottom + 6)) + "px";
+    } catch (e) { /* keep the kit position */ }
   }
   function finePointer() { try { return window.matchMedia("(pointer: fine)").matches; } catch (e) { return true; } }
   function target(id, c) {
     var n = id === "reveal" ? S.reveal(state, c) : S.fillBox(state, c);
     if (n === state) return toast(id === "reveal" ? "Nothing to reveal there" : "Nothing to fill in that box", "bad");
-    armed = null; commit(n);
+    disarm(); commit(n);
   }
   function enter(d) {
     if (state.solved) return;
@@ -242,7 +253,11 @@
 
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    var k = e.key;
+    var k = e.key, tag = (e.target && e.target.tagName) || "";
+    // R17: a focused link or form field keeps every key (Enter on a games-row link navigates); a focused button keeps
+    // Enter and Space (they press it, R9). Digits and arrows still reach the board after a click on the pad.
+    if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (tag === "BUTTON" && (k === "Enter" || k === " ")) return;
     if (k >= "1" && k <= "9") return enter(+k);
     if (k === "Backspace" || k === "Delete" || k === "0") { e.preventDefault(); return enter(0); }
     var arrows = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
@@ -252,7 +267,7 @@
     if (k === "h" || k === "H") return use("reveal");
     if (k === "c" || k === "C") return use("check");
     if (k === "f" || k === "F") return use("cands");
-    if (k === "Escape") { if (armed) armed = null; else sel = -1; render(); }
+    if (k === "Escape") { if (armed) disarm(); else sel = -1; render(); }
   });
   // save when the page is hidden or closed (a reload fires pagehide), and resume the clock when it is back
   document.addEventListener("visibilitychange", function () { bank(); save(); });

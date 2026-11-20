@@ -43,6 +43,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("2");
   ck("smash arms targeting", await p.locator("#board.targeting").count() === 1);
   ck("hint explains the target", /smash/i.test(await p.textContent("#hint")));
+  ck("arming a power-up clears the toast so the hint is readable", await p.evaluate(() => !document.getElementById("toast").classList.contains("on")));
   await shot(p, "targeting");
   await p.keyboard.press("Escape");
   ck("escape cancels targeting", await p.locator("#board.targeting").count() === 0);
@@ -92,7 +93,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.evaluate(() => { const s = window.__fibonacci.state; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; window.__fibonacci.state = s; });
   ck("empty slots are aria-disabled, never disabled", await p.evaluate(() => [...document.querySelectorAll("#tray .pw")].every(b => !b.disabled && b.getAttribute("aria-disabled") === "true")));
   await p.locator("#tray .pw").nth(3).click({ force: true });
-  ck("tapping an empty Boost explains it and how to earn it", /^Boost: Step a tile up one Fibonacci number \(1 becomes 2\)\. Earned by each new top tile from 34\.$/.test(await p.textContent("#hint")));
+  ck("tapping an empty Boost explains it and how to earn it", /^Boost: Step a tile up one Fibonacci number \(1 becomes 2\)\. Earned by each new top tile from 55\.$/.test(await p.textContent("#hint")));
   ck("no targeting from an empty slot", await p.locator("#board.targeting").count() === 0);
   await p.keyboard.press("1");
   ck("key 1 on an empty Undo explains it too", /^Undo: Take back the last move\./.test(await p.textContent("#hint")));
@@ -105,17 +106,53 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("1 and 2 look different (cream vs a hue)", await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[0] = 1; s.grid[1] = 2; window.__fibonacci.state = s;
     const t = [...document.querySelectorAll(".tiles .tile")]; return getComputedStyle(t[0]).backgroundColor !== getComputedStyle(t[1]).backgroundColor && !t[1].classList.contains("lo2"); }));
 
-  // 5. award toast on a new highest tile of 34
-  await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[0] = 6; s.grid[1] = 7; s.top = 7; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; window.__fibonacci.state = s; });
+  // 5. award toast on a new highest tile of 55 (round 2 floor); 34 no longer pays
+  const sum = () => p.evaluate(() => Object.values(window.__fibonacci.state.power).reduce((a, b) => a + b, 0));
+  const setup = (grid, top, power, free) => p.evaluate(([g, t, pw, f]) => { const s = window.__fibonacci.state; s.grid = g; s.top = t; s.power = pw; s.prev = null; s.over = false; s.free = !!f; window.__fibonacci.state = s; }, [grid, top, power, free]);
+  const row = (a) => a.concat(new Array(16 - a.length).fill(0));
+  const none = { undo: 0, smash: 0, swap: 0, boost: 0 };
+  await p.evaluate(() => window.NumbericsKit.clearToast());
+  await setup(row([6, 7]), 7, none);
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
-  ck("new 34 awards a power-up", await p.evaluate(() => Object.values(window.__fibonacci.state.power).reduce((a, b) => a + b, 0) === 1));
-  ck("toast names the tile and the reward", /New tile 34 +\+/.test(await p.textContent("#toast")));
+  ck("a new 34 pays nothing since round 2", (await sum()) === 0);
+  ck("a new 34 still toasts its tile", /^New tile 34$/.test(await p.textContent("#toast")));
+  await setup(row([7, 8]), 8, none);
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
+  ck("new 55 awards a power-up", (await sum()) === 1);
+  ck("toast names the tile and the reward", /New tile 55 +\+/.test(await p.textContent("#toast")));
+  // craft nit 2: small new tiles (2, 3, 5, 8) do not toast
+  await p.evaluate(() => window.NumbericsKit.clearToast());
+  await setup(row([3, 4]), 4, none);
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
+  ck("a new top tile of 8 does not toast", await p.evaluate(() => window.__fibonacci.state.top === 5 && !document.getElementById("toast").classList.contains("on")));
+  // R2 in the page: Boost 21 to 34 beside 55, swipe: 89 is made, nothing paid, and the toast says why
+  await setup(row([9, 7]), 9, { undo: 0, smash: 0, swap: 0, boost: 1 });
+  await p.keyboard.press("4"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("Enter");
+  ck("boost stepped 21 to 34", await p.evaluate(() => window.__fibonacci.state.grid[1] === 8));
+  await p.reload(); // R2 survives a reload between the power-up and the swipe
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
+  ck("R2: the boost-assisted 89 pays nothing, even across a reload", await p.evaluate(() => window.__fibonacci.state.grid[0] === 10) && (await sum()) === 0);
+  ck("R2: the toast says no reward right after a power-up", /^New tile 89\. No reward right after a power-up$/.test(await p.textContent("#toast")));
+  // R15: a full stock says so instead of paying silently nothing
+  await setup(row([10, 11]), 11, { undo: 9, smash: 9, swap: 9, boost: 9 });
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
+  ck("R15: a full stock toasts 'Power-ups full'", /^New tile 233\. Power-ups full$/.test(await p.textContent("#toast")) && (await sum()) === 36);
+  // cold #2: a tray tap that lands while the slide animates is never lost
+  await setup(row([1, 0, 0, 0, 2]), 2, { undo: 0, smash: 1, swap: 0, boost: 0 });
+  await p.waitForTimeout(50);
+  const smashBox = await p.locator("#tray .pw").nth(1).boundingBox();
+  await p.keyboard.press("ArrowRight");
+  await p.mouse.move(smashBox.x + smashBox.width / 2, smashBox.y + smashBox.height / 2);
+  await p.mouse.down(); await p.waitForTimeout(160); await p.mouse.up(); // spans the 110 ms redraw
+  ck("a tray tap during the slide animation still arms the power-up", await p.evaluate(() => window.__fibonacci.targeting && window.__fibonacci.targeting.name === "smash"));
+  await p.keyboard.press("Escape");
 
   // 6. stuck while holding a power-up, then the end overlay
   await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = [1,3,1,3,3,1,3,1,1,3,1,3,3,1,3,1]; s.power = { undo: 0, smash: 1, swap: 0, boost: 0 }; s.prev = null; s.over = false; window.__fibonacci.state = s; });
   ck("stuck with a power-up says so, no overlay", /Stuck/.test(await p.textContent("#hint")) && !(await p.isVisible("#over")));
   await p.evaluate(() => { window.__fibonacci.runBest = 1e9; const s = window.__fibonacci.state; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.over = true; window.__fibonacci.state = s; });
   ck("overlay shows when locked", await p.isVisible("#over"));
+  ck("no toast sits on the end card", await p.evaluate(() => !document.getElementById("toast").classList.contains("on")));
   ck("overlay summary is '<Result> · <score>'", /^Top tile \d[\d,]* · [\d,]+ points$/.test(await p.textContent("#over-text")));
   ck("no new best when the score did not beat it", !(await p.isVisible("#over-best")));
   await p.evaluate(() => { window.__fibonacci.runBest = 10; const s = window.__fibonacci.state; s.score = 5500; s.top = 13; window.__fibonacci.state = s; });
@@ -169,7 +206,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("H1 is Fibonacci", (await p.textContent("h1")) === "Fibonacci");
   ck("subtitle starts with a Numberics link home", await p.evaluate(() => { const a = document.querySelector(".sub a"); return a && a.textContent === "Numberics" && a.getAttribute("href") === "../" && document.querySelector(".sub").firstElementChild === a; }));
   ck("subtitle tagline is one sentence with a full stop", /^Numberics · [A-Z0-9][^.]*\.$/.test((await p.textContent(".sub")).trim()));
-  ck("pills sit on the title row at 1280", await p.evaluate(() => { const b = document.querySelector(".brand").getBoundingClientRect(), s = document.querySelector(".stats").getBoundingClientRect(); return s.left > b.right && s.top < b.bottom; }));
+  // craft #6: the pills sit under the title, where Endless's are
+  const pills = (q) => q.evaluate(() => { const b = document.querySelector(".brand").getBoundingClientRect(), s = document.querySelector(".stats").getBoundingClientRect(), t = document.getElementById("tray").getBoundingClientRect();
+    return { under: s.top >= b.bottom, left: Math.round(s.left - b.left), top: Math.round(s.top), tray: Math.round(t.top) }; });
+  const fp = await pills(p), ep2 = await ctx.newPage(); await ep2.goto(url); const ep = await pills(ep2); await ep2.close();
+  ck("pills sit under the title at 1280, as in Endless", fp.under && ep.under && fp.left === ep.left && Math.abs(fp.top - ep.top) <= 2 && Math.abs(fp.tray - ep.tray) <= 2, JSON.stringify([fp, ep]));
+  // R17: Enter on a focused games-row link navigates and is never a game move
+  const m0 = await p.evaluate(() => window.__fibonacci.state.moves);
+  const link = p.locator("#games a[href]").first(), href = await link.getAttribute("href");
+  await link.focus();
+  await Promise.all([p.waitForURL(u => !/\/fibonacci\/$/.test(u.toString()), { timeout: 3000 }).catch(() => {}), p.keyboard.press("Enter")]);
+  ck("R17: Enter on a focused games-row link navigates", !/\/fibonacci\/$/.test(p.url()), p.url() + " " + href + " moves " + m0);
+  await p.goto(page);
   ck("empty top tile reads 'none', never '-'", await p.evaluate(() => { const s = window.__fibonacci.state; s.top = 0; window.__fibonacci.state = s; return document.getElementById("top").textContent === "none"; }));
   await ctx.close();
 

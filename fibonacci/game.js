@@ -20,7 +20,7 @@
     if (!(!!s && s.size === 4 && validGrid(s.grid) && validPower(s.power) &&
       num(s.score) && int(s.top) && int(s.moves) && num(s.seed))) return false;
     if (s.prev != null && !validPrev(s.prev)) s.prev = null; // a broken snapshot costs one Undo, not the run
-    s.over = !!s.over;
+    s.over = !!s.over; s.free = !!s.free; // R2: a reload never turns a power-up-assisted swipe into a paid one
     return true;
   }
 
@@ -82,6 +82,7 @@
     var over = $("over");
     over.hidden = !state.over;
     if (state.over) {
+      K.clearToast(); // the end card is the only message (round 2: a toast sat on it)
       // R8: one summary line, "<Result> · <score>", and a new best says so.
       $("over-text").textContent = "Top tile " + N.label(state.top) + " · " + fmt(state.score) + " points";
       $("over-best").hidden = !(state.score > runBest);
@@ -107,7 +108,7 @@
 
   var PW = { undo: "Undo", smash: "Smash", swap: "Swap", boost: "Boost" };
   // R5: tooltip voice "1: Undo. Take back the last move.", and a tap on an unusable slot explains it.
-  var EARN = "Earned by each new top tile from 34.";
+  var EARN = "Earned by each new top tile from 55.";
   var DEFS = [
     { id: "undo", label: "Undo", desc: "Take back the last move.", earn: EARN },
     { id: "smash", label: "Smash", desc: "Remove one tile.", earn: EARN },
@@ -116,6 +117,8 @@
   ];
   var PW_HINT = { smash: "Tap a tile to smash it.", boost: "Tap a tile to step it up (1 to 2).",
                   swap: "Tap two cells to swap them." };
+  // Milestone toasts start at 13 (round 2 craft nit: "New tile 2", "New tile 3" were noise every game).
+  var TOAST_FROM = 6;
   var touchOnly = (function () { try { return window.matchMedia("(hover: none) and (pointer: coarse)").matches; } catch (e) { return false; } })();
   function targetHint() {
     if (targeting.kbd) {
@@ -127,7 +130,15 @@
     // cold #5: there is no Esc on a phone
     return PW_HINT[targeting.name] + (touchOnly ? " Tap " + PW[targeting.name] + " to cancel." : " (Esc cancels)");
   }
+  // The tray is rebuilt only when what it shows changes, and at once after a swipe, so a tap that lands
+  // while the slide animates still hits a live button (cold #2: the animation's redraw swallowed it).
+  var trayKey = "";
   function renderTray() {
+    var key = JSON.stringify([state.power, targeting && targeting.name, state.over, !!state.prev]);
+    if (key !== trayKey || !$("tray").firstChild) { trayKey = key; drawTray(); }
+    renderHint();
+  }
+  function drawTray() {
     P.tray($("tray"), DEFS, state.power, {
       armed: targeting && targeting.name,
       disabled: function (id) {
@@ -137,6 +148,8 @@
       onUse: activate,
       onInfo: function (id, text) { flush(); targeting = null; note = text; render(); },
     });
+  }
+  function renderHint() {
     $("hint").textContent = targeting ? targetHint() : note ? note
       : (!N.canMove(state) && !state.over ? "Stuck. Use a power-up to keep going." : "");
   }
@@ -157,12 +170,18 @@
       var el = els[t.from]; if (el) place(el, t.to);
       if (t.merge) merged[t.to] = true;
     });
+    var before = state;
     state = r.state; pendingFx = { merged: merged, spawned: r.spawned };
-    if (r.milestones.length && !state.over) { // R7: when the move ends the game, the end card is the only message
-      var top = r.milestones[r.milestones.length - 1];
-      toast("New tile " + N.label(top) + (r.awarded.length ? "  +" + PW[r.awarded[0].power] : ""));
+    var top = r.milestones.length ? r.milestones[r.milestones.length - 1] : 0;
+    if (top >= TOAST_FROM && !state.over) { // R7: when the move ends the game, the end card is the only message
+      var why = "";
+      if (r.awarded.length) why = "  +" + PW[r.awarded[0].power];
+      else if (top >= N.AWARD_FROM_INDEX) // a paying tile that paid nothing: say why (R2, R15)
+        why = r.free ? ". No reward right after a power-up"
+          : N.POWERS.every(function (k) { return before.power[k] >= N.POWER_CAP; }) ? ". Power-ups full" : "";
+      toast("New tile " + N.label(top) + why);
     }
-    persist();
+    persist(); renderTray();
     if (ANIM) { var gen = state.moves; timer = setTimeout(function () { if (state.moves === gen) { timer = null; finalize(); } }, ANIM); }
     else finalize();
   }
@@ -180,6 +199,7 @@
     }
     if (!state.power[name]) return explain(name);
     targeting = { name: name, picks: [], kbd: !!kbd };
+    K.clearToast(); // the toast sits over the hint line; the targeting hint must be readable
     if (kbd) startCursor();
     render();
   }
@@ -234,8 +254,10 @@
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var tag = e.target && e.target.tagName;
-    // R9: Enter or Space on a focused button or link belongs to that control, never to the game
-    if ((e.key === "Enter" || e.key === " ") && (tag === "BUTTON" || tag === "A")) return;
+    // R9, R17: Enter or Space on a focused control belongs to that control, never to the game; typing in a
+    // field is never a game key
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if ((e.key === "Enter" || e.key === " ") && (tag === "BUTTON" || tag === "A" || tag === "SUMMARY")) return;
     if (e.key === "Escape") { targeting = null; return render(); }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
     if (pi >= 0) return activate(N.POWERS[pi], true);

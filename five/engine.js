@@ -126,7 +126,7 @@
       seed: seed >>> 0, level: LEVELS.indexOf(level) >= 0 ? level : "medium",
       tiles: [1, 1, 1, 1], turn: "c", starter: "c", round: 1, wins: { p: 0, c: 0 }, draws: 0,
       power: { p: freshPower("p"), c: freshPower("c") }, shield: null, quiet: 0, seen: {},
-      roundOver: null, matchOver: null, prev: null, midTurn: false, moves: 0, last: null,
+      roundOver: null, matchOver: null, prev: null, midTurn: false, moves: 0, last: null, touched: false,
     };
     s.seen[key(s)] = 1;
     return s;
@@ -175,6 +175,8 @@
   }
   // only the player earns (R4), and never on the burst that ends the match (the stock would be thrown away)
   function earns(s, who) { return who === "p" && !s.matchOver; }
+  // R2: a power-up never earns one, including the move after it. Shield is the one power-up that leaves you a move
+  // in the same turn (midTurn), so a burst on that move pays nothing. Split and Nudge are the whole turn.
   function award(s) {
     var r = rand(s.seed); s.seed = r[1];
     return Power.award(s.power.p, POWERS, r[0]);
@@ -186,20 +188,22 @@
     if (state.roundOver) return fail(state, "over");
     var who = state.turn, ok = legalMoves(state).some(function (m) { return m.from === from && m.to === to; });
     if (!ok) return fail(state, "illegal");
-    var s = clone(state);
+    var s = clone(state), powered = state.midTurn;
     if (who === "p" && !s.midTurn) s.prev = snap(state);
-    var v = s.tiles[to] + s.tiles[from], burst = v >= BURST, awarded = null;
+    if (who === "p") s.touched = true;
+    var v = s.tiles[to] + s.tiles[from], burst = v >= BURST, awarded = null, unpaid = false;
     s.tiles[to] = burst ? 0 : v;
-    s.last = { kind: "add", side: who, from: from, to: to, burst: burst, value: v };
+    s.last = { kind: "add", side: who, from: from, to: to, burst: burst, value: v, prevTo: state.tiles[to], add: state.tiles[from] };
     endTurn(s, who, burst);
-    if (burst && side(to) !== who && earns(s, who)) awarded = award(s);
-    return { ok: true, state: s, burst: burst, awarded: awarded };
+    if (burst && side(to) !== who && earns(s, who)) { if (powered) unpaid = true; else awarded = award(s); }
+    return { ok: true, state: s, burst: burst, awarded: awarded, unpaid: unpaid };
   }
   // no legal move (every target is shielded): the turn passes
   function pass(state) {
     if (!mustPass(state)) return fail(state, "has moves");
     var s = clone(state), who = s.turn;
     if (who === "p" && !s.midTurn) s.prev = snap(state);
+    if (who === "p") s.touched = true;
     s.last = { kind: "pass", side: who };
     endTurn(s, who, false);
     return { ok: true, state: s };
@@ -236,11 +240,12 @@
     if (name === "undo") {
       var u = clone(state.prev);
       u.power.p.undo = Math.max(0, u.power.p.undo - 1); u.prev = null; u.moves = state.moves + 1;
-      u.last = { kind: "undo", side: "p" };
+      u.last = { kind: "undo", side: "p" }; u.touched = true; // the match was played in, Undo or not (R12)
       return { ok: true, state: u };
     }
     var s = clone(state);
     if (who === "p" && !s.midTurn) s.prev = snap(state);
+    if (who === "p") s.touched = true;
     Power.spend(s.power[who], name);
     if (name === "shield") {
       s.shield = { side: who, idx: arg }; s.midTurn = true; s.moves++;
@@ -255,7 +260,7 @@
     } else {
       var v = s.tiles[arg] + dir; burst = v >= BURST;
       s.tiles[arg] = burst ? 0 : v;
-      s.last = { kind: "nudge", side: who, to: arg, dir: dir, burst: burst };
+      s.last = { kind: "nudge", side: who, to: arg, dir: dir, burst: burst, prevTo: state.tiles[arg] };
     }
     endTurn(s, who, burst);
     return { ok: true, state: s, burst: burst };
@@ -374,6 +379,12 @@
     }
     return { plan: plan, seed: s.seed, state: s };
   }
+  // R12: has the player moved in this match (a move, a pass or a power-up)? Quitting after that counts as a loss.
+  // Old saves have no flag: there, any turn past the computer's opener counts.
+  function played(s) {
+    if (s.matchOver) return false;
+    return s.touched === undefined ? s.moves > 1 || s.round > 1 : !!s.touched;
+  }
   function apply(state, a) {
     if (a.type === "move") return play(state, a.from, a.to);
     if (a.type === "pass") return pass(state);
@@ -395,6 +406,6 @@
     REPEAT_DRAW: REPEAT_DRAW, QUIET_DRAW: QUIET_DRAW, EASY_CARE: EASY_CARE, MEDIUM_CARE: MEDIUM_CARE,
     solve: solve, lookup: lookup, reachable: reachable,
     newMatch: newMatch, nextRound: nextRound, legalMoves: legalMoves, mustPass: mustPass, play: play, pass: pass,
-    canUse: canUse, use: use, nudgeDir: nudgeDir, aiPlan: aiPlan, aiTurn: aiTurn, apply: apply, key: key, side: side,
+    canUse: canUse, use: use, played: played, nudgeDir: nudgeDir, aiPlan: aiPlan, aiTurn: aiTurn, apply: apply, key: key, side: side,
   };
 });

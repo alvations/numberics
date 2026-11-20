@@ -66,9 +66,16 @@
     }
     return f;
   }
+  // Every round gets a fresh deal: never the same start as the round before (round 2 lead: a losing Hard deal
+  // seemed to repeat after a loss; measured, that was chance, about 1 in 250 on three tiles, but a repeat
+  // reads as a bug, so it is ruled out).
   function deal(s, n) {
-    var want = s.diff === "hard" ? rnd(s) >= HARD_LOSING : true;
-    return dealWhere(s, n, want);
+    var want = s.diff === "hard" ? rnd(s) >= HARD_LOSING : true, h;
+    for (var k = 0; k < 50; k++) {
+      h = dealWhere(s, n, want);
+      if (!s.dealt || h.join() !== s.dealt.join()) break;
+    }
+    return h;
   }
 
   function opts(o) {
@@ -77,7 +84,9 @@
              level: Math.max(MIN_TILES, Math.min(MAX_TILES, o.level | 0 || MIN_TILES)) };
   }
   function freshRound(s) {
-    s.heaps = deal(s, s.level); s.turn = "you"; s.acted = false; s.added = false;
+    s.heaps = deal(s, s.level); s.dealt = s.heaps.slice(); s.turn = "you"; s.acted = false; s.added = false;
+    // R2: a side that used Add or Pass this round earns nothing for winning it; Pass is once per round per side
+    s.powered = { you: false, cpu: false }; s.passed = { you: false, cpu: false };
     s.lastTurn = null; s.last = null; s.prev = null; s.roundOver = null; s.award = null;
   }
   // A new run: level 3 (or o.level), round 1 of a best of five, one Undo each side.
@@ -112,11 +121,16 @@
   function finishRound(s, taker) {
     var winner = s.misere ? other(taker) : taker;
     s.roundOver = winner; s.score[winner]++;
-    // Winning a round earns one power-up. The computer earns too, on Hard only (it only plays them on Hard).
-    s.award = null;
+    // Winning a round earns one power-up, unless the winner used Add or Pass in it (R2: a power-up never earns
+    // one). The computer earns too, on Hard only (it only plays them on Hard). s.noAward says why nothing paid:
+    // "power" (Add or Pass used) or "full" (every slot at the cap, R15).
+    s.award = null; s.noAward = null;
     if (winner === "you" || s.diff === "hard") {
-      var name = Power.award(s.power[winner], winner === "you" ? POWERS : CPU_POWERS, rnd(s));
-      if (name) s.award = { who: winner, name: name };
+      if (s.powered && s.powered[winner]) s.noAward = "power";
+      else {
+        var name = Power.award(s.power[winner], winner === "you" ? POWERS : CPU_POWERS, rnd(s));
+        if (name) s.award = { who: winner, name: name }; else s.noAward = "full";
+      }
     }
     if (s.score[winner] >= WIN_ROUNDS) {
       s.matchOver = winner;
@@ -124,6 +138,13 @@
     }
   }
   function live(s) { return !s.roundOver && !s.matchOver; }
+  function markPowered(s, who) {
+    if (!s.powered) s.powered = { you: false, cpu: false };
+    if (!s.passed) s.passed = { you: false, cpu: false };
+    s.powered[who] = true;
+  }
+  // R12: has this match seen a move? Then quitting it (New game, a level or mode switch) counts as a loss.
+  function started(s) { return !s.matchOver && (s.round > 1 || !!s.roundOver || !!s.lastTurn || !!s.added); }
 
   // The side to move lowers tile i by `amount` (1 up to its value). Illegal input returns {ok:false}.
   function take(s0, tile, amount) {
@@ -133,14 +154,17 @@
     var s = clone(s0);
     if (s.turn === "you" && !s.acted) { s.prev = snapshot(s0); s.acted = true; }
     s.heaps[tile] = v - amount;
-    s.last = { who: s.turn, kind: "take", tile: tile, from: v, to: v - amount, added: s.added };
+    s.last = { who: s.turn, kind: "take", tile: tile, from: v, to: v - amount, added: s.added, addAt: s.added ? s.addAt || null : null };
     var taker = s.turn;
     endTurn(s, "take");
     if (total(s.heaps) === 0) finishRound(s, taker);
     return { ok: true, state: s };
   }
 
-  function canPass(s) { return live(s) && !(s.lastTurn && s.lastTurn.kind === "pass") && (s.power[s.turn].pass || 0) > 0; }
+  // Pass: once per round per side, never straight back after the other side passed, and needs a charge.
+  function canPass(s) {
+    return live(s) && !(s.passed && s.passed[s.turn]) && !(s.lastTurn && s.lastTurn.kind === "pass") && (s.power[s.turn].pass || 0) > 0;
+  }
   function canAdd(s, tile) {
     var v = s.heaps[tile];
     return live(s) && !s.added && (s.power[s.turn].add || 0) > 0 && Number.isInteger(v) && v >= 1 && v < MAX;
@@ -152,7 +176,7 @@
   // Power-ups for the side to move (the player calls this with s.turn === "you"; undo is the player's only).
   //   undo        restores the start of the player's last turn, stock included (no farming); spent Peeks stay spent
   //   add, tile   +1 to one live tile, never past 9; once per turn; you still take after it
-  //   pass        skip this turn; not right after the other side passed (no pass-back)
+  //   pass        skip this turn; once per round per side, and not right after the other side passed
   //   peek        spends a charge and returns one winning move in .move (null when there is none)
   function use(s0, name, tile) {
     var fail = { ok: false, state: s0 };
@@ -169,7 +193,7 @@
       if (!canAdd(s0, tile)) return fail;
       s = clone(s0);
       if (who === "you" && !s.acted) { s.prev = snapshot(s0); s.acted = true; }
-      Power.spend(s.power[who], "add"); s.heaps[tile]++; s.added = true; s.ply++;
+      Power.spend(s.power[who], "add"); s.heaps[tile]++; s.added = true; s.addAt = { tile: tile, from: s0.heaps[tile] }; s.ply++; markPowered(s, who);
       s.last = { who: who, kind: "add", tile: tile, from: s0.heaps[tile], to: s.heaps[tile] };
       if (who === "you") s.used++; else s.cpuUsed++;
       return { ok: true, state: s };
@@ -178,7 +202,7 @@
       if (!canPass(s0)) return fail;
       s = clone(s0);
       if (who === "you" && !s.acted) { s.prev = snapshot(s0); s.acted = true; }
-      Power.spend(s.power[who], "pass");
+      Power.spend(s.power[who], "pass"); markPowered(s, who); s.passed[who] = true;
       if (who === "you") s.used++; else s.cpuUsed++;
       s.last = { who: who, kind: "pass" };
       endTurn(s, "pass");
@@ -206,7 +230,8 @@
     var live1 = []; h.forEach(function (v, i) { if (v) live1.push(i); });
     var t = pickIn(s, live1); return { tile: t, to: h[t] - 1 };
   }
-  // The computer's whole turn. Hard turns a lost position around with Pass or Add when it holds one.
+  // The computer's whole turn. Hard turns a lost position around with Pass or Add when it holds one (and, like
+  // the player, earns nothing for a round won that way).
   function cpuTurn(s0) {
     if (!live(s0) || s0.turn !== "cpu") return s0;
     var s = clone(s0), r;
@@ -225,5 +250,5 @@
   return { POWERS: POWERS, CPU_POWERS: CPU_POWERS, HARD_LOSING: HARD_LOSING, MAX: MAX, MIN_TILES: MIN_TILES, MAX_TILES: MAX_TILES, WIN_ROUNDS: WIN_ROUNDS, DIFFS: DIFFS,
            nimSum: nimSum, winning: winning, legalMoves: legalMoves, winningMoves: winningMoves, peek: peek,
            newGame: newGame, nextRound: nextRound, nextMatch: nextMatch, take: take, use: use,
-           canPass: canPass, canAdd: canAdd, canUndo: canUndo, chooseMove: chooseMove, cpuTurn: cpuTurn };
+           canPass: canPass, canAdd: canAdd, canUndo: canUndo, started: started, chooseMove: chooseMove, cpuTurn: cpuTurn };
 });

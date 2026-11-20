@@ -18,3 +18,5 @@
 .marks .mark.cur{ outline:3px dashed var(--ink); outline-offset:-3px; }
 .marks .mark.sel.cur{ outline-color:#15151d; }
 .stat b.none{ color:var(--mute); font-weight:400; }
+/* Round 2 (craft #6): the pills sit on their own row under the title, where Endless's are at every width. */
+header .brand{ flex-basis:100%; }

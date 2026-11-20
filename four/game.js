@@ -14,7 +14,8 @@
     { id: "hold", label: "Hold", desc: "Put your next disc aside, or swap it back." },
     { id: "tune", label: "Tune", desc: "Choose your next disc's number." },
   ];
-  var RULE = "Four of yours in a row, or a 10 with two of yours.";
+  var RULE = "Four of yours in a row, or four that make ten with two of yours.";
+  var SHOW_THREATS = { easy: true, medium: true, hard: false }; // round 2 (cold #5): Hard keeps its ambushes
   var NAMES = { undo: "Undo", pop: "Pop", hold: "Hold", tune: "Tune" };
   var LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
@@ -36,10 +37,10 @@
   var level = saved && F.LEVELS.indexOf(saved.level) >= 0 ? saved.level : "medium";
   var state = saved && valid(saved.state) ? saved.state : F.newGame(K.freshSeed(), { level: level });
   var counted = !!(saved && saved.counted);       // this game's result is already in the record
-  var nextFirst = saved && saved.nextFirst === 2 ? 2 : 1; // who opens the next game: alternates every game
   var cursor = 3, targeting = null;               // {name}
   var popCur = -1, note = "";                     // Pop's keyboard cursor (a cell); a tray explanation (R5)
   var cpuTimer = null, overTimer = null, fx = null, fxUntil = 0;
+  var viewing = false;                            // R13: the end card is hidden to look at the board
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), gridEl = $("grid"), slots = [];
@@ -48,7 +49,7 @@
     var d = document.createElement("div"); d.className = "slot"; gridEl.appendChild(d); slots[vr * COLS + c] = d;
   }
 
-  function persist() { store.save({ state: state, level: level, rec: rec, counted: counted, nextFirst: nextFirst }); }
+  function persist() { store.save({ state: state, level: level, rec: rec, counted: counted }); }
   // discs are filled by owner (gold yours, cool the computer's); the number is printed on them
   function mini(el, n) { el.textContent = n ? String(n) : "none"; el.classList.toggle("none", !n); }
   function landing(col) { var h = F.height(state.own, col); return h < ROWS ? h * COLS + col : -1; }
@@ -58,8 +59,12 @@
     var over = state.over, winCells = {};
     if (over && over.line) over.line.forEach(function (x) { winCells[x] = 1; });
     var ghost = myTurn() && !targeting ? landing(cursor) : -1, popping = targeting && targeting.name === "pop";
+    var threat = {};
+    if (SHOW_THREATS[state.level] && !over) F.threats(state).forEach(function (x) { threat[x] = 1; });
     slots.forEach(function (slot, cell) {
       slot.textContent = ""; slot.className = "slot";
+      if (threat[cell]) { slot.classList.add("threat"); slot.setAttribute("aria-label", "the computer's next disc wins here"); }
+      else slot.removeAttribute("aria-label");
       if (!targeting && myTurn() && cell % COLS === cursor) slot.classList.add("aim");
       if (popping && cell === popCur) slot.classList.add("cur");
       var who = state.own[cell], n = state.num[cell];
@@ -79,8 +84,9 @@
     if (fx) fxUntil = Date.now() + 260;
     fx = null;
     mini($("next"), state.next[0]); mini($("held"), state.held[0]); mini($("cnext"), state.next[1]);
-    var r = rec[level];
-    $("rec").textContent = r.w + "-" + r.l + (r.d ? "-" + r.d : "");
+    var r = rec[level], none = !(r.w || r.l || r.d);
+    $("rec").textContent = none ? "none" : r.w + "-" + r.l + (r.d ? "-" + r.d : "");
+    $("rec").classList.toggle("none", none); // R11/R16: an empty record is a dimmed "none"
     $("rec").setAttribute("aria-label", LEVEL_NAMES[level] + ": won " + r.w + ", lost " + r.l + ", drawn " + r.d);
     Array.prototype.forEach.call($("levels").children, function (b) {
       b.setAttribute("aria-pressed", String(b.getAttribute("data-level") === level));
@@ -98,13 +104,14 @@
     });
     boardEl.classList.toggle("targeting", !!targeting);
     renderHint();
-    if (!over) { $("over").hidden = true; clearTimeout(overTimer); overTimer = null; }
+    if (!over) { viewing = false; $("over").hidden = true; clearTimeout(overTimer); overTimer = null; }
+    else if (viewing) $("over").hidden = true;
   }
 
   function renderHint() {
     var h = $("hint"); h.textContent = "";
     if (note) { h.textContent = note; return; }
-    if (targeting && targeting.name === "pop") { h.textContent = "Tap a disc to pop it. Arrows, Enter; Esc cancels."; return; }
+    if (targeting && targeting.name === "pop") { h.textContent = "Tap a disc to pop it (Esc cancels)"; return; }
     if (targeting && targeting.name === "tune") {
       h.appendChild(document.createTextNode("Your next disc becomes:"));
       var box = document.createElement("span"); box.className = "pick";
@@ -116,23 +123,33 @@
       });
       h.appendChild(box); return;
     }
-    if (state.over) return;
-    if (state.turn === 2) { h.textContent = state.moves ? "The computer is thinking..." : "The computer opens this game."; return; }
-    h.textContent = RULE;
+    if (state.over) { if (viewing) h.textContent = "Tap the board for the summary."; return; }
+    if (state.turn === 2) { h.textContent = state.moves ? "The computer is thinking\u2026" : "The computer opens this game."; return; }
+    h.textContent = SHOW_THREATS[state.level] && F.threats(state).length ? "Blue ring: the computer's next disc would win there." : RULE;
   }
 
   function showOver() {
     var o = state.over; if (!o) return;
     var title = o.winner === 1 ? "You win" : o.winner === 2 ? "The computer wins" : "Draw";
+    viewing = false;
     // R8: "<Result> · <tally>"; a ten-line spells out its sum so nobody has to add it up
     var how = o.type === "ten" ? o.line.map(function (x) { return state.num[x]; }).join(" + ") + " = 10"
       : o.type === "colour" ? "Four in a row" : "Board full";
     var r = rec[state.level] || rec[level];
     $("over-title").textContent = title;
-    $("over-text").textContent = how + " \u00b7 won " + r.w + ", lost " + r.l + (r.d ? ", drawn " + r.d : "");
+    // R16: the tally reads "You 2 : 1 Computer" (this level's record)
+    $("over-text").textContent = how + " \u00b7 You " + r.w + " : " + r.l + " Computer" + (r.d ? " \u00b7 " + r.d + " drawn" : "");
     var gen = state.moves;
     clearTimeout(overTimer);
-    overTimer = setTimeout(function () { overTimer = null; if (state.over && state.moves === gen) $("over").hidden = false; }, OVER_DELAY);
+    // R13: the winning line shows on the bare board first, then the card
+    overTimer = setTimeout(function () { overTimer = null; if (state.over && state.moves === gen && !viewing) $("over").hidden = false; }, OVER_DELAY);
+  }
+  function view(on) { // R13: "See the board" hides the card; a tap on the board or Esc brings it back
+    viewing = on; note = "";
+    if (!on) { clearTimeout(overTimer); overTimer = null; }
+    render();
+    if (!on && state.over) $("over").hidden = false;
+    else boardEl.focus();
   }
   function finish() {
     if (!state.over || counted) return;
@@ -148,7 +165,10 @@
     note = "";
     if (!r.ok) return;
     state = r.state; fx = { cell: r.cell };
-    if (r.award) K.toast((r.earned === "block" ? "Blocked! " : "Ten threat! ") + "+" + NAMES[r.award]);
+    var what = r.earned === "block" ? "Blocked! " : "Ten threat! ";
+    if (r.award) K.toast(what + "+" + NAMES[r.award]);
+    else if (r.free) K.toast(what + "No reward right after a power-up.", "info"); // R2
+    else if (r.full) K.toast(what + "Power-ups full", "info"); // R15
     after();
   }
   function after() {
@@ -169,8 +189,8 @@
     var r = F.computerTurn(state);
     if (!r.actions.length) return;
     var used = r.actions.filter(function (a) { return a.type !== "drop"; }).map(function (a) { return NAMES[a.type]; });
-    state = r.state; fx = { cell: r.drop.cell }; note = "";
-    if (used.length) K.toast("The computer used " + used.join(" and "), "bad");
+    state = r.state; fx = { cell: r.drop.cell };
+    note = used.length ? "The computer used " + used.join(" and ") + "." : ""; // R14: announced in the hint line
     after();
   }
   function flushCpu() { if (cpuTimer !== null) { clearTimeout(cpuTimer); cpuTimer = null; if (state.turn === 2 && !state.over) cpuMove(); } }
@@ -220,6 +240,7 @@
   }
   boardEl.addEventListener("click", function (ev) {
     if (ev.target.closest(".over")) return;
+    if (state.over) { if (viewing) view(false); return; }
     var w = where(ev); if (!w) return;
     if (targeting && targeting.name === "pop") { if (w.cell >= 0) pop(w.cell); return; }
     if (targeting) return;
@@ -231,14 +252,17 @@
   });
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === "Escape") { if (targeting) { targeting = null; render(); } return; }
+    var tag = (e.target && e.target.tagName) || "";
+    if (e.key === "Escape") { if (targeting) { targeting = null; render(); } else if (viewing) view(false); return; }
+    // R17: a key on a focused link or form control belongs to that control (Enter on a games-row link navigates)
+    if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (viewing && (e.key === "Enter" || e.key === " ") && tag !== "BUTTON") { e.preventDefault(); view(false); return; }
     var digit = ["1", "2", "3", "4"].indexOf(e.key);
     if (targeting && targeting.name === "tune" && digit >= 0) { tune(digit + 1); return; }
     if (digit >= 0 || e.key === "u" || e.key === "U") { // keys act like a tap: an unusable slot explains itself
       var id = digit >= 0 ? F.POWERS[digit] : "undo", b = $("tray").children[F.POWERS.indexOf(id)];
       if (b) b.click(); return;
     }
-    var tag = (e.target && e.target.tagName) || "";
     if (targeting && targeting.name === "pop") {
       var mv = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[e.key];
       if (mv) { e.preventDefault(); movePop(mv[0], mv[1]); }
@@ -252,28 +276,46 @@
   });
 
   // ---- new game and difficulty ----
-  function inProgress() { return state.moves > (state.first === 2 ? 1 : 0) && !state.over; } // you have dropped a disc
+  function mine() { return state.own.some(function (v) { return v === 1; }); }
+  // you have dropped a disc in this game (an Undo or a Pop that cleared it does not undo having played)
+  function inProgress() { return !state.over && (mine() || !!state.prev || state.used[0] > 0); }
   function startNew(lv) {
     clearTimeout(cpuTimer); cpuTimer = null; clearTimeout(overTimer); overTimer = null;
-    targeting = null; note = ""; level = lv || level; counted = false; cursor = 3;
-    state = F.newGame(K.freshSeed(), { level: level, first: nextFirst });
-    nextFirst = 3 - nextFirst; // the opener alternates game to game
+    // R12: quitting a live game you have dropped in counts as a loss (on the level it was played at)
+    var quit = inProgress() && !counted;
+    if (quit) { (rec[state.level] || rec[level]).l++; counted = true; }
+    // the opener alternates only after a game that counted, so New game can never re-roll who opens
+    var first = state.over || counted ? 3 - (state.first || 1) : (state.first || 1);
+    targeting = null; note = ""; level = lv || level; counted = false; cursor = 3; viewing = false;
+    state = F.newGame(K.freshSeed(), { level: level, first: first });
     persist(); render();
+    if (quit) K.toast("Counted as a loss", "bad");
     if (state.turn === 2) scheduleCpu();
   }
-  K.twoStep($("new"), inProgress, function () { startNew(); }, "Sure? This ends the game");
+  var QUIT = "Sure? Counts as a loss";
+  K.twoStep($("new"), inProgress, function () { startNew(); }, QUIT);
   $("again").addEventListener("click", function () { startNew(); });
-  // R10: a level switch mid-game uses the same two-step "Sure?" as New game
+  // R10/R12: a level switch mid-game uses the same two-step "Sure?" as New game. The level button is too narrow
+  // for the whole warning at 320px, so it says "Sure?" and the hint line says what it costs.
+  var LEVEL_QUIT = "Sure? Switching level counts this game as a loss.", levelNoteT = null;
   Array.prototype.forEach.call($("levels").children, function (b) {
     var lv = b.getAttribute("data-level");
-    K.twoStep(b, function () { return lv !== level && inProgress(); }, function () {
+    K.twoStep(b, function () {
+      var risky = lv !== level && inProgress();
+      if (risky) {
+        note = LEVEL_QUIT; renderHint(); clearTimeout(levelNoteT);
+        levelNoteT = setTimeout(function () { if (note === LEVEL_QUIT) { note = ""; renderHint(); } }, 3000); // as the button disarms
+      }
+      return risky;
+    }, function () {
       if (lv === level && !state.over) return;
       startNew(lv);
     }, "Sure?");
   });
+  $("over-view").addEventListener("click", function () { view(true); });
 
   render();
-  if (state.over) { $("over").hidden = false; showOver(); }
+  if (state.over) { showOver(); $("over").hidden = false; }
   else if (state.turn === 2) scheduleCpu();
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
@@ -290,6 +332,6 @@
   window.__four = {
     get state() { return state; },
     set state(s) { clearTimeout(cpuTimer); cpuTimer = null; state = s; targeting = null; render(); if (!s.over && s.turn === 2) scheduleCpu(); },
-    render: render, cpu: flushCpu,
+    render: render, cpu: flushCpu, get viewing() { return viewing; }, get rec() { return rec; },
   };
 })();

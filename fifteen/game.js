@@ -12,20 +12,27 @@
   var EARN = "Win a round without Erase or Double to earn one.";
   var DEFS = F.POWERS.map(function (p) {
     return { id: p, label: PW[p], earn: EARN, desc: {
-      undo: "Take back your last turn.", erase: "Remove one of the computer's numbers.",
+      undo: "Take back your last turn.", erase: "Remove one of the computer's numbers, then claim one.",
       peek: "Show the number to block, or the one that wins.", double: "Claim two numbers this turn." }[p] };
   });
   var DIFF = { easy: "Easy", medium: "Medium", hard: "Hard" };
+  var HOLD = 1500;                       // R13: the finished board stays in view this long before the card
 
   var saved = store.load() || {};
   var state = saved.state && F.valid(saved.state) ? saved.state : F.newMatch(K.freshSeed(), "medium");
   var view = saved.view === "grid" ? "grid" : "numbers";
+  // R12/R16: matches won and lost on this device; a quit live match counts as lost
+  var record = saved.record && typeof saved.record.won === "number" && typeof saved.record.lost === "number" ? saved.record : { won: 0, lost: 0 };
+  var counted = !!saved.counted;         // this match's result is already in the record
   var seen = !!saved.seen;               // the one-line note on the first switch to Grid
   var armed = null;                      // "erase" | "double" while a power-up waits for a pick
   var peek = null;                       // last Peek result, shown until the next board action
   var fresh = {};                        // numbers claimed or erased by the last action (fade in)
   var timer = null, gen = 0, cur = 4, diffArmed = null;
   var note = "";                         // a tapped power-up's explanation, shown until the next action
+  var cpuNote = "";                      // R14: what the computer's power-up just did, shown on your turn
+  var holding = false, holdT = null;     // R13: a result just happened; the card waits HOLD ms
+  var viewing = false;                   // R13: "See the board" hides the card again
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), tilesEl = $("tiles"), tiles = [];
@@ -39,7 +46,11 @@
     tilesEl.appendChild(b); tiles.push(b);
   }
 
-  function persist() { store.save({ state: state, view: view, seen: seen }); }
+  function tally() {                     // count a finished match once (a drawn match counts neither way)
+    if (state.match && !counted) { counted = true; if (state.match.winner === 1) record.won++; else if (state.match.winner === 2) record.lost++; }
+  }
+  function persist() { tally(); store.save({ state: state, view: view, seen: seen, record: record, counted: counted }); }
+  function live() { return !state.match && (state.moves > 0 || state.rounds.length > 0); }
   function cellOf(n) { return view === "grid" ? F.CELL_OF[n] : n - 1; }
   function numAt(cell) { for (var k = 1; k <= 9; k++) if (cellOf(k) === cell) return k; return 5; }
   function sumText(line) { return line.join(" + ") + " = 15"; }
@@ -64,7 +75,8 @@
     $("v-numbers").setAttribute("aria-pressed", String(view === "numbers"));
     $("v-grid").setAttribute("aria-pressed", String(view === "grid"));
     $("you").textContent = state.wins[1]; $("cpu").textContent = state.wins[2];
-    $("round").textContent = Math.min(state.round, F.ROUNDS) + "/" + F.ROUNDS;
+    var rec = $("rec"), none = !record.won && !record.lost;
+    rec.textContent = none ? "none" : record.won + "-" + record.lost; rec.classList.toggle("none", none);
     Array.prototype.forEach.call($("diff").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.d === state.diff)); });
     P.tray($("tray"), DEFS, state.power, {
       armed: armed, disabled: whyNot, onUse: activate,
@@ -86,12 +98,16 @@
     return "Not now.";
   }
   // R8: one overlay for a round end and for the match end; the winning three stay visible as chips
+  // R13: the card waits while the finished board shows (holding) and hides again on "See the board" (viewing)
   function renderOver() {
-    var res = state.result, over = $("over"), was = !over.hidden;
-    over.hidden = !res; boardEl.classList.toggle("ended", !!res);
-    if (!res) return;
-    var m = state.match, w = m ? m.winner : res.winner, tally = "You " + state.wins[1] + " : " + state.wins[2] + " Computer" +
-      (state.wins[0] ? " · " + state.wins[0] + " drawn" : "");
+    var res = state.result, over = $("over"), was = !over.hidden, card = !!res && !holding && !viewing;
+    over.hidden = !card; boardEl.classList.toggle("ended", card);
+    if (!card) return;
+    var m = state.match, w = m ? m.winner : res.winner, a = state.wins[1], c = state.wins[2];
+    // R16: rounds read "You 2 : 1 Computer", a match "Match won 3-1"; each part stays on one line (craft #9)
+    var parts = [m ? (w === 1 ? "Match won " + a + "-" + c : w === 2 ? "Match lost " + a + "-" + c : "Match drawn " + a + "-" + c)
+      : "You " + a + " : " + c + " Computer"];
+    if (state.wins[0]) parts.push(state.wins[0] + " drawn");
     $("over-title").textContent = m ? (w === 1 ? "You win the match" : w === 2 ? "The computer wins" : "Match drawn")
       : (w === 1 ? "You win round " : w === 2 ? "Computer wins round " : "Round " + state.round + " drawn").replace(/round $/, "round " + state.round);
     var trio = $("trio"); trio.textContent = "";
@@ -104,11 +120,18 @@
       trio.setAttribute("aria-label", sumText(res.line));
     } else trio.setAttribute("aria-label", "");
     trio.hidden = !res.line;
-    $("over-text").textContent = (res.line ? "" : "Nobody made 15 · ") + tally + (m ? " · " + DIFF[state.diff] : "");
+    if (!res.line) parts.unshift("Nobody made 15");
+    if (m) parts.push(DIFF[state.diff]);
+    var txt = $("over-text"); txt.textContent = "";
+    parts.forEach(function (t, i) {
+      if (i) txt.appendChild(document.createTextNode(" · "));
+      var sp = document.createElement("span"); sp.textContent = t; txt.appendChild(sp);
+    });
     var best = $("over-best"), msg = "", gold = false;
     if (m) msg = "";                       // a new game starts a fresh stock, so a last reward means nothing
     else if (res.winner === 1 && res.earned) { msg = "+1 " + PW[res.earned]; gold = true; }
-    else if (res.winner === 1 && !m) msg = "No power-up: you used Erase or Double this round.";
+    else if (res.winner === 1 && res.why === "full") msg = "Power-ups full.";            // R15
+    else if (res.winner === 1 && res.why === "powered") msg = "No power-up: you used Erase or Double this round.";
     else if (res.winner === 2 && res.earned) msg = "The computer earned a " + PW[res.earned] + ".";
     best.textContent = msg; best.hidden = !msg; best.className = gold ? "best" : "note";
     $("next").hidden = !!m; $("again").hidden = !m;
@@ -117,20 +140,24 @@
   }
   function cpuPending() { return F.playing(state) && state.turn === 2; }
   function hintText() {
-    if (state.result) return "";             // the overlay carries the result (R7: one channel per event)
+    if (state.result) return viewing ? "Tap the board for the result." : "";   // the card carries the result (R7)
     if (note) return note;
     if (cpuPending()) return "The computer is thinking.";
+    var mine = state.owner.some(function (o) { return o === 1; });
+    var lead = mine ? "" : "Round " + state.round + " of " + F.ROUNDS + ". ";
     if (armed === "erase") return "Tap a computer number to erase it (Esc cancels).";
     if (armed === "double") return "Double: pick your first number (Esc cancels).";
     if (state.acted && state.last.some(function (a) { return a.type === "double"; })) return "Double: pick your second number.";
     if (peek) return peek.text;
     if (state.blocked) return "Now claim a number (not the one you erased).";
-    return state.owner.every(function (o) { return !o; }) ? "Your turn. Claim any number." : "Your turn.";
+    if (cpuNote) return lead + cpuNote + " Your turn.";
+    return lead + (state.owner.every(function (o) { return !o; }) ? "Your turn. Claim any number." : "Your turn.");
   }
 
   // ---- turns ----
   function settle(prevOwner) {
     fresh = {};
+    if (state.result && prevOwner) startHold();
     if (prevOwner) for (var i = 0; i < 9; i++) if (prevOwner[i] !== state.owner[i]) fresh[i + 1] = true;
     persist(); render();
     if (cpuPending()) schedule();
@@ -141,25 +168,32 @@
       if (g !== gen || !cpuPending()) return;        // a stale timer never plays an old board
       timer = null; var before = state.owner.slice(), r = F.cpuTurn(state);
       state = r.state; peek = null;
-      r.actions.forEach(function (a) {
-        if (a.type === "double") K.toast("The computer used Double", "bad");
-        if (a.type === "erase") K.toast("The computer erased your " + a.n, "bad");
-      });
+      // R14: the computer's power-ups are announced in the hint line, on your turn
+      cpuNote = r.actions.map(function (a) {
+        return a.type === "double" ? "The computer used Double." : a.type === "erase" ? "The computer erased your " + a.n + "." : "";
+      }).join(" ").replace(/\s+/g, " ").trim();
       settle(before);
     }, THINK);
   }
   function cancelCpu() { gen++; clearTimeout(timer); timer = null; }
+  function startHold() {
+    clearTimeout(holdT); holding = true; viewing = false;
+    holdT = setTimeout(function () { holdT = null; if (holding) showCard(); }, HOLD);
+  }
+  function showCard() { clearTimeout(holdT); holdT = null; holding = false; viewing = false; render(); }
+  function clearHold() { clearTimeout(holdT); holdT = null; holding = false; viewing = false; }
 
   function onTile(ev) { pick(+ev.currentTarget.dataset.n); }
   function pick(n) {
     cur = cellOf(n);
+    if (state.result && (holding || viewing)) return showCard();   // a tap on the finished board brings the card
     if (!F.playing(state) || state.turn !== 1) return;
-    note = "";
+    note = ""; cpuNote = "";
     var before = state.owner.slice(), r;
     if (armed === "erase") {
       r = F.use(state, "erase", n);
       if (!r.ok) { K.toast("Pick one of the computer's numbers", "bad"); return render(); }
-      armed = null; state = r.state; peek = null; K.toast("Erased " + n); return settle(before);
+      armed = null; state = r.state; peek = null; return settle(before);   // the hint says what comes next
     }
     if (armed === "double") {
       if (state.owner[n - 1]) { K.toast("Pick a free number", "bad"); return render(); }
@@ -173,7 +207,7 @@
   }
 
   function activate(id) {
-    note = "";
+    note = ""; cpuNote = "";
     if (armed === id) { armed = null; return render(); }
     armed = null;
     if (id === "undo") {
@@ -201,18 +235,22 @@
   function setView(v, quiet) {
     if (v === view) return;
     var keep = numAt(cur); view = v; cur = cellOf(keep);   // the cursor stays on the same number
-    if (v === "grid" && !seen && !quiet) { seen = true; K.toast("Same board: every line adds up to 15."); }
+    // the one-line note goes in the hint line, so it covers nothing (cold #1)
+    if (v === "grid" && !seen && !quiet) { seen = true; note = "Same board: every line adds up to 15."; }
     persist(); render();
   }
 
   // ---- match flow ----
+  // R12: quitting a live match (New game or a level switch after the first move) records it as lost
   function startMatch(diff) {
-    cancelCpu(); armed = null; peek = null; fresh = {}; note = "";
-    state = F.newMatch(K.freshSeed(), diff || state.diff); persist(); render();
+    if (live()) record.lost++;
+    cancelCpu(); clearHold(); armed = null; peek = null; fresh = {}; note = ""; cpuNote = "";
+    state = F.newMatch(K.freshSeed(), diff || state.diff); counted = false; persist(); render();
+    if (cpuPending()) schedule();
   }
   function nextRound() {
     if (!state.result || state.match) return;
-    cancelCpu(); armed = null; peek = null; fresh = {}; note = "";
+    cancelCpu(); clearHold(); armed = null; peek = null; fresh = {}; note = ""; cpuNote = "";
     var back = $("over").contains(document.activeElement);
     state = F.nextRound(state); persist(); render();
     if (back) tiles[numAt(cur) - 1].focus();
@@ -220,6 +258,7 @@
   }
   var diffT = null;
   function disarmDiff() {
+    if (diffArmed && /counts as a loss/.test(note)) { note = ""; $("hint").textContent = hintText(); }
     clearTimeout(diffT); diffArmed = null;
     Array.prototype.forEach.call($("diff").children, function (x) { x.textContent = DIFF[x.dataset.d]; });
   }
@@ -227,29 +266,34 @@
     var b = document.createElement("button"); b.type = "button"; b.dataset.d = d; b.textContent = DIFF[d];
     b.addEventListener("click", function () {
       if (d === state.diff && !state.match) return;
-      // R10: the same two-step "Sure?" as New game
-      var midMatch = !state.match && (state.moves > 0 || state.rounds.length > 0);
-      if (midMatch && diffArmed !== d) {
-        disarmDiff(); diffArmed = d; b.textContent = "Sure?";
+      // R10/R12: the same two-step "Sure?" as New game, and the hint says it counts as a loss
+      if (live() && diffArmed !== d) {
+        disarmDiff(); K.clearToast(); diffArmed = d; b.textContent = "Sure?";
+        note = "Sure? Switching to " + DIFF[d] + " counts as a loss."; $("hint").textContent = note;
         diffT = setTimeout(disarmDiff, 3000); return;
       }
       disarmDiff(); startMatch(d);
     });
     $("diff").appendChild(b);
   });
-  K.twoStep($("new"), function () { return !state.match && (state.moves > 0 || state.rounds.length > 0); }, function () { startMatch(); }, "Sure? This ends the match");
+  K.twoStep($("new"), live, function () { startMatch(); }, "Sure? Counts as a loss");
   $("again").addEventListener("click", function () { startMatch(); });
   $("next").addEventListener("click", nextRound);
+  $("over-view").addEventListener("click", function () { viewing = true; render(); boardEl.focus(); });
   $("v-numbers").addEventListener("click", function () { setView("numbers"); });
   $("v-grid").addEventListener("click", function () { setView("grid"); });
 
   // ---- keyboard: arrows move over the 3x3 as drawn, Enter claims, V view, 1-4 power-ups, Esc cancels ----
   // R9: while Erase or Double waits for a pick, the arrows move the cursor from anywhere and Enter picks.
-  // Enter or Space on a focused button (not a tile) is that button's own click, never a game action.
+  // Enter or Space on a focused button (not a tile) is that button's own click, never a game action;
+  // a focused link, input or select keeps every key to itself (R17: Enter on a games-row link navigates).
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var t = e.target && e.target.closest ? e.target.closest("a, input, select, textarea") : null;
+    if (t) return;
     var ae = document.activeElement, onButton = ae && ae.tagName === "BUTTON" && !ae.classList.contains("ft");
     if ((e.key === "Enter" || e.key === " ") && onButton) return;
+    if (state.result && (holding || viewing) && (e.key === "Enter" || e.key === " " || e.key === "Escape")) { e.preventDefault(); return showCard(); }
     if (e.key === "Escape") { if (armed) { armed = null; render(); } return; }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
     if (pi >= 0) { e.preventDefault(); return activate(F.POWERS[pi]); }
@@ -272,7 +316,7 @@
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-match. Not reachable from the UI.
   window.__demo = function () {
-    cancelCpu(); armed = null; fresh = {};
+    cancelCpu(); clearHold(); armed = null; fresh = {}; note = ""; cpuNote = ""; record = { won: 2, lost: 1 };
     var s = F.newMatch(2026, "medium");
     s.round = 3; s.wins = [1, 1, 0]; s.rounds = [1, 0];
     s.owner = [0, 1, 0, 2, 2, 0, 0, 1, 0];     // you 2 8, computer 4 5: you must block 6 (4+5+6)
@@ -280,7 +324,8 @@
     state = s; peek = null; fresh = { 5: true }; render();
   };
   window.__fifteen = {
-    get state() { return state; }, set state(s) { cancelCpu(); state = s; armed = null; peek = null; render(); if (cpuPending()) schedule(); },
-    get view() { return view; }, render: render,
+    get state() { return state; }, set state(s) { cancelCpu(); clearHold(); state = s; armed = null; peek = null; note = ""; cpuNote = ""; render(); if (cpuPending()) schedule(); },
+    get view() { return view; }, render: render, get record() { return record; },
+    get holding() { return holding; }, get viewing() { return viewing; }, HOLD: HOLD,
   };
 })();

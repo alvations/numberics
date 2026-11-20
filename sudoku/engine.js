@@ -78,8 +78,18 @@
   function countSolutions(grid, limit) { return search(grid, limit || 2, null, null); }
   function solve(grid) { var o = {}; search(grid, 1, null, o); return o.sol || null; }
 
+  // A dig that stops above the clue target (about 2% of Hard grids cannot go below 27) tries a fresh grid from the
+  // same random stream, so the stated ladder holds; every puzzle that met its target first time is unchanged.
   function generate(seed, difficulty) {
-    var target = CLUES[difficulty] || CLUES.medium, r = rng(seed);
+    var target = CLUES[difficulty] || CLUES.medium, r = rng(seed), best = null;
+    for (var a = 0; a < 12; a++) {
+      var g = dig(r, target);
+      if (!best || g.clues < best.clues) best = g;
+      if (best.clues <= target) break;
+    }
+    return { puzzle: best.puzzle, solution: best.solution, clues: best.clues, difficulty: difficulty, seed: seed >>> 0 };
+  }
+  function dig(r, target) {
     var o = {}; search(new Array(81).fill(0), 1, r, o);
     var solution = o.sol, puzzle = solution.slice(), clues = 81;
     var order = shuffle(Array.from({ length: 81 }, function (_, k) { return k; }), r);
@@ -88,7 +98,7 @@
       puzzle[cell] = 0;
       if (countSolutions(puzzle, 2) !== 1) puzzle[cell] = keep; else clues--;
     }
-    return { puzzle: puzzle, solution: solution, clues: clues, difficulty: difficulty, seed: seed >>> 0 };
+    return { puzzle: puzzle, solution: solution, clues: clues };
   }
 
   // Cells that share a digit with a peer: what the UI paints red.
@@ -114,12 +124,17 @@
   // Undo is free and unlimited, so it has no stock. The three charged power-ups:
   //   reveal: the true digit for one cell (the old Hint), check: marks wrong digits once,
   //   cands: fills the pencil notes of one 3x3 box from the digits already on the board.
-  // Earned by PROGRESS, never by correctness: `high` is the most cells the player has ever had filled at once
-  // in this puzzle (givens not counted). It never goes down (Erase and Undo leave it), and each time it reaches
-  // a new multiple of 9 one charge is paid. A wrong digit counts as much as a right one, so a reward says
-  // nothing about the answer, and rewinding cannot farm (about 4 easy, 5 medium, 6 hard per puzzle).
-  // A cell filled by Reveal raises `high` but never pays (a power-up never earns one), and the move that
-  // solves the board never pays (a charge would be useless). Spending is permanent: Undo never refunds.
+  // Earned by PROGRESS, never by correctness: `progress` counts the cells the player has filled that show NO
+  // conflict (givens and revealed cells not counted). Conflicts are already painted red, so a reward says nothing
+  // new about the answer, and typing junk into every cell earns nothing (TRIAGE2 Sudoku, mechanics #2).
+  // `high` is the most progress ever reached in this puzzle. It never goes down (Erase and Undo leave it), and
+  // each time it reaches a new multiple of 9 one charge is paid, so rewinding cannot farm (about 4 easy, 5 medium,
+  // 6 hard per puzzle). A wrong digit that clashes with nothing counts as much as a right one.
+  // A power-up never earns one (R2): Reveal never pays, a revealed cell never counts toward progress (even if it
+  // is erased and typed again), and when Reveal replaced one of the player's digits (which can clear a clash)
+  // the next digit placed pays nothing either (`free`). A Reveal into an empty cell can only add clashes, so it
+  // can never help a later move pay. Candidates and Check do not change any digit. The move that solves the
+  // board never pays (a charge would be useless). Spending is permanent: Undo never refunds.
   var KINDS = ["reveal", "check", "cands"], CAP = 9, STEP = 9;
   var START = { reveal: 1, check: 0, cands: 0 };
   // Reveal is the strongest (it hands over an answer), so it is the rarest reward.
@@ -127,6 +142,18 @@
 
   function filled(s) { // cells the player has filled (givens excluded)
     var n = 0; for (var c = 0; c < 81; c++) if (s.grid[c] && !s.puzzle[c]) n++; return n;
+  }
+  // cells that count toward rewards: filled by the player (not given, never revealed) and showing no conflict
+  function progress(s) {
+    var rev = {}; (s.revealed || []).forEach(function (c) { rev[c] = true; });
+    var n = 0;
+    for (var c = 0; c < 81; c++) {
+      if (!s.grid[c] || s.puzzle[c] || rev[c]) continue;
+      var clash = false;
+      for (var p = 0; p < PEERS[c].length; p++) if (s.grid[PEERS[c][p]] === s.grid[c]) { clash = true; break; }
+      if (!clash) n++;
+    }
+    return n;
   }
   // Which power-up the k-th progress step pays: a pure function of the puzzle seed and k. Full kinds are skipped.
   function awardKind(seed, k, stock) {
@@ -144,7 +171,8 @@
     return { puzzle: gen.puzzle.slice(), solution: gen.solution.slice(), grid: gen.puzzle.slice(),
              notes: new Array(81).fill(0), difficulty: gen.difficulty, seed: gen.seed,
              moves: 0, hints: 0, history: [], solved: false,
-             stock: Object.assign({}, START), used: { reveal: 0, check: 0, cands: 0 }, high: 0, gain: [] };
+             stock: Object.assign({}, START), used: { reveal: 0, check: 0, cands: 0 }, high: 0, gain: [],
+             revealed: [], free: false };
   }
   // Brings an older save (before power-ups, or from the unit-reward version) up to date. Old saves keep loading.
   function upgrade(s) {
@@ -153,8 +181,12 @@
     if (!ok(n.used)) n.used = { reveal: s.hints || 0, check: 0, cands: 0 }; else n.used = Object.assign({}, n.used);
     // a debt left by the old Undo rule (stock below zero) is forgiven: Undo no longer touches the stock
     KINDS.forEach(function (k) { n.stock[k] = Math.max(0, Math.min(CAP, n.stock[k])); n.used[k] = Math.max(0, n.used[k]); });
-    if (!Number.isInteger(n.high) || n.high < 0) n.high = filled(n); // progress made before this rule pays nothing again
-    n.high = Math.min(81, Math.max(n.high, filled(n)));
+    // revealed cells and the R2 flag are newer: an older save has none (its earlier Reveals already raised `high`)
+    n.revealed = Array.isArray(s.revealed) ? s.revealed.filter(function (c) { return Number.isInteger(c) && c >= 0 && c < 81; }) : [];
+    n.free = s.free === true;
+    // progress made before this rule pays nothing again; a mark set by the old any-digit rule is kept (never lowered)
+    if (!Number.isInteger(n.high) || n.high < 0) n.high = filled(n);
+    n.high = Math.min(81, Math.max(n.high, progress(n)));
     delete n.paid; // the old per-unit mask
     if (!Number.isInteger(n.hints)) n.hints = n.used.reveal;
     n.solved = isComplete(n.grid);
@@ -167,6 +199,7 @@
     n.grid = s.grid.slice(); n.notes = s.notes.slice(); n.history = s.history.slice();
     if (s.stock) n.stock = Object.assign({}, s.stock);
     if (s.used) n.used = Object.assign({}, s.used);
+    n.revealed = (s.revealed || []).slice();
     n.gain = [];
     return n;
   }
@@ -176,7 +209,7 @@
   }
   // After a digit lands: raise the high-water mark and pay a new multiple of 9, unless `pays` is false.
   function settle(n, pays) {
-    var f = filled(n);
+    var f = progress(n);
     if (f <= n.high) return;
     var step = Math.floor(f / STEP) > Math.floor(n.high / STEP);
     n.high = f;
@@ -185,12 +218,13 @@
     if (k) { n.stock[k]++; n.gain.push(k); }
   }
 
-  function put(s, c, d, pays) {
+  function put(s, c, d, pays, revealed) {
     var n = cloneState(s); remember(n, s);
+    if (revealed && n.revealed.indexOf(c) < 0) n.revealed.push(c); // before settle: a revealed cell never counts
     n.grid[c] = d; n.notes[c] = 0; n.moves++;
     if (d) PEERS[c].forEach(function (p) { n.notes[p] &= ~(1 << d); }); // a placed digit removes that pencil mark from peers
     n.solved = isComplete(n.grid);
-    if (d) settle(n, pays);
+    if (d) { settle(n, pays && !s.free); n.free = false; } // the first digit after a Reveal that replaced one pays nothing (R2)
     return n;
   }
   // Returns a NEW state; an illegal action returns the same object (callers can compare by identity).
@@ -213,10 +247,12 @@
   function has(s, k) { return !s.solved && s.stock && s.stock[k] > 0; }
   function spend(n, k) { n.stock[k]--; n.used[k]++; }
 
-  // Reveal: the true digit for cell c. Costs one reveal; a unit it finishes does not pay.
+  // Reveal: the true digit for cell c. Costs one reveal, never pays, and the cell never counts toward progress.
   function reveal(s, c) {
     if (!has(s, "reveal") || isGiven(s, c) || s.grid[c] === s.solution[c]) return s;
-    var n = put(s, c, s.solution[c], false); spend(n, "reveal"); n.hints = s.hints + 1; return n;
+    var n = put(s, c, s.solution[c], false, true); spend(n, "reveal"); n.hints = s.hints + 1;
+    n.free = s.free || !!s.grid[c]; // it replaced a digit: a clash may be gone, so the next digit placed pays nothing (R2)
+    return n;
   }
   // Check: which placed digits are wrong (compared with the one solution). Returns { state, wrong }.
   // The board is unchanged, so it is not an Undo step; the charge is spent even when nothing is wrong.
@@ -246,6 +282,6 @@
   return { CLUES: CLUES, generate: generate, solve: solve, countSolutions: countSolutions, conflicts: conflicts,
            isComplete: isComplete, newState: newState, place: place, toggleNote: toggleNote, undo: undo,
            hint: hint, reveal: reveal, check: check, fillBox: fillBox, candidates: candidates, upgrade: upgrade,
-           canUndo: canUndo, filled: filled, total: total, KINDS: KINDS, START: START, CAP: CAP, STEP: STEP,
+           canUndo: canUndo, filled: filled, progress: progress, total: total, KINDS: KINDS, START: START, CAP: CAP, STEP: STEP,
            isGiven: isGiven, PEERS: PEERS, ROW: ROW, COL: COL, BOX: BOX, UNIT: UNIT, UNITS_OF: UNITS_OF };
 });

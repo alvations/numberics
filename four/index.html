@@ -19,7 +19,7 @@
       <p class="sub"><a href="../">Numberics</a> &middot; Four in a row, or four that make ten.</p>
     </div>
     <div class="stats" aria-live="off">
-      <div class="stat"><span>Next</span><b id="next" class="mini you" aria-label="your next disc"></b></div>
+      <div class="stat"><span>You</span><b id="next" class="mini you" aria-label="your next disc"></b></div>
       <div class="stat"><span>Held</span><b id="held" class="mini you" aria-label="your held disc"></b></div>
       <div class="stat"><span>Computer</span><b id="cnext" class="mini cpu" aria-label="the computer's next disc"></b></div>
       <div class="stat"><span>Record</span><b id="rec">0-0</b></div>
@@ -40,14 +40,18 @@
     <div id="over" class="over" hidden>
       <h2 id="over-title">You win</h2>
       <p id="over-text"></p>
-      <button id="again" class="btn primary" type="button">New game</button>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">New game</button>
+      </div>
     </div>
   </div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Tap a column, or use the arrows and Enter, to drop your next disc. Win with four of your colour in a row,
-     or a ten-line: any four in a row, any colours, that add up to exactly 10 and include at least two of your discs.
-     The opener alternates. Block a line of three or set up a ten to earn power-ups.</p>
+  <p class="how">Tap a column (or arrows and Enter) to drop your next disc. Win with four of yours in a row, or four in
+     a row of any colours that make ten, two of them yours. Discs are mostly 1s. On Easy and Medium a blue ring marks
+     where the computer's next disc would win; on Hard it can also Pop, Hold and Tune. Block a three or set up a ten
+     to earn power-ups.</p>
   <nav id="games" class="games" data-root="../" data-current="four" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

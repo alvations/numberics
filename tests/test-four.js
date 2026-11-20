@@ -277,6 +277,115 @@ t("a power-up never earns a power-up", () => {
   const a = F.use(s, "tune", 2).state, b = F.use(a, "hold").state;
   const tot = p => p.undo + p.pop + p.hold + p.tune; eq(tot(b.power[0]), 1);
 });
+// ---- R2 (round 2, critic F1 blocker): a power-up never earns one, including the next drop after it ----
+const total = p => p.undo + p.pop + p.hold + p.tune;
+t("R2 repro: Pop then the drop pays nothing (the critic's exact script)", () => {
+  let s = F.newGame(1, { level: "easy" });
+  for (let k = 0; k < 6 && !s.over; k++) {
+    if (s.turn === 1) { const L = F.legal(s); s = F.drop(s, L[(1 + k) % L.length]).state; } else s = F.computerTurn(s).state;
+  }
+  ok(!s.over && s.turn === 1, "setup reached the player's turn");
+  const plain = F.drop(s, 2);
+  const x = JSON.parse(JSON.stringify(s)); x.power[0].pop = 1;
+  const popped = F.use(x, "pop", 2); ok(popped.ok, "pop cell 2");
+  const r = F.drop(popped.state, 2); ok(r.ok);
+  eq(r.earned, "block", "the pop set up a block (the old code paid it)");
+  eq(r.award, null, "a drop right after Pop paid " + r.award); eq(r.free, true);
+  ok(total(r.state.power[0]) <= total(x.power[0]) - 1, "stock rose through the pop");
+  eq(plain.earned, null, "the plain drop in column 2 earns nothing");
+});
+t("R2: Tune, Hold and Pop each make the next drop of that side unpaid; the drop after that pays again", () => {
+  const blockBoard = () => board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1]], { turn: 1, next: [1, 1] });
+  for (const [name, arg] of [["tune", 2], ["hold"], ["pop", null]]) {
+    const s = blockBoard(); s.power[0] = { undo: 0, pop: 1, hold: 1, tune: 1 };
+    if (name === "pop") { s.own[at(0, 6)] = 2; s.num[at(0, 6)] = 1; }
+    const u = F.use(s, name, name === "pop" ? at(0, 6) : arg); ok(u.ok, name);
+    u.state.next[0] = 1;
+    const r = F.drop(u.state, 3); eq(r.earned, "block", name); eq(r.award, null, name); eq(r.free, true, name);
+    eq(r.state.free[0], 0, name + ": the mark is spent by the drop");
+  }
+  const plain = F.drop(blockBoard(), 3); ok(plain.award, "the same block without a power-up pays"); eq(plain.free, false);
+});
+t("R2: Hard's computer earns nothing on the drop after its own power-up", () => {
+  const s = board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1]], { turn: 2, next: [1, 2], level: "hard" });
+  s.power[1].tune = 1; const u = F.use(s, "tune", 1); ok(u.ok);
+  const r = F.drop(u.state, 3); eq(r.earned, "block"); eq(r.award, null); eq(r.state.power[1], { undo: 0, pop: 0, hold: 0, tune: 0 });
+});
+t("R2 property: random games mixing power-ups and drops never raise the stock through a power-up-assisted drop", () => {
+  let rs = 77, assisted = 0, paidPlain = 0;
+  const pick = (arr) => { const r = F.rand(rs); rs = r[1]; return arr[Math.floor(r[0] * arr.length)]; };
+  for (let g = 0; g < 150; g++) {
+    let s = F.newGame(5000 + g, { level: ["easy", "medium", "hard"][g % 3], first: g % 2 ? 2 : 1 });
+    s.power[0] = { undo: 2, pop: 3, hold: 3, tune: 3 }; s.power[1] = { undo: 0, pop: 2, hold: 2, tune: 2 };
+    let guard = 0;
+    while (!s.over && guard++ < 200) {
+      const side = s.turn - 1, before = total(s.power[side]);
+      let usedPower = false;
+      if (pick([0, 1, 2]) === 0) { // try a random power-up first (any side may act for the property)
+        const name = pick(["pop", "hold", "tune"]);
+        const filled = s.own.map((v, i) => (v ? i : -1)).filter(i => i >= 0);
+        const arg = name === "pop" ? (filled.length ? pick(filled) : 0) : name === "tune" ? pick([1, 2, 3, 4]) : undefined;
+        const u = F.use(s, name, arg); if (u.ok) { s = u.state; usedPower = true; }
+      }
+      const mid = total(s.power[side]);
+      const r = F.drop(s, pick(F.legal(s))); ok(r.ok);
+      if (usedPower) {
+        assisted++;
+        eq(r.award, null, "a drop after " + "a power-up paid");
+        ok(total(r.state.power[side]) < before, "stock rose through a power-up: " + before + " -> " + total(r.state.power[side]));
+      } else if (r.award) paidPlain++;
+      ok(total(r.state.power[side]) <= mid + 1, "at most one award per drop");
+      s = r.state;
+    }
+  }
+  ok(assisted > 300, "the fuzz exercised power-ups (" + assisted + ")"); ok(paidPlain > 10, "plain drops still pay (" + paidPlain + ")");
+});
+t("R2: Undo restores the mark with the board (a rewound assisted drop stays unpaid)", () => {
+  const s = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1]], { turn: 1, next: [1, 1] }); s.power[0] = { undo: 1, pop: 0, hold: 0, tune: 1 };
+  const t1 = F.use(s, "tune", 2).state; t1.next[0] = 1;
+  let x = F.drop(t1, 3).state; x = F.computerTurn(x).state; if (x.over) return;
+  const u = F.use(x, "undo"); ok(u.ok); eq(u.state.free[0], 1);
+  eq(F.drop(u.state, 3).award, null);
+});
+t("R15: with every slot full the reward is skipped and the result says so", () => {
+  const s = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1]], { turn: 1, next: [1, 1] });
+  s.power[0] = { undo: 9, pop: 9, hold: 9, tune: 9 };
+  const r = F.drop(s, 3); eq(r.full, true); eq(r.award, null);
+  const s2 = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1]], { turn: 1, next: [1, 1] }); s2.power[0] = { undo: 9, pop: 9, hold: 9, tune: 3 };
+  const r2 = F.drop(s2, 3); eq(r2.award, "tune", "a slot under the cap takes it"); eq(r2.full, false);
+});
+t("old saves without the R2 mark still play", () => {
+  const s = JSON.parse(JSON.stringify(F.newGame(3))); delete s.free;
+  const r = F.drop(s, 3); ok(r.ok); eq(r.state.free, [0, 0]);
+});
+
+// ---- threat marks (round 2, cold #5): where the computer's shown next disc would complete a line ----
+t("threats: a playable hole the computer's next disc completes (ten-line and colour) is listed", () => {
+  const s = board([[0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 1, next: [1, 3] });
+  s.own[at(0, 0)] = 2; s.num[at(0, 0)] = 2;
+  ok(F.threats(s).indexOf(at(0, 4)) >= 0, "the 3 at (0,4) makes 4 + 2 + 1 + 3 with two of the computer's");
+  s.next[1] = 2; ok(F.threats(s).indexOf(at(0, 4)) < 0, "a 2 would not");
+  const c = board([[0, 0, 2, 1], [0, 1, 2, 1], [0, 2, 2, 1]], { turn: 1, next: [1, 1] });
+  ok(F.threats(c).indexOf(at(0, 3)) >= 0, "colour four");
+});
+t("threats: a floating hole is listed too (so you can see not to drop under it), and never an occupied cell", () => {
+  // computer discs on row 1 at columns 0-2, nothing at (1,3): its next disc would win there once (0,3) is filled
+  const s = board([[0, 0, 1, 1], [0, 1, 1, 2], [0, 2, 1, 1], [1, 0, 2, 1], [1, 1, 2, 1], [1, 2, 2, 1]], { turn: 1, next: [1, 1] });
+  const th = F.threats(s); ok(th.indexOf(at(1, 3)) >= 0, JSON.stringify(th));
+  ok(th.every(x => !s.own[x]));
+  eq(F.threats(Object.assign({}, s, { over: { winner: 1 } })), []);
+});
+t("threats match the safe-move check: a landing cell is a threat exactly when the computer can win there now", () => {
+  let rs = 3;
+  for (let g = 0; g < 40; g++) {
+    let s = F.newGame(900 + g);
+    for (let k = 0; k < 14 && !s.over; k++) { const L = F.legal(s), r = F.rand(rs); rs = r[1]; s = F.drop(s, L[Math.floor(r[0] * L.length)]).state; }
+    if (s.over) continue;
+    const th = F.threats(s);
+    for (const c of F.legal(s)) { const cell = F.height(s.own, c) * C + c;
+      eq(th.indexOf(cell) >= 0, F.linesAt(s.own, s.num, cell, 2, s.next[1]).length > 0, "cell " + cell); }
+  }
+});
 t("state is plain JSON (saves and loads)", () => {
   let s = F.newGame(2); s = F.drop(s, 3).state; s = F.computerTurn(s).state;
   const back = JSON.parse(JSON.stringify(s)); eq(F.drop(back, 2).state.own, F.drop(s, 2).state.own);

@@ -136,6 +136,48 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("no page errors in round 1 checks", e5.length === 0, e5.join("|"));
   await ctx.close();
 
+  // 4b2. Round 2 fixes (docs/reviews/TRIAGE2.md)
+  ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); const e7 = []; p.on("pageerror", x => e7.push(x.message));
+  await p.goto(url);
+  ck("R11: BEST says a dimmed none before any score", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
+  // a power-up tap right after a swipe is never lost (cold #1): press during the animation, release after it ends
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[3] = 1; s.grid[7] = 2; s.top = 2; s.moves = 3;
+    s.prev = { grid: s.grid.slice(), score: 0, top: 2, moves: 2, seed: s.seed, power: { undo: 1, smash: 0, swap: 0, boost: 1 } };
+    s.power = { undo: 1, smash: 0, swap: 0, boost: 1 }; s.score = 0; s.over = false; window.__numberics.state = s; });
+  const bb = await p.locator("#tray .pw:nth-child(4)").boundingBox();
+  await p.keyboard.press("ArrowLeft");
+  await p.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await p.mouse.down();
+  await p.waitForTimeout(220); // the slide's final draw (110 ms) lands while the finger is down
+  await p.mouse.up();
+  ck("a Boost tap during the slide animation still arms Boost", await p.evaluate(() => !!window.__numberics.targeting && window.__numberics.targeting.name === "boost"));
+  await p.keyboard.press("Escape");
+  // R2 in the client: boost, swipe, a new 64 that pays nothing, and the toast says why (neutral, not gold)
+  await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[0] = 6; s.grid[3] = 5; s.top = 6; s.power = { undo: 0, smash: 0, swap: 0, boost: 1 }; s.prev = null; s.free = false; window.__numberics.state = s; });
+  await p.keyboard.press("4");
+  const bx = await p.locator("#board").boundingBox();
+  await p.mouse.click(bx.x + bx.width * 0.875, bx.y + bx.height * 0.125); // cell 3
+  await p.waitForTimeout(50);
+  ck("boost marks the next move unpaid", await p.evaluate(() => window.__numberics.state.grid[3] === 6 && window.__numberics.state.free === true));
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
+  ck("R2: the swipe after a Boost makes 128 and earns nothing", await p.evaluate(() => { const s = window.__numberics.state; return s.grid[0] === 7 && s.top === 7 && s.power.smash + s.power.swap + s.power.boost + s.power.undo === 0 && !s.free; }));
+  ck("R2: the toast says no reward right after a power-up, in the neutral info style", await p.evaluate(() => { const t = document.getElementById("toast"); return /^New tile 128\. No reward right after a power-up\.$/.test(t.textContent) && t.classList.contains("info") && !t.classList.contains("bad"); }));
+  const tb2 = await p.evaluate(() => { const r = (x) => document.querySelector(x).getBoundingClientRect(); return [r("#toast").bottom, r("#board").top]; });
+  ck("the toast stays off the board (aesthetic #1)", tb2[0] <= tb2[1], JSON.stringify(tb2));
+  // small new tiles are not news (aesthetic nit 4)
+  await p.evaluate(() => { document.getElementById("toast").classList.remove("on"); document.getElementById("toast").textContent = ""; const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[0] = 1; s.grid[1] = 1; s.top = 1; s.free = false; window.__numberics.state = s; });
+  await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(250);
+  ck("a new 4 tile does not toast", await p.evaluate(() => window.__numberics.state.top === 2 && !document.getElementById("toast").classList.contains("on")));
+  // R17: Enter on a focused games-row link navigates and never moves a tile
+  const mv = await p.evaluate(() => window.__numberics.state.moves);
+  await p.focus("#games a[href*='sudoku']");
+  await Promise.all([p.waitForURL(/sudoku/, { timeout: 5000 }).catch(() => null), p.keyboard.press("Enter")]);
+  ck("R17: Enter on a focused games-row link navigates", /sudoku/.test(p.url()), p.url());
+  await p.goto(url);
+  ck("R17: ...and no move was made on the way out", await p.evaluate(m => window.__numberics.state.moves === m, mv));
+  ck("no page errors in round 2 checks", e7.length === 0, e7.join("|"));
+  await ctx.close();
+
   // 4c. a phone (no hover): no "Esc", and 320px does not scroll sideways
   ctx = await b.newContext({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   p = await ctx.newPage(); await p.goto(url);

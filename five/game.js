@@ -6,7 +6,7 @@
   var N = window.NumbericsFive, K = window.NumbericsKit, P = window.NumbericsPower;
   var store = K.store("numberics_five_v1");
   var reduce = K.reducedMotion();
-  var FLY = 200, BURST_MS = 320, THINK = reduce ? 250 : 520;
+  var FLY = 200, BURST_MS = 320, THINK = reduce ? 250 : 520, HOLD = 1500; // R13: the result shows before the card
 
   function validState(s) {
     return s && Array.isArray(s.tiles) && s.tiles.length === 4 &&
@@ -22,6 +22,7 @@
 
   var sel = -1, cur = 0, armed = null;   // selected tile, keyboard cursor, armed power-up
   var timer = null, busy = false, counted = !!state.matchOver, levelArm = null;
+  var holding = false, viewing = false, keys = false; // R13 hold before the card, "See the board", keyboard in use
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), fxEl = $("fx");
@@ -33,12 +34,13 @@
     store.save({ state: state, level: level, record: record });
   }
 
+  var PW_LEVEL = { easy: "Easy", medium: "Medium", hard: "Hard" };
   var PW = { undo: "Undo", split: "Split", shield: "Shield", nudge: "Nudge" };
   var DESC = { undo: "Take back your turn and the computer's reply.", split: "Move one point from your tile onto your other tile.",
     shield: "Your tile cannot be hit on the computer's next turn. You still move.", nudge: "Add 1 to a computer tile or take 1 off yours." };
   var DEFS = N.POWERS.map(function (p) { return { id: p, label: PW[p], desc: DESC[p] }; });
   var EARN = "Burst a computer tile to earn one. Only you have power-ups.";
-  var PW_HINT = { split: "Tap your tile to move a point to your other.",
+  var PW_HINT = { split: "Tap the tile to take 1 from.",
     shield: "Tap your tile to shield it, then move.",
     nudge: "Tap a tile: theirs +1, yours -1." };
 
@@ -67,13 +69,15 @@
       el.textContent = "";
       el.className = "slot" + (v ? "" : " dead") + (i === sel ? " sel" : "") + (canTargets[i] ? " can" : "") +
         (i === cur && boardEl.classList.contains("kb") ? " cur" : "") +
-        (state.shield && state.shield.idx === i ? " shield" : "");
+        (state.shield && state.shield.idx === i ? " shield" : "") +
+        (state.roundOver && state.last && state.last.burst && state.last.to === i ? " hit" : "");
       if (v) el.appendChild(tileEl(v));
       var owner = i < 2 ? "your" : "computer";
       el.setAttribute("aria-label", owner + " tile " + (i % 2 ? "right" : "left") + ": " + (v ? v : "burst"));
     });
     $("you").textContent = state.wins.p; $("cpu").textContent = state.wins.c;
-    $("matches").textContent = record.won + "-" + record.lost;
+    var none = !record.won && !record.lost; // R16: Record reads a dimmed "none" until a match is decided
+    $("matches").textContent = none ? "none" : record.won + "-" + record.lost; $("matches").classList.toggle("none", none);
     var pips = $("pips"); pips.textContent = "";
     var R = 2 * N.ROUNDS_TO_WIN - 1;
     for (var k = 0; k < R; k++) {
@@ -89,25 +93,45 @@
     });
     boardEl.classList.toggle("targeting", !!armed);
     var hint = "";
-    if (armed) hint = PW_HINT[armed] + " (Esc cancels)";
-    else if (state.roundOver) hint = state.roundOver === "draw" ? "Drawn: the same position came up 3 times, or 40 turns passed without a burst." : "";
-    else if (state.turn === "c" || busy) hint = "The computer is thinking...";
+    if (armed) hint = PW_HINT[armed] + (keys ? " (Esc cancels)" : "");
+    else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again to switch. This match counts as a loss.";
+    else if (state.roundOver) hint = state.roundOver === "draw" ? "Drawn: the same position came up 3 times, or 40 turns passed without a burst."
+      : (holding || viewing) ? lastWords() + (viewing ? " Tap the board for the summary." : "") : "";
+    else if (state.turn === "c" || busy) hint = "The computer is thinking\u2026";
     else if (N.mustPass(state)) hint = "Nothing to hit this turn. Tap your tile to pass, or use a power-up.";
     else if (sel >= 0) hint = "Add " + state.tiles[sel] + " onto which tile? Your own other tile counts.";
     else hint = state.midTurn ? "Shield is up. Now make your move." : "Your turn: tap one of your tiles.";
     $("hint").textContent = hint;
     var over = $("over"), ttl = $("over-title");
-    over.hidden = !state.roundOver || busy;
+    over.hidden = !state.roundOver || busy || holding || viewing;
     if (state.roundOver && !busy) {
-      // R8: a white one-line headline, one summary line "<Result> · <tally>", the gold primary button
+      // R8: a white one-line headline, one summary line, the gold primary button.
+      // R16: rounds read "You 2 : 1 Computer", matches "Match won 3-1" / "Match lost 1-3".
       var m = state.matchOver, rw = state.roundOver;
       ttl.textContent = m ? (m === "p" ? "Match to you" : "Match to the computer")
         : rw === "draw" ? "Round drawn" : rw === "p" ? "Round to you" : "Round to the computer";
-      var tally = state.wins.p + "-" + state.wins.c + (state.draws ? ", " + state.draws + " drawn" : "");
-      $("over-text").textContent = (m ? (m === "p" ? "Match won" : "Match lost") : rw === "draw" ? "Round drawn" : rw === "p" ? "Round won" : "Round lost") +
-        " · " + tally + (m ? "" : ", first to 3");
+      $("over-text").textContent = m ? (m === "p" ? "Match won " + state.wins.p + "-" + state.wins.c : "Match lost " + state.wins.p + "-" + state.wins.c)
+        : "You " + state.wins.p + " : " + state.wins.c + " Computer" + (state.draws ? " · " + state.draws + " drawn" : "") + " · first to 3";
       $("again").textContent = m ? "New game" : "Next round";
     }
+  }
+
+  // what ended the round, for the hint line while the board shows (R13)
+  function lastWords() {
+    var l = state.last; if (!l || !l.burst) return "";
+    var who = l.side === "p" ? "Your" : "The computer's", whose = N.side(l.to) === l.side ? (l.side === "p" ? "your" : "its") : (l.side === "p" ? "their" : "your");
+    if (l.kind === "nudge") return "Nudge burst " + whose + " " + l.prevTo + ".";
+    if (l.prevTo === undefined) return "";
+    return who + " " + l.add + " onto " + whose + " " + l.prevTo + " made " + l.value + ": it burst.";
+  }
+  // R13: after the round-ending move, hold the board (undimmed) for a beat, then show the card
+  function hold() {
+    holding = true; viewing = false; render();
+    timer = setTimeout(function () { timer = null; holding = false; render(); $("again").focus({ preventScroll: true }); }, HOLD);
+  }
+  function showCard() { // skip the hold, or come back from "See the board"
+    if (timer !== null && holding) { clearTimeout(timer); timer = null; }
+    holding = false; viewing = false; render(); $("again").focus({ preventScroll: true });
   }
 
   // ---- animation: a copy of the giving tile flies onto the target, then the board redraws; a burst leaves a ghost ----
@@ -153,8 +177,10 @@
   }
   function flush() { // drop any pending animation or computer timer; the state is already authoritative
     if (timer !== null) { clearTimeout(timer); timer = null; }
-    fxEl.textContent = ""; busy = false;
+    fxEl.textContent = ""; busy = false; holding = false; viewing = false;
   }
+  // a tap or key while only an animation is pending on your turn lands at once (the state is already yours)
+  function catchUp() { if (busy && state.turn === "p" && !state.roundOver) { flush(); render(); } }
 
   // commit a new state from an action, animate it, then pass the turn to the computer if needed
   function commit(res, who) {
@@ -162,6 +188,7 @@
     state = res.state; persist();
     // R7: a reward is a toast; a round result is the overlay alone (no "Burst!" note on the round-ending burst)
     if (res.awarded) K.toast("Burst! +" + PW[res.awarded]);
+    else if (res.unpaid && !state.roundOver) K.toast("Burst! No reward after Shield.", "info"); // R2
     else if (res.burst && who === "p" && !state.roundOver) K.toast("Burst!");
     animate(before, state.last, afterTurn);
   }
@@ -172,7 +199,7 @@
         t.style.transition = "none"; t.classList.remove("on"); void t.offsetWidth; t.style.transition = "";
       }
     }
-    if (state.roundOver) { $("again").focus({ preventScroll: true }); return; }
+    if (state.roundOver) return hold();
     if (state.turn === "c") scheduleComputer();
   }
   function scheduleComputer() {
@@ -203,6 +230,8 @@
 
   // ---- input ----
   function tap(i) {
+    if (state.roundOver && !busy) { if (holding || viewing) showCard(); return; }
+    catchUp();
     if (!myTurn()) return;
     var v = state.tiles[i];
     if (armed) {
@@ -222,23 +251,36 @@
   function activate(name) {
     if (name === "undo") {
       if (!N.canUse(state, "undo")) return; // R1: never across a decided round, so a counted match stays counted
-      flush(); armed = null; sel = -1;
+      flush(); armed = null; sel = -1; levelArm = null;
       state = N.use(state, "undo").state; persist(); K.toast("Took back your turn"); return render();
     }
+    catchUp();
     if (!myTurn()) return;
     if (armed === name) { armed = null; return render(); }
     if (!state.power.p[name] || (name === "shield" && state.midTurn)) return;
     armed = name; sel = -1; render();
   }
-  slots.forEach(function (el, i) { el.addEventListener("click", function () { boardEl.classList.remove("kb"); cur = i; tap(i); }); });
+  slots.forEach(function (el, i) { el.addEventListener("click", function (e) { e.stopPropagation(); keys = false; boardEl.classList.remove("kb"); cur = i; tap(i); }); });
+  boardEl.addEventListener("click", function (e) { // R13: a tap anywhere on the shown board brings the summary back
+    if (state.roundOver && !busy && (holding || viewing) && !(e.target.closest && e.target.closest(".over"))) showCard();
+  });
   var GRID = { 0: { up: 2, right: 1 }, 1: { up: 3, left: 0 }, 2: { down: 0, right: 3 }, 3: { down: 1, left: 2 } };
+  // a number key behaves exactly like tapping that tray slot (an unusable one explains itself, R5)
+  function traySlot(k) { var b = $("tray").querySelectorAll("button")[k]; if (b) b.click(); }
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.target && e.target.closest && e.target.closest("button") && (e.key === "Enter" || e.key === " ")) return;
-    if (e.key === "Escape") { armed = null; sel = -1; return render(); }
+    var tg = e.target && e.target.closest ? e.target : null;
+    if (tg && tg.closest("input, select, textarea")) return;
+    // R17: Enter or Space on a focused link or button is that control (a games-row link navigates)
+    if (tg && tg.closest("a, button") && (e.key === "Enter" || e.key === " ")) return;
+    keys = true;
+    if (e.key === "Escape") {
+      if (state.roundOver && viewing) return showCard();
+      armed = null; sel = -1; return render();
+    }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
-    if (pi >= 0) return activate(N.POWERS[pi]);
-    if (e.key === "u" || e.key === "U") return activate("undo");
+    if (pi >= 0) return traySlot(pi);
+    if (e.key === "u" || e.key === "U") return traySlot(0);
     var d = K.arrowKey(e);
     if (d) {
       e.preventDefault(); boardEl.classList.add("kb");
@@ -247,28 +289,38 @@
     }
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      if (state.roundOver && !busy) return $("again").click();
+      if (state.roundOver && !busy) return (holding || viewing) ? showCard() : $("again").click();
       boardEl.classList.add("kb"); tap(cur);
     }
   });
 
   function startMatch(lv) {
-    flush(); armed = null; sel = -1; level = lv || level;
+    // R12: quitting a match you have played in counts as a loss
+    if (N.played(state)) record.lost++;
+    flush(); armed = null; sel = -1; level = lv || level; levelArm = null;
     state = N.newMatch(K.freshSeed(), level); persist(); render(); scheduleComputer();
   }
-  var inProgress = function () { return state.moves > 0 && !state.matchOver; };
-  K.twoStep($("new"), inProgress, function () { startMatch(); }, "Sure? This ends the match");
+  // R12: "after the first move" means your first move: the computer always opens, which is not you playing
+  var inProgress = function () { return N.played(state); };
+  K.twoStep($("new"), inProgress, function () { startMatch(); }, "Sure? Counts as a loss");
+  var levelT = null;
+  function disarmLevels() {
+    clearTimeout(levelT); levelT = null; levelArm = null;
+    Array.prototype.forEach.call($("levels").children, function (x) { x.textContent = PW_LEVEL[x.getAttribute("data-level")]; });
+  }
   Array.prototype.forEach.call($("levels").children, function (b) {
-    var label = b.textContent;
+    var lv = b.getAttribute("data-level"), label = PW_LEVEL[lv];
     b.addEventListener("click", function () {
-      var lv = b.getAttribute("data-level"); if (lv === level) return;
+      if (lv === level) return;
       if (inProgress() && levelArm !== lv) {
-        levelArm = lv; b.textContent = "Sure?";
-        setTimeout(function () { if (levelArm === lv) levelArm = null; b.textContent = label; }, 3000); return;
+        disarmLevels(); // only one "Sure?" at a time
+        K.clearToast(); levelArm = lv; b.textContent = "Sure?"; render();
+        levelT = setTimeout(function () { disarmLevels(); render(); }, 3000); return;
       }
-      levelArm = null; b.textContent = label; startMatch(lv); K.toast(label + ": new game");
+      disarmLevels(); startMatch(lv); K.toast(label + ": new game");
     });
   });
+  $("over-view").addEventListener("click", function (e) { e.stopPropagation(); viewing = true; render(); boardEl.focus({ preventScroll: true }); });
   $("again").addEventListener("click", function () {
     flush();
     if (state.matchOver) return startMatch();
@@ -289,6 +341,7 @@
   };
   window.__five = {
     get state() { return state; }, set state(s) { flush(); armed = null; sel = -1; state = s; render(); },
-    get busy() { return busy; }, render: render, tap: tap, flush: flush,
+    get busy() { return busy; }, get holding() { return holding; }, get viewing() { return viewing; },
+    get record() { return record; }, render: render, tap: tap, flush: flush,
   };
 })();

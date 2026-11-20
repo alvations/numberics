@@ -8,8 +8,8 @@
  * function of its seed plus the moves and power-ups applied to it.
  *
  * The slide-and-merge core takes a RULE SET, so sibling games (fibonacci/) reuse it:
- *   make(rules) -> a full engine API. The default export is make(ENDLESS), unchanged
- *   in behaviour (tests/test.js replays a fixture recorded before this refactor).
+ *   make(rules) -> a full engine API. The default export is make(ENDLESS); tests/test.js
+ *   replays a pinned fixture (re-recorded once, for the round-2 R2 rule: state.free).
  * A rule set is { canMerge(a, b), mergeResult(a, b), spawn(r), value(level),
  *   label(level), awardFrom }, all on stored levels; r is a float in [0,1).
  */
@@ -50,13 +50,13 @@
         size: s.size, grid: s.grid.slice(), score: s.score, top: s.top,
         moves: s.moves, seed: s.seed, over: s.over,
         power: { undo: s.power.undo, smash: s.power.smash, swap: s.power.swap, boost: s.power.boost },
-        prev: s.prev,
+        prev: s.prev, free: !!s.free,
       };
     }
 
     function snapshot(s) {
       return { grid: s.grid.slice(), score: s.score, top: s.top, moves: s.moves,
-               seed: s.seed, power: Object.assign({}, s.power) };
+               seed: s.seed, power: Object.assign({}, s.power), free: !!s.free };
     }
 
     function spawn(s) {
@@ -76,7 +76,7 @@
       var s = {
         size: size, grid: new Array(size * size).fill(0), score: 0, top: 0,
         moves: 0, seed: seed >>> 0, over: false,
-        power: { undo: 1, smash: 0, swap: 0, boost: 0 }, prev: null,
+        power: { undo: 1, smash: 0, swap: 0, boost: 0 }, prev: null, free: false,
       };
       spawn(s); spawn(s);
       return s;
@@ -160,12 +160,16 @@
       if (!any) return res;
       s.prev = snapshot(state);
       s.score += res.gained; s.moves++;
-      // milestones: every NEW highest tile; the game never declares a win
+      // milestones: every NEW highest tile; the game never declares a win.
+      // R2: the move right after a board-changing power-up (Smash, Swap, Boost) still counts its
+      // milestones but pays nothing, so a power-up can never set up a reward (state.free).
+      if (state.free) res.free = true;
+      s.free = false;
       var fresh = res.merges.filter(function (l, i, a) { return l > s.top && a.indexOf(l) === i; })
                             .sort(function (a, b) { return a - b; });
       fresh.forEach(function (l) {
         res.milestones.push(l);
-        if (l >= rules.awardFrom) award(s, l, res.awarded);
+        if (l >= rules.awardFrom && !res.free) award(s, l, res.awarded);
       });
       if (fresh.length) s.top = fresh[fresh.length - 1];
       res.spawned = spawn(s);
@@ -183,7 +187,7 @@
         if (!state.prev) return fail;
         var p = state.prev;
         s.grid = p.grid.slice(); s.score = p.score; s.top = p.top; s.moves = p.moves;
-        s.seed = p.seed; s.power = Object.assign({}, p.power);
+        s.seed = p.seed; s.power = Object.assign({}, p.power); s.free = !!p.free;
         s.power.undo = Math.max(0, s.power.undo - 1); // the rewind is paid for
         s.prev = null;
       } else {
@@ -198,7 +202,7 @@
           if (!(a >= 0 && a < n && b >= 0 && b < n) || a === b || (!g[a] && !g[b])) return fail;
           var t = g[a]; g[a] = g[b]; g[b] = t;
         } else return fail;
-        s.power[name]--; s.prev = snap;
+        s.power[name]--; s.prev = snap; s.free = true; // R2: the next move pays no reward
       }
       if (name === "undo") s.over = false;
       refreshOver(s);

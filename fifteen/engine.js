@@ -22,8 +22,11 @@
  * - Undo (you only) rewinds to the start of your last turn, the computer's reply included, restoring the
  *   whole snapshot (stock, score, round) minus the Undo charge spent, and a Peek spent since then stays
  *   spent (R3). It never crosses a decided round or match (R1), nor into a new round.
- * - On Hard you start each match with one Undo AND one Erase (perfect play is a draw; this breaks it,
- *   so a perfect player can always win a Hard match: tests/test-fifteen.js measures it).
+ * - On Hard you start each match with one Undo, and EVERY round with at least one Erase (perfect play is
+ *   a draw; the Erase breaks it, so a perfect player wins every Hard round and the match 3-0, while a
+ *   round won with it still earns nothing: tests/test-fifteen.js measures both).
+ * - The round that decides the match earns nothing: a new match starts a fresh stock, so that reward
+ *   could never be used. A reward skipped because every slot is full says so (result.why "full", R15).
  * - The computer earns power-ups only on Hard, by the same rule, only Erase or Double (the two it
  *   uses), starts with none, and uses Erase and Double only when they
  *   turn its solved result strictly better (a draw into a win, or a loss into a draw or win).
@@ -92,34 +95,50 @@
     return out;
   }
 
-  // ---- exact solver: negamax over (owner, side to move), memoised. 3^9 * 2 positions at most. ----
-  // value for the side to move: >0 win (bigger = sooner), 0 draw, <0 loss. Power-ups are not in the tree.
+  // ---- exact solver: negamax over (owner, side to move, your Erases left), memoised. ----
+  // value for the side to move: >0 win (bigger = sooner), 0 draw, <0 loss (closer to 0 = later).
+  // `e` (0-2) is how many Erases you (side 1) still hold this round: on your turn the tree also tries
+  // "erase one computer number, then claim another". Hard plays with e set, so it never walks into a
+  // position your Erase turns round (a casual player's Erase must not beat it). Other power-ups are not in the tree.
   var memo = {};
-  function code(owner, side) { var k = 0; for (var i = 0; i < 9; i++) k = k * 3 + owner[i]; return k * 2 + (side - 1); }
-  function solve(owner, side) {
-    var other = 3 - side, k = code(owner, side);
+  function code(owner, side, e) { var k = 0; for (var i = 0; i < 9; i++) k = k * 3 + owner[i]; return (k * 2 + (side - 1)) * 3 + e; }
+  function solve(owner, side, e) {
+    e = Math.max(0, Math.min(2, e | 0));
+    var other = 3 - side, k = code(owner, side, e);
     if (memo[k] !== undefined) return memo[k];
-    var f = free(owner), v;
+    var f = free(owner), v, i, j;
     if (sumWin(owner, other)) v = -(f.length + 1);
     else if (sumWin(owner, side)) v = f.length + 1;       // only reachable through a forged state
     else if (!f.length) v = 0;
     else {
       v = -99;
-      for (var i = 0; i < f.length; i++) {
-        owner[f[i] - 1] = side; var c = -solve(owner, other); owner[f[i] - 1] = 0;
+      for (i = 0; i < f.length; i++) {
+        owner[f[i] - 1] = side; var c = -solve(owner, other, e); owner[f[i] - 1] = 0;
         if (c > v) v = c;
+      }
+      if (side === 1 && e > 0) {
+        var theirs = held(owner, 2), g;
+        for (i = 0; i < theirs.length; i++) {
+          owner[theirs[i] - 1] = 0; g = f;      // the erased number is not free to claim this turn
+          for (j = 0; j < g.length; j++) {
+            owner[g[j] - 1] = 1;
+            c = -solve(owner, 2, e - 1);
+            owner[g[j] - 1] = 0; if (c > v) v = c;
+          }
+          owner[theirs[i] - 1] = 2;
+        }
       }
     }
     memo[k] = v; return v;
   }
   // value of a position just after `side` finished its turn (opponent to move), from `side`'s view
-  function after(owner, side) {
+  function after(owner, side, e) {
     if (sumWin(owner, side)) return free(owner).length + 1;
-    return -solve(owner, 3 - side);
+    return -solve(owner, 3 - side, e);
   }
-  function scored(owner, side) {
+  function scored(owner, side, e) {
     return free(owner).map(function (n) {
-      var o = owner.slice(); o[n - 1] = side; return { n: n, v: after(o, side) };
+      var o = owner.slice(); o[n - 1] = side; return { n: n, v: after(o, side, e) };
     });
   }
   function bestMoves(owner, side) {
@@ -138,7 +157,7 @@
       powered: [false, false, false], // [unused, you, computer]: used Erase or Double this round (R2)
       wins: [0, 0, 0],           // [draws, your rounds, computer rounds]
       rounds: [],                // winner of each finished round (0 draw)
-      result: null,              // {winner: 0|1|2, line: [a,b,c] | null, earned: name|null}
+      result: null,              // {winner, line: [a,b,c] | null, earned: name|null, why: null|"powered"|"full"|"match"}
       match: null,               // {winner: 0|1|2} once the match is decided
       // Hard is a solved draw, so on Hard you start with one Erase to break it (the computer does not)
       power: stock(diff === "hard" ? { undo: 1, erase: 1 } : { undo: 1 }), cpuPower: stock({}),
@@ -162,11 +181,15 @@
     }
   }
   function endRound(s, winner, line) {
-    var earned = null;
-    if (winner && earns(s, winner) && !s.usedPower && !(s.powered && s.powered[winner])) earned = award(s, winner);
-    s.result = { winner: winner, line: line, earned: earned };
+    var earned = null, why = null;
     s.wins[winner]++; s.rounds.push(winner);
     decided(s);
+    if (winner && earns(s, winner)) {
+      if (s.usedPower || (s.powered && s.powered[winner])) why = "powered";   // R2
+      else if (s.match) why = "match";                                         // nothing left to spend it on
+      else { earned = award(s, winner); if (!earned) why = "full"; }            // R15
+    }
+    s.result = { winner: winner, line: line, earned: earned, why: why };
   }
   // snapshot at the start of your turn (first action), for Undo
   // and `last` (what the side to move did this turn) restarts on the first board action of a turn
@@ -246,28 +269,39 @@
       var blk = threats(owner, 3 - side);
       return [{ type: "claim", n: blk.length ? pickOne(s, blk) : pickOne(s, f) }];
     }
-    // hard: perfect play; a power-up only when it improves the solved result
-    var base = scored(owner, side), top = Math.max.apply(null, base.map(function (m) { return m.v; }));
+    // hard: perfect play; a power-up only when it improves the plain solved result. Moves are ranked
+    // against the Erase you still hold this round (pe): where Hard can hold a draw or better even against
+    // that Erase, it plays for that; where it cannot (your Erase wins with perfect play), it falls back to
+    // the plain solved value so it never blunders a game it holds, and makes your win as late as it can.
+    var pe = side === 2 ? s.power.erase : 0;
+    var rank = function (o) {
+      if (sumWin(o, side)) return { v: 99999, p: 99 };
+      var p = after(o, side, 0), ev = pe ? after(o, side, pe) : p;
+      return { v: ev >= 0 ? 10000 + ev * 64 + p : p * 64 + ev, p: p };
+    };
+    var base = free(owner).map(function (n) { var o = owner.slice(); o[n - 1] = side; var r = rank(o); return { n: n, v: r.v, p: r.p }; });
+    var top = Math.max.apply(null, base.map(function (m) { return m.v; }));
+    var plainTop = Math.max.apply(null, base.map(function (m) { return m.p; }));
     var best = { v: top, acts: null }, st = stockOf(s, side);
-    if (top <= 0 && canUse(s, "double", side)) {
+    if (plainTop <= 0 && canUse(s, "double", side)) {
       for (i = 0; i < f.length; i++) for (j = 0; j < f.length; j++) {
         if (i === j) continue;
         var o = owner.slice(); o[f[i] - 1] = side;
-        var v = sumWin(o, side) ? 99 : (o[f[j] - 1] = side, after(o, side));
-        if (v > best.v) best = { v: v, acts: [{ type: "double" }, { type: "claim", n: f[i] }, { type: "claim", n: f[j] }] };
+        var r = sumWin(o, side) ? { v: 99999, p: 99 } : (o[f[j] - 1] = side, rank(o));
+        if (r.p > plainTop && r.v > best.v) best = { v: r.v, acts: [{ type: "double" }, { type: "claim", n: f[i] }, { type: "claim", n: f[j] }] };
       }
     }
-    if (top <= 0 && st.erase && canUse(s, "erase", side)) {
-      held(owner, 3 - side).forEach(function (e) {
+    if (plainTop <= 0 && st.erase && canUse(s, "erase", side)) {
+      held(owner, 3 - side).forEach(function (x) {
         f.forEach(function (n) {
-          var o = owner.slice(); o[e - 1] = 0; o[n - 1] = side;
-          var v = after(o, side);
-          if (v > best.v) best = { v: v, acts: [{ type: "erase", n: e }, { type: "claim", n: n }] };
+          var o = owner.slice(); o[x - 1] = 0; o[n - 1] = side;
+          var r = rank(o);
+          if (r.p > plainTop && r.v > best.v) best = { v: r.v, acts: [{ type: "erase", n: x }, { type: "claim", n: n }] };
         });
       });
     }
     if (best.acts) {
-      if (best.acts.length === 3 && best.v === 99) best.acts.pop();   // the first claim already wins
+      if (best.acts.length === 3 && best.v === 99999 && sumWin((function () { var o = owner.slice(); o[best.acts[1].n - 1] = side; return o; })(), side)) best.acts.pop();   // the first claim already wins
       return best.acts;
     }
     var tops = base.filter(function (m) { return m.v === top; }).map(function (m) { return m.n; });
@@ -297,6 +331,7 @@
     s.owner = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     s.claimsLeft = 1; s.usedPower = false; s.blocked = 0; s.acted = false; s.powered = [false, false, false];
     s.result = null; s.prev = null; s.last = [];
+    if (s.diff === "hard") s.power.erase = Math.max(s.power.erase, 1);   // one Erase every Hard round
     return s;
   }
   // a fresh match keeps the difficulty, resets the stock (each run starts with one Undo)

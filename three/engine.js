@@ -63,7 +63,7 @@
     b369: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 6, 9],
     b3x: [1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3],
   };
-  var DEFAULT = { step: true, flushMin: 3, bag: "b33", bonus: false, start: 9 }; // variant H, see TUNING
+  var DEFAULT = { step: true, stepMax: 6, flushTo: "clear", flushMin: 3, bag: "b12", bonus: false, start: 9 }; // variant L, see TUNING
 
   function rand(seed) {
     var a = (seed + 0x6d2b79f5) >>> 0, t = a;
@@ -81,7 +81,7 @@
       if (!a || !b) return false;
       if (a + b === 3) return true;                       // 1 + 2
       if (!isThree(a) || !isThree(b)) return false;
-      return a === b || (R.step && Math.abs(a - b) === 3);  // equal, or neighbouring multiples
+      return a === b || (R.step && Math.abs(a - b) === 3 && Math.max(a, b) <= R.stepMax);  // equal, or small neighbours
     }
 
     function clone(s) {
@@ -99,7 +99,7 @@
         if (opts.length) return opts[Math.floor(roll(s) * opts.length)];
       }
       if (!s.bag.length) {
-        var b = BAGS[R.bag].slice();
+        var b = (Array.isArray(R.bag) ? R.bag : BAGS[R.bag]).slice();
         for (var i = b.length - 1; i > 0; i--) { var j = Math.floor(roll(s) * (i + 1)), t = b[i]; b[i] = b[j]; b[j] = t; }
         s.bag = b;
       }
@@ -181,11 +181,12 @@
         run.forEach(function (c) { if (s.grid[c] > s.grid[at]) at = c; });
         var values = run.map(function (c) { return s.grid[c]; }), before = s.grid.slice();
         run.forEach(function (c) { s.grid[c] = 0; });
-        s.grid[at] = total;
+        var keep = R.flushTo === "sum" ? total : 0; // shipped: the run clears; "sum" left one tile worth the sum
+        s.grid[at] = keep;
         var pts = total * run.length;
         s.score += pts; s.flushes++;
         if (pts > s.best) s.best = pts;
-        if (total > s.top) s.top = total;
+        if (keep > s.top) s.top = keep;
         var got = pay ? award(s) : null;
         out.push({ cells: run, values: values, at: at, value: total, points: pts, power: got, paid: !!pay, before: before });
       }
@@ -291,12 +292,20 @@
   }
 
   var api = create(DEFAULT);
-  // Rainbow scale: k = value / 3. 3 red .. 21 violet, then one octave up with a brighter ring.
-  var RAINBOW = ["red", "orange", "yellow", "green", "blue", "indigo", "violet"];
+  // Colours follow the value ladder, not value / 3: tiles only double (3, 6, 12, 24 ...) or come from 3 + 6 = 9
+  // (9, 18, 36 ...), so the ladder is 3, 6, 9, 12, 18, 24, 36, 48, 72, 96, 144, 192, 288, 384 and each rung has
+  // its own colour. 3-6-9-12 stay red-orange-yellow-green (the rainbow a Flush reads in). Past 384 the 14 colours
+  // repeat with a ring, one more each lap. A value off the ladder (an old save) takes the rung just below it.
+  var RAINBOW = ["red", "orange", "yellow", "green", "blue", "indigo", "violet",
+                 "pink", "teal", "lime", "silver", "sand", "aqua", "white"];
+  function ladder(k) { return k === 0 ? 3 : k % 2 ? 3 * Math.pow(2, (k + 1) / 2) : 9 * Math.pow(2, k / 2 - 1); }
+  // the highest rung at or below v
+  api.rung = function (v) { var k = 0; while (ladder(k + 1) <= v) k++; return k; };
+  api.ladder = ladder;
   api.colour = function (v) {
     if (!(v >= 3 && v % 3 === 0)) return { band: -1, name: "grey", octave: 0 };
-    var k = v / 3 - 1;
-    return { band: k % 7, name: RAINBOW[k % 7], octave: Math.floor(k / 7) };
+    var k = api.rung(v);
+    return { band: k % RAINBOW.length, name: RAINBOW[k % RAINBOW.length], octave: Math.floor(k / RAINBOW.length) };
   };
   api.RAINBOW = RAINBOW;
   api.create = create;

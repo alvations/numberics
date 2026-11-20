@@ -80,34 +80,35 @@ t("can move only while a cell is empty or a mergeable pair touches", () => {
   ok(F.canMove(board([[1, 1, 3, 1], [3, 5, 1, 3], [1, 3, 5, 1], [3, 1, 3, 5]])), "1 next to 1 merges");
   ok(!F.canMove(board([[3, 3, 5, 5], [5, 5, 3, 3], [3, 3, 5, 5], [5, 5, 3, 3]])), "equal 3s and 5s are stuck");
 });
-t("a new highest tile from 34 up awards one power-up; lower ones and repeats do not", () => {
-  let r = F.move(board([[6, 7, 0, 0], Z, Z, Z], { top: 7 }), "left");
-  eq(r.state.grid[0], 8); eq(F.value(8), 34); eq(r.awarded.length, 1); eq(total(r.state), 1);
-  r = F.move(board([[5, 6, 0, 0], Z, Z, Z], { top: 6 }), "left");
-  eq(r.milestones, [7]); eq(r.awarded.length, 0, "21 is below the floor");
-  r = F.move(board([[7, 8, 0, 0], Z, Z, Z], { top: 12 }), "left");
+t("a new highest tile from 55 up awards one power-up; lower ones and repeats do not (round 2 floor)", () => {
+  let r = F.move(board([[7, 8, 0, 0], Z, Z, Z], { top: 8 }), "left");
+  eq(r.state.grid[0], 9); eq(F.value(9), 55); eq(r.awarded.length, 1); eq(total(r.state), 1);
+  r = F.move(board([[6, 7, 0, 0], Z, Z, Z], { top: 7 }), "left");
+  eq(r.milestones, [8]); eq(r.awarded.length, 0, "34 is below the floor since round 2");
+  r = F.move(board([[8, 9, 0, 0], Z, Z, Z], { top: 12 }), "left");
   eq(r.awarded.length, 0, "not a new highest"); eq(r.state.top, 12);
-  eq(F.AWARD_FROM_LEVEL, 8); eq(F.AWARD_FROM_INDEX, 8);
+  eq(F.AWARD_FROM_LEVEL, 9); eq(F.AWARD_FROM_INDEX, 9);
 });
 t("two new highs in one move award twice, once each", () => {
   const r = F.move(board([[7, 8, 9, 10], Z, Z, Z], { top: 10 }), "left");
+  ok(r.awarded.every(a => a.level >= 9));
   eq(r.state.grid.slice(0, 2), [9, 11]); eq(r.milestones, [11]); eq(r.awarded.length, 1);
   const r2 = F.move(board([[7, 8, 0, 0], [9, 10, 0, 0], Z, Z], { top: 10 }), "left");
   eq(r2.milestones, [11]); eq(r2.awarded.length, 1, "9 is not new, 11 is");
 });
 t("power stock never exceeds the cap of 9", () => {
   const p = { undo: 9, smash: 9, swap: 9, boost: 8 };
-  let r = F.move(board([[7, 8, 0, 0], Z, Z, Z], { top: 8, power: p }), "left");
+  let r = F.move(board([[8, 9, 0, 0], Z, Z, Z], { top: 9, power: p }), "left");
   eq(r.state.power.boost, 9); ok(Object.values(r.state.power).every(v => v <= F.POWER_CAP));
-  r = F.move(board([[8, 9, 0, 0], Z, Z, Z], { top: 9, power: { undo: 9, smash: 9, swap: 9, boost: 9 } }), "left");
-  eq(total(r.state), 36);
+  r = F.move(board([[9, 10, 0, 0], Z, Z, Z], { top: 10, power: { undo: 9, smash: 9, swap: 9, boost: 9 } }), "left");
+  eq(total(r.state), 36); eq(r.awarded.length, 0, "R15: a full stock skips the reward (the client says Power-ups full)");
 });
 t("a fresh run starts with exactly one Undo", () => eq(F.newGame(3).power, { undo: 1, smash: 0, swap: 0, boost: 0 }));
 t("undo rewinds exactly one move, costs a charge and cannot farm a reward", () => {
-  const s = board([[6, 7, 0, 0], Z, Z, Z], { top: 7, power: { undo: 1, smash: 0, swap: 0, boost: 0 } });
+  const s = board([[7, 8, 0, 0], Z, Z, Z], { top: 8, power: { undo: 1, smash: 0, swap: 0, boost: 0 } });
   const r = F.move(s, "left"); eq(r.awarded.length, 1);
   const u = F.use(r.state, "undo"); ok(u.ok);
-  eq(u.state.grid, s.grid); eq(u.state.top, 7); eq(u.state.score, 0); eq(total(u.state), 0, "net stock after undo is lower");
+  eq(u.state.grid, s.grid); eq(u.state.top, 8); eq(u.state.score, 0); eq(total(u.state), 0, "net stock after undo is lower");
   eq(F.use(u.state, "undo").ok, false, "nothing left to rewind");
 });
 t("smash removes a tile; empty or out-of-range targets are refused", () => {
@@ -116,9 +117,9 @@ t("smash removes a tile; empty or out-of-range targets are refused", () => {
   const r = F.use(s, "smash", 0); ok(r.ok); eq(r.state.grid[0], 0); eq(r.state.power.smash, 0);
 });
 t("boost moves a tile to the next Fibonacci number and never awards", () => {
-  const s = board([[7, 0, 0, 0], Z, Z, Z], { power: { undo: 0, smash: 0, swap: 0, boost: 1 } });
-  const r = F.use(s, "boost", 0); ok(r.ok); eq(r.state.grid[0], 8); eq(F.label(8), "34"); eq(r.state.top, 8);
-  eq(total(r.state), 0, "boosting to 34 does not pay out");
+  const s = board([[8, 0, 0, 0], Z, Z, Z], { power: { undo: 0, smash: 0, swap: 0, boost: 1 } });
+  const r = F.use(s, "boost", 0); ok(r.ok); eq(r.state.grid[0], 9); eq(F.label(9), "55"); eq(r.state.top, 9);
+  eq(total(r.state), 0, "boosting to 55 does not pay out");
   // and the next real merge to a lower value is not a new high either
   eq(F.use(s, "boost", 5).ok, false, "empty cell refused");
 });
@@ -172,6 +173,51 @@ t("an over game cannot be undone (R1): over means no usable Undo", () => {
   const s = board([[1, 3, 1, 3], [3, 1, 3, 1], [1, 3, 1, 3], [3, 1, 3, 1]], { over: true });
   eq(F.use(s, "undo").ok, false);
 });
+t("R2 repro (critic F1): Boost 21 to 34 beside 55, then the swipe that makes 89, pays nothing", () => {
+  const s = board([[9, 7, 0, 0], Z, Z, Z], { top: 9, power: { undo: 0, smash: 0, swap: 0, boost: 1 } });
+  eq(F.move(s, "left").awarded.length, 0, "the plain swipe cannot merge 55 and 21");
+  const b = F.use(s, "boost", 1); ok(b.ok); eq(b.state.grid.slice(0, 2), [9, 8]);
+  const r = F.move(b.state, "left"); eq(r.state.grid[0], 10, "55 + 34 = 89");
+  eq(r.awarded.length, 0, "a boost-assisted swipe never pays"); eq(total(r.state), 0);
+});
+t("R2 repro: Swap a 34 beside 55, then the swipe that makes 89, pays nothing", () => {
+  const s = board([[9, 0, 0, 0], [0, 0, 0, 8], Z, Z], { top: 9, power: { undo: 0, smash: 0, swap: 1, boost: 0 } });
+  const w = F.use(s, "swap", 1, 7); ok(w.ok); eq(w.state.grid.slice(0, 2), [9, 8]);
+  const r = F.move(w.state, "left"); eq(r.state.grid[0], 10); eq(r.awarded.length, 0, "a swap-assisted swipe never pays");
+});
+t("R2 property: random play mixing power-ups and moves never raises the stock through a power-up-assisted move", () => {
+  let d = 4242, bad = 0, checked = 0;
+  const rnd = () => { const r = F.rand(d); d = r[1]; return r[0]; };
+  for (let g = 1; g <= 120; g++) {
+    let s = F.newGame(g), assisted = false;
+    for (let n = 0; n < 4000 && !s.over; n++) {
+      if (s.top >= 6 && rnd() < 0.25) { // stock up so the fuzz always has power-ups to try
+        s = Object.assign({}, s, { power: { undo: s.power.undo, smash: Math.max(1, s.power.smash), swap: Math.max(1, s.power.swap), boost: Math.max(1, s.power.boost) } });
+        const tiles = s.grid.map((v, i) => v ? i : -1).filter(i => i >= 0);
+        const name = ["smash", "swap", "boost"][Math.floor(rnd() * 3)];
+        const a = tiles[Math.floor(rnd() * tiles.length)], b = Math.floor(rnd() * 16);
+        const u = F.use(s, name, a, b);
+        if (u.ok) {
+          ok(total(u.state) === total(s) - 1, "a power-up spends exactly its charge and earns nothing");
+          s = u.state; assisted = true; continue;
+        }
+      }
+      const res = F.move(s, F.DIRS[Math.floor(rnd() * 4)]);
+      if (!res.moved) { if (!F.canMove(s)) break; continue; }
+      if (assisted) { checked++; if (total(res.state) > total(s)) bad++; }
+      assisted = false; s = res.state;
+    }
+  }
+  ok(checked > 1000, "fuzz reached " + checked + " assisted moves");
+  eq(bad, 0, "assisted moves that raised the stock (of " + checked + ")");
+});
+t("R2: the swipe after an assisted swipe pays again (the rule is one swipe deep, as in Three)", () => {
+  const s = board([[9, 7, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], { top: 9, power: { undo: 0, smash: 0, swap: 0, boost: 1 } });
+  let r = F.move(F.use(s, "boost", 1).state, "left"); eq(r.awarded.length, 0);
+  // set up a natural 89 + 55 merge after it
+  const t2 = Object.assign({}, r.state, { grid: [10, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] });
+  r = F.move(t2, "left"); eq(r.state.grid[0], 11); eq(r.awarded.length, 1, "a natural new top tile pays");
+});
 {
   const fs = require("fs"), path = require("path"), rd = f => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
   const html = rd("fibonacci/index.html"), js = rd("fibonacci/game.js");
@@ -187,7 +233,14 @@ t("an over game cannot be undone (R1): over means no usable Undo", () => {
     ok(/onInfo:/.test(js), "tray onInfo wired");
   });
   t("R8: the end card has a 'New best.' line", () => ok(/id="over-best" class="best" hidden>New best\.</.test(html)));
-  t("R9: Enter or Space on a focused button is left to the button", () => ok(/\(e\.key === "Enter" \|\| e\.key === " "\) && \(tag === "BUTTON" \|\| tag === "A"\)\) return/.test(js)));
+  t("R9, R17: Enter or Space on a focused button or link is left to it; fields are never game keys", () => {
+    ok(/\(e\.key === "Enter" \|\| e\.key === " "\) && \(tag === "BUTTON" \|\| tag === "A"/.test(js));
+    ok(/tag === "INPUT" \|\| tag === "SELECT"/.test(js));
+  });
+  t("round 2: the help line, the tray and the engine agree on the 55 floor", () => {
+    ok(/new highest tile from 55 up/.test(html) && /new top tile from 55\./.test(js));
+    ok(!/from 34/.test(html) && !/from 34/.test(js)); eq(F.value(F.AWARD_FROM_INDEX), 55);
+  });
 }
 require("./conventions")(t, ok, ["fibonacci/engine.js", "fibonacci/game.js", "fibonacci/index.html", "fibonacci/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

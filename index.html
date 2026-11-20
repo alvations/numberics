@@ -19,7 +19,7 @@
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Score</span><b id="score">0</b></div>
-      <div class="stat"><span>Best</span><b id="best">0</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
       <div class="stat"><span>Top tile</span><b id="top" class="none">none</b></div>
     </div>
   </header>
@@ -41,8 +41,8 @@
   <div class="row">
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up.
-     Merge past 2048 and keep going.</p>
+  <p class="how">Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up,
+     except on the move right after you use one. Keys 1 to 4 use the power-ups. Merge past 2048 and keep going.</p>
   <nav id="games" class="games" data-root="" data-current="endless" data-detail aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

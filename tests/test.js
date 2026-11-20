@@ -117,6 +117,85 @@ t("power-ups change only their target: no spawn, no move counted (Boost does not
     eq(r.state.moves, s.moves, n + " moves"); eq(r.state.seed, s.seed, n + " seed");
   });
 });
+// ---- round 2 (docs/reviews/TRIAGE2.md R2): a power-up never earns one, including the next move ----
+const tot = (st) => N.POWERS.reduce((a, k) => a + st.power[k], 0);
+const Z4 = [0, 0, 0, 0];
+const P0 = (o) => Object.assign({ undo: 0, smash: 0, swap: 0, boost: 0 }, o);
+t("R2 blocker repro: Boost 32 beside 64, then a swipe, makes 128 and pays nothing", () => {
+  const s = board([[6, 0, 0, 5], Z4, Z4, Z4], { top: 6, power: P0({ boost: 1 }) });
+  eq(N.move(s, "left").awarded.length, 0, "the plain swipe pays nothing");
+  const u = N.use(s, "boost", 3); ok(u.ok); eq(u.state.grid.slice(0, 4), [6, 0, 0, 6]); ok(u.state.free, "next move marked unpaid");
+  const m = N.move(u.state, "left"); eq(m.state.grid[0], 7); eq(m.milestones, [7], "the milestone still counts");
+  eq(m.awarded, [], "no reward"); eq(tot(m.state), 0); ok(m.free, "the result says why"); ok(!m.state.free, "the mark lasts one move");
+  eq(m.state.top, 7, "top still rises"); eq(m.gained, 128, "points still score");
+  // the same board reached by play pays
+  const h = N.move(board([[6, 0, 0, 6], Z4, Z4, Z4], { top: 6 }), "left"); eq(h.awarded.length, 1, "an honest 128 pays");
+});
+t("R2 blocker repro: Swap two 64s side by side, then a swipe, pays nothing", () => {
+  const s = board([[6, 0, 0, 0], [0, 0, 6, 0], Z4, Z4], { top: 6, power: P0({ swap: 1 }) });
+  const u = N.use(s, "swap", 1, 6); ok(u.ok); eq(u.state.grid.slice(0, 2), [6, 6]);
+  const m = N.move(u.state, "left"); eq(m.state.grid[0], 7); eq(m.awarded, []); eq(tot(m.state), 0);
+});
+t("R2: Smash opens a merge, the swipe after it pays nothing", () => {
+  const s = board([[5, 1, 5, 0], Z4, Z4, Z4], { top: 5, power: P0({ smash: 1 }) });
+  const u = N.use(s, "smash", 1); ok(u.ok);
+  const m = N.move(u.state, "left"); eq(m.state.grid[0], 6); eq(m.milestones, [6]); eq(m.awarded, []);
+});
+t("R2: only the next move is unpaid; the move after it pays as usual", () => {
+  const s = board([[5, 0, 0, 0], [6, 6, 0, 0], Z4, Z4], { top: 6, power: P0({ smash: 1 }) });
+  const u = N.use(s, "smash", 0); const m1 = N.move(u.state, "down"); ok(m1.moved); eq(m1.awarded, []);
+  ok(!m1.state.free);
+  // put a fresh 64 pair on the board: an honest merge right after the unpaid move pays
+  const s2 = Object.assign({}, m1.state, { grid: m1.state.grid.slice() }); s2.grid.fill(0); s2.grid[0] = 6; s2.grid[1] = 6; s2.top = 6;
+  eq(N.move(s2, "left").awarded.length, 1);
+});
+t("R2: Undo of the unpaid move restores the mark, so a rewind cannot launder the reward", () => {
+  const s = board([[6, 0, 0, 5], Z4, Z4, Z4], { top: 6, power: P0({ boost: 1, undo: 1 }) });
+  const u = N.use(s, "boost", 3), m = N.move(u.state, "left");
+  const back = N.use(m.state, "undo"); ok(back.ok); ok(back.state.free, "the mark comes back with the board");
+  const again = N.move(back.state, "left"); eq(again.awarded, []); eq(tot(again.state), 0);
+});
+t("R2: Undo of a power-up clears the mark with it", () => {
+  const s = board([[6, 0, 0, 5], Z4, Z4, Z4], { top: 6, power: P0({ boost: 1, undo: 1 }) });
+  const u = N.use(s, "boost", 3); const r = N.use(u.state, "undo"); ok(r.ok); ok(!r.state.free);
+});
+t("R2: an old save without the mark plays as before", () => {
+  const s = board([[6, 6, 0, 0], Z4, Z4, Z4], { top: 6 }); delete s.free;
+  eq(N.move(s, "left").awarded.length, 1);
+});
+t("R2 property: a power-up followed by any move never raises the total stock (random games)", () => {
+  let checked = 0, paidHonest = 0;
+  for (let seed = 1; seed <= 120; seed++) {
+    let s = N.newGame(seed), x = seed;
+    s.power = { undo: 2, smash: 3, swap: 3, boost: 3 };
+    for (let i = 0; i < 400 && !s.over; i++) {
+      x = (x * 1103515245 + 12345) >>> 0;
+      if (x % 4 === 0) {
+        const name = N.POWERS[1 + (x >>> 3) % 3], a = (x >>> 5) % 16, b = (x >>> 9) % 16;
+        const before = tot(s), u = N.use(s, name, a, b);
+        if (u.ok) {
+          ok(tot(u.state) === before - 1, "use pays nothing, seed " + seed);
+          // chains of power-ups then a move: still nothing
+          let v = u.state, used = 1;
+          if (x % 3 === 0) { const w = N.use(v, "boost", (x >>> 13) % 16); if (w.ok) { v = w.state; used++; } }
+          N.DIRS.forEach(d => { const r = N.move(v, d); if (r.moved) { ok(tot(r.state) === before - used, name + " then " + d + ", seed " + seed); checked++; } });
+          s = v; continue;
+        }
+      }
+      const r = N.move(s, N.DIRS[(x >>> 7) % 4]);
+      if (r.moved) { if (r.awarded.length) paidHonest++; s = r.state; }
+      else if (!N.canMove(s)) break;
+    }
+  }
+  ok(checked > 1000, "exercised " + checked); ok(paidHonest > 20, "honest moves still pay (" + paidHonest + ")");
+});
+t("a Boost that cannot help still ends the run once it is spent (no endless wait)", () => {
+  // locked checkerboard of 2 and 8: boosting a 2 to 4 matches no neighbour
+  const s = board([[1, 3, 1, 3], [3, 1, 3, 1], [1, 3, 1, 3], [3, 1, 3, 1]], { power: P0({ boost: 1 }) });
+  ok(!N.canMove(s));
+  const u = N.use(s, "boost", 0); ok(u.ok); ok(u.state.over, "locked, nothing left: over");
+});
+
 t("a power-up with no charges does nothing", () => {
   eq(N.use(board([[1,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]]), "smash", 0).ok, false);
 });
@@ -133,7 +212,7 @@ t("random play never corrupts the board (5000 moves)", () => {
 const root = path.join(__dirname, "..");
 const files = ["engine.js", "game.js", "index.html", "style.css"].map(f => [f, fs.readFileSync(path.join(root, f), "utf8")]);
 t("no document.write anywhere", () => files.forEach(([f, s]) => ok(!/document\.write/.test(s), f)));
-t("no em-dashes anywhere in source", () => files.forEach(([f, s]) => ok(!/—/.test(s), f)));
+t("no em-dashes anywhere in source", () => files.forEach(([f, s]) => ok(!/\u2014/.test(s), f)));
 t("every localStorage use sits inside a try block (storage may throw)", () => {
   const src = files.find(f => f[0] === "game.js")[1];
   const lines = src.split("\n");
@@ -172,6 +251,18 @@ t("F5/F9: hover, press and gold link focus ring are mirrored from shared/theme.c
 });
 t("R9: Enter or Space on a focused button is left to the button", () => {
   ok(/\(e\.key === "Enter" \|\| e\.key === " "\) && \(tag === "BUTTON" \|\| tag === "A"\)\) return;/.test(src["game.js"]));
+});
+
+t("R17: keys typed into a field, and Enter/Space on a link or button, are never game actions", () => {
+  ok(/if \(tag === "INPUT" \|\| tag === "SELECT" \|\| tag === "TEXTAREA"\) return;/.test(src["game.js"]), "field guard");
+});
+t("round 2 (cold #1): the tray is rebuilt only when what it shows changes, so a tap is never lost", () => {
+  ok(/if \(key !== trayKey\) \{ trayKey = key; drawTray\(\); \}/.test(src["game.js"]), "tray cache");
+  ok(/renderTray\(\); \/\/ the tray and hint follow the move at once/.test(src["game.js"]), "tray updates on the move");
+});
+t("round 2: the help line says how R2 works and names the number keys", () => {
+  ok(/except on the move right after you use one\. Keys 1 to 4 use the power-ups\./.test(src["index.html"]));
+  ok(/\.toast\.info\{/.test(src["style.css"]) && /--line:#33364a/.test(src["style.css"]), "info toast and --line mirrored");
 });
 
 t("history carries only the owner's authorship (no AI author, co-author or trailer)", () => {

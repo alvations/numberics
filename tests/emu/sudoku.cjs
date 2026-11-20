@@ -13,8 +13,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const tot = (x) => x.stock.reveal + x.stock.check + x.stock.cands;
   const empties = (p) => p.evaluate(() => { const s = window.__sudoku.state; return s.grid.map((v, i) => v ? -1 : i).filter(i => i >= 0); });
   const toastIs = async (p, re, bad) => {
-    const t = await p.evaluate(() => { const e = document.getElementById("toast"); return { text: e.textContent, on: e.classList.contains("on"), bad: e.classList.contains("bad") }; });
-    return t.on && re.test(t.text) && (bad === undefined || t.bad === bad);
+    const t = await p.evaluate(() => { const e = document.getElementById("toast"); return { text: e.textContent, on: e.classList.contains("on"), bad: e.classList.contains("bad"), info: e.classList.contains("info") }; });
+    return t.on && re.test(t.text) && (bad === undefined || (bad === "info" ? t.info && !t.bad : t.bad === bad && !t.info));
   };
 
   // 1. tray, layout
@@ -34,20 +34,25 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 2. tray info on a phone: tapping an empty slot explains it in a neutral toast
   await p.click("#pw-check", { force: true });
-  ck("tapping an empty Check explains it and how to earn it (R5)", await toastIs(p, /^Check: Mark wrong digits, briefly\. Earn one for every 9 cells you fill\.$/, true), await p.textContent("#toast"));
+  ck("tapping an empty Check explains it in the neutral info toast (R5, R7: not the red-edged warning)", await toastIs(p, /^Check: Mark wrong digits, briefly\. Earn one for every 9 cells you fill with no clash\.$/, "info"), await p.textContent("#toast"));
+  ck("the info toast is neutral: no red edge", await p.evaluate(() => { const c = getComputedStyle(document.getElementById("toast")); return c.borderTopColor !== "rgb(255, 107, 107)" && c.backgroundColor !== "rgb(242, 184, 75)"; }));
   ck("toast is clear of the title and the games row (F2)", await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), h = document.querySelector("h1").getBoundingClientRect(), g = document.getElementById("games").getBoundingClientRect(); return t.top >= h.bottom && t.bottom <= g.top; }));
   await p.click("#pw-undo", { force: true });
-  ck("tapping Undo with nothing to undo says so", await toastIs(p, /Nothing to undo yet/, true));
+  ck("tapping Undo with nothing to undo says so", await toastIs(p, /Nothing to undo yet/, "info"));
 
-  // 3. earn by progress: 9 filled cells pay one charge whether right or wrong
+  // 3. earn by progress: 9 filled cells that clash with nothing pay one charge whether right or wrong
+  const quietDigit = (i) => p.evaluate((c) => { // a wrong digit that clashes with nothing on the board, else the right one
+    const S = window.NumbericsSudoku, s = window.__sudoku.state, m = S.candidates(s.grid, c) & ~(1 << s.solution[c]);
+    for (let d = 1; d <= 9; d++) if (m & (1 << d)) return d; return s.solution[c];
+  }, i);
   let e = await empties(p);
   const pre = tot(await st(p));
-  for (let i = 0; i < 8; i++) { await p.locator(".c").nth(e[i]).click(); await p.keyboard.press(String(((await st(p)).solution[e[i]] % 9) + 1)); }
-  ck("8 filled cells: nothing yet", tot(await st(p)) === pre);
-  await p.locator(".c").nth(e[8]).click(); await p.keyboard.press(String(((await st(p)).solution[e[8]] % 9) + 1));
+  for (let i = 0; i < 8; i++) { await p.locator(".c").nth(e[i]).click(); await p.keyboard.press(String(await quietDigit(e[i]))); }
+  ck("8 filled cells: nothing yet", tot(await st(p)) === pre && await p.locator(".c.bad").count() === 0);
+  await p.locator(".c").nth(e[8]).click(); await p.keyboard.press(String(await quietDigit(e[8])));
   let s = await st(p);
-  ck("the 9th filled cell (wrong digits too) earns one charge", tot(s) === pre + 1 && s.high === 9, JSON.stringify(s.stock));
-  ck("the earn toast says what the player did, in gold", await toastIs(p, /^9 cells filled: \+1 (Reveal|Check|Candidates)$/, false), await p.textContent("#toast"));
+  ck("the 9th filled cell with no clash (wrong digits too) earns one charge", tot(s) === pre + 1 && s.high === 9, JSON.stringify(s.stock));
+  ck("the earn toast says what the player did, in gold, in the family form", await toastIs(p, /^9 cells filled: \+(Reveal|Check|Candidates)$/, false), await p.textContent("#toast"));
   ck("Undo now shows its infinity badge", (await p.textContent("#pw-undo i")) === "∞" && await p.locator("#pw-undo i").isVisible());
   await p.keyboard.press("u");
   s = await st(p);
@@ -104,7 +109,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const g0 = (await st(p)).grid.join(""), t0 = await p.evaluate(() => window.__sudoku.elapsed);
   await p.keyboard.press("u");
   ck("U on a solved board changes nothing (R1 blocker)", (await st(p)).solved && (await st(p)).grid.join("") === g0 && await p.isVisible("#win"));
-  ck("Undo is shown unavailable once solved, with the reason", (await p.getAttribute("#pw-undo", "aria-disabled")) === "true" && await toastIs(p, /Not after the puzzle is solved/, true), await p.textContent("#toast"));
+  // the explanation is issued, but a toast never sits on the end card (shared kit), so it is not shown over it
+  ck("Undo is shown unavailable once solved, with the reason", (await p.getAttribute("#pw-undo", "aria-disabled")) === "true" && /Not after the puzzle is solved/.test(await p.textContent("#toast")), await p.textContent("#toast"));
+  await p.waitForTimeout(150);
+  ck("no toast over the end card", !(await p.evaluate(() => document.getElementById("toast").classList.contains("on"))));
   await p.locator("#pw-undo").click({ force: true });
   ck("tapping Undo on a solved board changes nothing either", (await st(p)).solved && await p.isVisible("#win"));
   await p.waitForTimeout(1300);
@@ -174,6 +182,59 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ({ ctx, p, errs } = await page({ viewport: { width: 320, height: 640 } }));
   await p.evaluate(() => window.__demo());
   ck("320px: no horizontal scroll, tray fits", await p.evaluate(() => document.documentElement.scrollWidth <= 320 && [...document.querySelectorAll("#tray .pw")].every(b => b.scrollWidth <= b.clientWidth + 1)));
+  await ctx.close();
+
+  // 12b. junk fill (TRIAGE2 Sudoku, mechanics #2): type 1 into every empty cell of a Hard puzzle, then erase it all
+  ({ ctx, p, errs } = await page());
+  await p.click("#levels button[data-l=hard]");
+  e = await empties(p);
+  const j0 = tot(await st(p));
+  for (const c of e) { await p.evaluate(i => window.__sudoku.select(i), c); await p.keyboard.press("1"); }
+  s = await st(p);
+  ck("junk fill: 1 in every empty cell pays at most one charge", tot(s) - j0 <= 1, (tot(s) - j0) + " paid, mark " + s.high);
+  ck("junk fill: the red cells are exactly the ones that do not count", await p.evaluate(() => { const S = window.NumbericsSudoku, s = window.__sudoku.state;
+    return S.progress(s) === [...document.querySelectorAll(".c:not(.given)")].filter(c => c.textContent && !c.classList.contains("bad")).length; }));
+  for (const c of e) { await p.evaluate(i => window.__sudoku.select(i), c); await p.keyboard.press("Backspace"); }
+  ck("junk fill: erasing it all leaves a Hard puzzle with the starting stock or one more", tot(await st(p)) - j0 <= 1);
+  await ctx.close();
+
+  // 12c. aiming (craft #1, #2): the instruction never covers the board, Esc clears it, tapping the slot again clears it
+  for (const vp of [{ width: 375, height: 667 }, { width: 390, height: 844 }, { width: 1280, height: 860 }]) {
+    ({ ctx, p, errs } = await page({ viewport: vp }));
+    await p.evaluate(() => { const s = window.__sudoku.state; s.stock = { reveal: 1, check: 0, cands: 1 }; window.__sudoku.state = s; });
+    await p.keyboard.press("Escape"); await p.click("#pw-reveal");
+    const clear = () => p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), b = document.getElementById("board").getBoundingClientRect();
+      return document.getElementById("toast").classList.contains("on") && (t.bottom <= b.top || t.top >= b.bottom); });
+    ck(vp.width + ": the aiming toast is on and clear of every cell", await p.locator("#board.targeting").count() === 1 && await clear(), await p.textContent("#toast"));
+    if (vp.width === 375) await shot(p, "aiming-375");
+    await p.keyboard.press("Escape");
+    ck(vp.width + ": Esc cancels aiming and clears its instruction", await p.locator("#board.targeting").count() === 0 && !(await p.evaluate(() => document.getElementById("toast").classList.contains("on"))));
+    await p.click("#pw-cands"); await p.click("#pw-cands");
+    ck(vp.width + ": tapping the armed slot again clears it too", await p.locator("#board.targeting").count() === 0 && !(await p.evaluate(() => document.getElementById("toast").classList.contains("on"))));
+    if (vp.width === 375) { // scrolled so the board touches the top: the instruction moves below the board, never onto it
+      await p.evaluate(() => { document.body.style.paddingBottom = "900px"; window.scrollTo(0, document.getElementById("board").getBoundingClientRect().top + window.scrollY - 4); });
+      await p.click("#pw-reveal");
+      ck("375 scrolled: the aiming toast still clears the board", await clear(), JSON.stringify(await p.evaluate(() => [document.getElementById("toast").getBoundingClientRect().top, document.getElementById("board").getBoundingClientRect().bottom])));
+      await p.keyboard.press("Escape");
+    }
+    ck(vp.width + ": no page errors while aiming", errs.length === 0, errs.join("|"));
+    await ctx.close();
+  }
+
+  // 12d. R17: Enter on a focused games-row link navigates, and a digit there places nothing
+  ({ ctx, p, errs } = await page());
+  e = await empties(p); await p.evaluate(i => window.__sudoku.select(i), e[0]);
+  await p.focus("#games a[href]:not([aria-current])");
+  await p.keyboard.press("5");
+  ck("a digit typed on a focused link places nothing (R17)", (await st(p)).moves === 0);
+  const target = await p.evaluate(() => document.activeElement.href);
+  await Promise.all([p.waitForURL(u => u.toString() !== url + "sudoku/", { timeout: 5000 }).catch(() => null), p.keyboard.press("Enter")]);
+  ck("Enter on a focused games-row link navigates (R17)", p.url() === target, p.url() + " vs " + target);
+  await ctx.close();
+
+  // 12e. 320 wide: the tagline keeps one line (craft #3)
+  ({ ctx, p, errs } = await page({ viewport: { width: 320, height: 568 } }));
+  ck("320px: the tagline fits on one line", await p.evaluate(() => { const s = document.querySelector(".sub"); return s.getClientRects().length && s.getBoundingClientRect().height < parseFloat(getComputedStyle(s).fontSize) * 2; }));
   await ctx.close();
 
   // 13. an old save (before power-ups) still loads
