@@ -9,7 +9,7 @@
   var HOLD_MS = 1500;             // R13: the last take stays on an undimmed board this long before the end card
   var DEFS = [
     { id: "undo", label: "Undo", desc: "Take back your last turn." },
-    { id: "add", label: "Add", desc: "Add 1 to any tile (never past 9), then take as usual." },
+    { id: "add", label: "Add", desc: "Add 1 to a tile (up to 9), then take." },
     { id: "pass", label: "Pass", desc: "Skip your turn (once per round)." },
     { id: "peek", label: "Peek", desc: "Show one winning move, if there is one." },
   ];
@@ -36,6 +36,7 @@
 
   var sel = null, amount = 1, peekMark = null, targeting = null, timer = null, cpuMark = null, note = "", info = "", newBest = false;
   var hold = false, holdT = null, viewing = false; // R13: the finished board first, then the card; "See the board"
+  var holdAt = 0;      // when the hold began: the tap that ended the round never also skips it
   var cardWas = false; // the card just appeared: focus its primary button (round 3, one end-card pattern)
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), heapsEl = $("heaps");
@@ -221,7 +222,7 @@
     if (state.matchOver && !prevState.matchOver) { if (state.matchOver === "you") record.won++; else record.lost++; }
     clearTimeout(holdT); holdT = null; viewing = false; hold = false;
     if (!live() && !prevState.roundOver && !prevState.matchOver) { // R13: a round just ended: show the board first
-      hold = true; var gen = state.ply;
+      hold = true; holdAt = Date.now(); var gen = state.ply;
       holdT = setTimeout(function () { holdT = null; if (state.ply === gen) { hold = false; render(); } }, HOLD_MS);
     }
     if (state.matchOver === "you" && prevState.matchOver !== "you") {
@@ -315,8 +316,11 @@
   $("again").addEventListener("click", proceed);
   $("over-view").addEventListener("click", function () { viewing = true; info = ""; render(); boardEl.focus(); });
   // a tap on the board (or Enter) during the hold or while viewing brings the card back
-  function showCard() { if (!hold && !viewing) return false; clearTimeout(holdT); holdT = null; hold = false; viewing = false; render(); return true; }
-  boardEl.addEventListener("click", function (e) { if (!live() && !e.target.closest(".over")) showCard(); });
+  function showCard() {
+    if (!hold && !viewing) return false;
+    if (hold && Date.now() - holdAt < 300) return true; // round 3 craft #2: the Take click bubbled here and cut the hold
+    clearTimeout(holdT); holdT = null; hold = false; viewing = false; render(); return true; }
+  boardEl.addEventListener("click", function (e) { if (!live() && !e.target.closest(".over") && !e.target.closest(".bar")) showCard(); });
   function proceed() {
     var before = state;
     if (state.matchOver === "you") state = N.nextMatch(state);

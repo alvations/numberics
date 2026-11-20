@@ -25,14 +25,23 @@
 .fly{ position:absolute; font-size:12cqw; transition:translate 200ms ease-in, scale 200ms ease-in, opacity 200ms ease-in; z-index:2; }
 .ghost{ position:absolute; font-size:17cqw; animation:five-burst 320ms ease-out forwards; z-index:2; }
 @keyframes five-burst{ to{ opacity:0; scale:1.45; } }
+/* round 3 (craft #2): the burst that decides the round stays lit for the whole 1.5 s hold, then the card */
+.ghost.final{ animation:five-final 1500ms ease-out forwards; box-shadow:0 0 0 3px var(--accent), 0 0 26px hsl(var(--h) 80% 60% / .6); }
+@keyframes five-final{ 0%{ scale:1; } 18%{ scale:1.12; } 75%{ opacity:1; } 100%{ opacity:.25; scale:1.12; } }
+/* round 3 (cold #23): the tile the computer just added onto, on your turn */
+.slot.last .tile{ box-shadow:0 0 0 2px var(--cool); }
+.slot.dead.last::after{ border-color:var(--cool); }
+/* round 3 (craft #11): the status line keeps two lines, so a longer line never moves the board */
+#hint{ min-height:2.8em; display:flex; align-items:center; justify-content:center; line-height:1.4; }
 .over h2{ color:var(--ink); }
 @media (prefers-reduced-motion:reduce){
   .slot .tile{ transition:none; }
   .slot.sel .tile{ translate:none; }
   .fly{ transition:opacity 200ms; }
   .ghost{ animation:five-fade 320ms ease-out forwards; }
+  .ghost.final{ animation:five-final-fade 1500ms ease-out forwards; }
 }
 @keyframes five-fade{ to{ opacity:0; } }
-.stat b.none{ color:var(--mute); font-weight:600; } /* R16: an empty Record reads "none", dimmed */
+@keyframes five-final-fade{ 75%{ opacity:1; } 100%{ opacity:.25; } }
 .slot.dead.hit::after{ border-color:var(--accent); } /* R13: the tile that burst to end the round */
 .over .row{ margin:4px 0 0; }

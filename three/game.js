@@ -138,9 +138,9 @@
     $("new").style.visibility = card ? "hidden" : "";
     if (card && !wasOver && !helpOpen()) $("again").focus({ preventScroll: true });
     if (state.over) {
-      // "<detail> · <score>", the family's subline form
-      $("over-text").textContent = state.flushes + (state.flushes === 1 ? " flush" : " flushes") + " · " +
-        (state.used ? state.used + " power-up" + (state.used === 1 ? "" : "s") : "pure run") + " · score " + K.fmt(state.score);
+      // "<detail> · <score>", the family's subline form; no-break spaces and hyphen keep each part whole at 320 px
+      $("over-text").textContent = state.flushes + (state.flushes === 1 ? "\u00a0flush" : "\u00a0flushes") + "\u00a0· " +
+        (state.used ? state.used + "\u00a0power\u2011up" + (state.used === 1 ? "" : "s") : "pure run") + "\u00a0· score\u00a0" + K.fmt(state.score);
       $("over-best").hidden = !(state.score > base && state.score > 0);
     }
   }

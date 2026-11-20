@@ -37,6 +37,7 @@
   var runBest = saved.runCleared >= 0 ? Math.min(saved.runCleared | 0, best) : best;
   var state = games[mode];
   var cursor = 0, anchor = -1, bracketMode = false, drag = null, kbd = false; // kbd: show the cursor only for keyboard play
+  var viewing = false, cardUp = false; // "See the board" hides the end card; cardUp: the card showed at the last draw
   var note = ""; // a one-off hint line message (a power-up explaining itself, a confirm), cleared by the next action
 
   function persist() {
@@ -51,17 +52,23 @@
 
   // ---------- drawing ----------
   var boardEl = $("board"), lineEl = $("line"), barsEl = $("bars");
-  function cols(n) {
-    var c = []; for (var k = 0; k < n; k++) { c.push("minmax(0,3fr)"); if (k < n - 1) c.push("minmax(0,2fr)"); }
+  // Every tile and every gap is at least MIN px wide (round 3: at 320px a five-number line had 35px tiles and 23px
+  // gaps). When the board is too narrow for that in one row, the gaps drop to a row of their own under the seams.
+  var MIN = 40;
+  function cols(n, stack) {
+    var c = []; for (var k = 0; k < n; k++) { c.push(stack ? "minmax(0,1fr)" : "minmax(0,3fr)"); if (k < n - 1) c.push(stack ? "6px" : "minmax(" + MIN + "px,2fr)"); }
     return c.join(" ");
   }
+  function room() { var cs = getComputedStyle(boardEl); return boardEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); }
   function render() {
     var L = E.line(state), n = L.n.length, cur = state.cur, lits = E.literals(L.n, cur.g) || L.n.map(function (t, i) { return { i: i, j: i }; });
     var startOf = []; lits.forEach(function (l) { for (var k = l.i; k <= l.j; k++) startOf[k] = l.i; });
     var long = L.n.some(function (t) { return t.length > 1; }) && n >= 4;
-    var width = n * 68 + (n - 1) * 44;
-    [lineEl, barsEl].forEach(function (el) { el.style.gridTemplateColumns = cols(n); el.style.maxWidth = width + "px"; });
-    lineEl.className = "line n" + n + (long ? " long" : "");
+    var avail = room(), stack = avail > 0 && avail < n * MIN + (n - 1) * MIN;
+    var width = stack ? n * 52 + (n - 1) * 6 : n * 68 + (n - 1) * 44;
+    [lineEl, barsEl].forEach(function (el) { el.style.gridTemplateColumns = cols(n, stack); el.style.maxWidth = width + "px"; });
+    lineEl.className = "line n" + n + (long ? " long" : "") + (stack ? " stack" : "");
+    boardEl.classList.toggle("stacked", stack);
     var gold = E.onTarget(state);
     boardEl.classList.toggle("gold", gold);
     var peekOn = {}; state.peeks.forEach(function (p) { for (var k = p.i; k <= p.j; k++) peekOn[k] = true; });
@@ -72,6 +79,7 @@
       t.className = "tile num" + (lv === 1 ? " lo" : lv === 2 ? " lo2" : "");
       t.style.setProperty("--h", K.hue(lv));
       t.dataset.i = k; t.textContent = tok;
+      t.style.gridColumn = String(2 * k + 1); t.style.gridRow = stack ? "1" : "";
       t.setAttribute("role", "button");
       var u = cur.u[startOf[k]];
       if (k > 0 && (cur.g[k - 1] === "j" || cur.g[k - 1] === ".")) t.classList.add("jl");
@@ -85,7 +93,7 @@
       if (k < n - 1) {
         var g = document.createElement("button"), op = cur.g[k];
         g.type = "button"; g.className = "gp" + (!op ? " empty" : op === "j" ? " j" : op === "." ? " dot" : "");
-        g.dataset.g = k;
+        g.dataset.g = k; g.style.gridColumn = String(2 * k + 2); g.style.gridRow = stack ? "2" : "";
         var b = document.createElement("b"); b.textContent = !op ? "?" : op === "j" ? "·" : op === "." ? "." : E.SYM[op];
         g.appendChild(b);
         g.setAttribute("aria-label", "gap " + (k + 1) + ": " + (!op ? "empty" : op === "j" ? "joined" : op === "." ? "decimal point" : op));
@@ -130,7 +138,7 @@
     $("round").textContent = state.mode === "daily" ? String(state.solved) : String(state.round);
     $("lineno").textContent = (state.idx + 1) + "/6";
     var bv = state.mode === "climb" ? Math.max(best, cleared(state)) : best;
-    $("best").textContent = bv ? String(bv) : "none"; $("best").classList.toggle("none", !bv);
+    $("best").textContent = bv ? String(bv) : "none"; $("best").classList.toggle("none", !bv); // shared .stat .none
     Array.prototype.forEach.call($("modes").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
 
     $("next").hidden = !state.done || state.over;
@@ -148,10 +156,17 @@
     else if (state.peeks.length) h = "Peek: " + state.peeks.map(function (p) { return L.n.slice(p.i, p.j + 1).join(" ") + " make " + p.v; }).join(" · ");
     else if (val.why === "math") h = "Each step must be a whole number or a fraction.";
     else if (!state.edits && !state.done && state.idx === 0 && state.round === 1) h = "Tap a gap for + − × ÷, a number for √ or !.";
+    else if (state.over && viewing) h = "Tap the board for the summary.";
+    else if (!state.done) h = "Make " + L.g + " with the numbers in order."; // the band never sits empty (round 3)
     $("hint").textContent = h;
 
     // end screens (R8): headline, one summary line "<result> · <tally>", the answer when one was shown, New best
-    var over = $("over"); over.hidden = !state.over;
+    // one end-card pattern (round 3): "See the board" hides the card, the page's New game is hidden (space kept)
+    // while the card shows, and a card that appears takes focus on its primary button
+    if (!state.over) viewing = false;
+    var card = state.over && !viewing, over = $("over"); over.hidden = !card;
+    $("new").style.visibility = card ? "hidden" : "";
+    boardEl.classList.toggle("viewing", state.over && viewing);
     var pw = state.used + " power-up" + (state.used === 1 ? "" : "s") + " used";
     var made = state.solved + " line" + (state.solved === 1 ? "" : "s") + " made";
     $("over-answer").hidden = true; $("over-best").hidden = true;
@@ -174,7 +189,12 @@
         $("again").textContent = "Next round";
       }
     }
+    if (card && !cardUp && drawn) $("again").focus({ preventScroll: true });
+    cardUp = card; drawn = true;
   }
+  var drawn = false; // the first draw (page load) never moves focus
+  function seeBoard() { if (!state.over) return; viewing = true; render(); boardEl.focus({ preventScroll: true }); }
+  function showCard() { if (!state.over || !viewing) return; viewing = false; render(); }
 
   // ---------- actions ----------
   function apply(r, quiet) {
@@ -220,19 +240,19 @@
     if (state.mode === "daily") return setMode("climb");
     if (state.ended) return startNew();
     disarm();
-    state = E.nextRound(state).state; cursor = 0; note = ""; persist(); render();
+    state = E.nextRound(state).state; cursor = 0; note = ""; viewing = false; persist(); render();
   }
   function setMode(m) {
     if (m === mode) return;
     disarm(); games[mode] = state; mode = m;
     if (m === "daily" && games.daily.start !== K.daySeed()) games.daily = E.newGame(K.daySeed(), "daily");
-    state = games[m]; cursor = 0; anchor = -1; bracketMode = false; drag = null; note = ""; persist(); render();
+    state = games[m]; cursor = 0; anchor = -1; bracketMode = false; drag = null; note = ""; viewing = false; persist(); render();
   }
   function startNew() {
     disarm();
     state = mode === "daily" ? E.newGame(K.daySeed(), "daily") : E.newGame(K.freshSeed(), "climb");
     if (mode === "climb") runBest = best;
-    cursor = 0; anchor = -1; bracketMode = false; note = ""; persist(); render();
+    cursor = 0; anchor = -1; bracketMode = false; note = ""; viewing = false; persist(); render();
   }
   function pickTile(k) {
     if (state.done) return;
@@ -248,6 +268,10 @@
     while (el && el !== boardEl && !(el.dataset && el.dataset.i !== undefined && el.classList.contains("num"))) el = el.parentElement;
     return el && el !== boardEl ? +el.dataset.i : -1;
   }
+  // seeing the board after the end: a tap anywhere on it brings the summary back
+  boardEl.addEventListener("click", function (e) { if (viewing && !(e.target.closest && e.target.closest(".over"))) showCard(); });
+  $("over-view").addEventListener("click", function (e) { e.stopPropagation(); seeBoard(); });
+  window.addEventListener("resize", function () { render(); });
   lineEl.addEventListener("pointerdown", function (e) {
     var k = tileAt(e.clientX, e.clientY); if (k < 0 || state.done) return;
     kbd = false; drag = { from: k, to: k, id: e.pointerId };
@@ -300,6 +324,8 @@
       K.clearToast(); // a toast must never hide this warning (round 2: a Hint toast covered it and a run was lost)
       b.textContent = climb ? "Sure? Ends run" : "Sure? Show it";
       note = climb ? "This ends the Climb run. Tap again to show it." : "This gives up the line. Tap again to show it.";
+      // a Tier 1 line that needs a group says so first (round 3: players gave up at the first bracket line)
+      if (E.line(state).h === 1 && !state.cur.b.length) note = "This line needs ( ) Brackets. " + (climb ? "Tap again to end the run." : "Tap again to give up.");
       render();
       var asked = note;
       revealArmed = setTimeout(function () { revealArmed = null; b.textContent = "Show answer"; if (note === asked) { note = ""; render(); } }, 3000); return;
@@ -325,8 +351,8 @@
     kbd = true;
     var pi = ["1", "2", "3", "4"].indexOf(key);
     if (pi >= 0) { activate(PW[pi].id); return; }
-    if (key === "Escape") { anchor = -1; bracketMode = false; note = ""; render(); return; }
-    if (state.over) { if (key === "Enter") { e.preventDefault(); again(); } return; }
+    if (key === "Escape") { if (viewing) return showCard(); anchor = -1; bracketMode = false; note = ""; render(); return; }
+    if (state.over) { if (key === "Enter" || key === " " || key === "Escape") { e.preventDefault(); if (viewing) showCard(); else if (key === "Enter") again(); } return; }
     if (state.done) { if (key === "Enter" || key === " ") { e.preventDefault(); nextLine(); } return; }
     var onGap = cursor % 2 === 1, k = Math.floor(cursor / 2);
     if (key === "ArrowLeft" || key === "ArrowRight") { e.preventDefault(); cursor = Math.max(0, Math.min(max, cursor + (key === "ArrowLeft" ? -1 : 1))); render(); return; }

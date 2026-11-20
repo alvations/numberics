@@ -258,8 +258,9 @@
   setBag(BAG);
   // Strength per level. loose: chance a turn picks at random among the columns the search does not see losing;
   // blunder: chance a loose turn ignores even that (any legal column). A win in one is always taken.
-  // Tuned against a safe-move player (never leaves the computer an immediate line for its shown disc), see tests.
-  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.5 }, medium: { depth: 6, nodes: 20000, loose: 0.85, blunder: 0.2 },
+  // missTen (Easy): chance it misses a win in one that is only a ten-line (round 3, gameplay #9).
+  // Tuned (round 3) against the careful player of tools/measure-four.js (blocks every ring, never drops in a marked column).
+  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.5, missTen: 0.4 }, medium: { depth: 6, nodes: 20000, loose: 0.75, blunder: 0.2 },
              hard: { depth: 14, nodes: 40000, loose: 0.5, blunder: 0.15 } };
 
   function Search(own, num, toMove, masks, budget) {

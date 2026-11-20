@@ -18,7 +18,7 @@
     <div class="stats" aria-live="off">
       <div class="stat"><span>You</span><b id="you">0</b></div>
       <div class="stat"><span>Computer</span><b id="cpu">0</b></div>
-      <div class="stat"><span>Record</span><b id="matches">0-0</b></div>
+      <div class="stat"><span>Record</span><b id="matches" class="none">none</b></div>
     </div>
   </header>
 
@@ -51,7 +51,8 @@
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
   <p class="how">Tap your tile, then any tile to add its value onto it (or arrows, Enter). A tile at 5 or more bursts.
-     Burst both computer tiles to win the round; first to 3 wins. The computer goes first, and you can always win.</p>
+     Burst both computer tiles to win the round; first to 3 wins. Bursting a computer tile earns a power-up, unless you used one that turn.
+     The computer goes first, and you can always win.</p>
   <nav id="games" class="games" data-root="../" data-current="five" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

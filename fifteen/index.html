@@ -47,14 +47,15 @@
   </div>
 
   <div class="row">
-    <div class="views" role="group" aria-label="View">
-      <button id="v-numbers" class="btn" type="button" aria-pressed="true">Numbers</button>
-      <button id="v-grid" class="btn" type="button" aria-pressed="false">Grid</button>
+    <div class="seg views" role="group" aria-label="View">
+      <button id="v-numbers" type="button" aria-pressed="true">Numbers</button>
+      <button id="v-grid" type="button" aria-pressed="false">Grid</button>
     </div>
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Claim numbers in turns; three that add up to 15 win a round. Best of five. Win a round without
-     Erase or Double to earn a power-up. On Hard the computer can Erase and Double too. Keys: arrows, Enter, V, 1-4.</p>
+  <p class="how">Three numbers that make 15 win a round. A win without Erase, Double or Peek earns a power-up.
+     On Hard a draw gives you an Erase, so perfect play wins; the computer can Erase and Double.
+     Keys: arrows, Enter, V, 1-4.</p>
   <nav id="games" class="games" data-root="../" data-current="fifteen" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

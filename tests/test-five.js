@@ -169,7 +169,34 @@ t("Hard from a lost position sets a trap: it beats a greedy player every time an
     if (playMatch(i * 7919 + 13, "hard", "greedy").matchOver === "p") gw++;
     const m = playMatch(i * 7919 + 13, "hard", "random"); rw += m.wins.p; rr += m.wins.p + m.wins.c;
   }
-  ok(gw <= 4, "greedy won " + gw + "/200"); ok(rw / rr < 0.08, "random rounds " + rw + "/" + rr);
+  // round 3: the varied opening (1 1 2 1 leaves no losing first reply) lets greedy take a few Hard matches (measured 9/200)
+  ok(gw <= 16, "greedy won " + gw + "/200"); ok(rw / rr < 0.08, "random rounds " + rw + "/" + rr);
+});
+t("round 3 (mechanics #4): the opening varies by seed between all four opening positions, on every level", () => {
+  for (const lv of F.LEVELS) {
+    const seen = {};
+    for (let seed = 0; seed < 200; seed++) { const s = F.aiTurn(F.newMatch(seed * 7 + 3, lv)).state; seen[s.tiles.join("")] = (seen[s.tiles.join("")] || 0) + 1; }
+    eq(Object.keys(seen).sort(), ["1112", "1121", "1211", "2111"], lv + " " + JSON.stringify(seen));
+    ok(Object.values(seen).every(n => n >= 15), lv + " every opening is common " + JSON.stringify(seen));
+    if (lv === "hard") ok(seen["2111"] + seen["1211"] > 2 * (seen["1112"] + seen["1121"]), "Hard leans to the sharper opening " + JSON.stringify(seen));
+  }
+  // every round of a match, not only the first: rounds of one match start differently
+  let s = F.newMatch(11, "hard"); const opens = new Set();
+  for (let i = 0; i < 12; i++) { s = F.aiTurn(Object.assign(F.nextRound(Object.assign(s, { roundOver: "p", matchOver: null })), {})).state; opens.add(s.tiles.join("")); }
+  ok(opens.size >= 3, "openings over 12 rounds of one match " + [...opens]);
+});
+t("round 3: every opening is equally good in theory (lost for the computer in 7 more turns), so R4 holds whichever is played", () => {
+  for (const t4 of [[2, 1, 1, 1], [1, 2, 1, 1], [1, 1, 2, 1], [1, 1, 1, 2]]) eq(F.lookup(t4, "p"), { result: "win", dist: 7 }, t4.join(""));
+});
+t("round 3: the opening is a pure function of the seed", () => {
+  for (let seed = 0; seed < 30; seed++) for (const lv of F.LEVELS) eq(F.aiTurn(F.newMatch(seed, lv)).state.tiles, F.aiTurn(F.newMatch(seed, lv)).state.tiles);
+});
+t("cold #24: the round records what it paid (for the round card), and a new round starts empty", () => {
+  let s = F.play(at([4, 1, 2, 1], "p"), 0, 2).state; eq(s.earned.length, 1); ok(F.POWERS.includes(s.earned[0]));
+  s = F.play(Object.assign(s, { turn: "p" }), 1, 3).state; eq(s.earned.length, 1, "1 onto 1 does not burst");
+  const u = F.use(Object.assign(s, { turn: "p", prev: F.newMatch(7, "medium") }), "undo"); ok(u.ok); eq(u.state.earned, [], "Undo takes the record back too");
+  const won = F.play(at([1, 0, 0, 4], "p"), 0, 3).state; eq(won.earned.length, 1, "the round-ending burst pays (not the match one)");
+  eq(F.nextRound(won).earned, []);
 });
 t("measured: a greedy player wins most Easy matches and about a third of Medium; each level is harder than the one below", () => {
   const N = 400, rate = (lv, bot) => { let w = 0, r = 0, all = 0; for (let i = 0; i < N; i++) { const s = playMatch(i * 7919 + 13, lv, bot); if (s.matchOver === "p") w++; r += s.wins.p; all += s.wins.p + s.wins.c; } return { match: w / N, round: r / all }; };

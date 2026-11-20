@@ -256,4 +256,76 @@ module.exports = async function ({ browser, url, ck, shot }) {
   for (let guard = 0; guard < 6 && !(await st(p)).done; guard++) await p.locator('.gp[data-g="0"]').click();
   ck("reduced motion: a line still solves", (await st(p)).done && e3.length === 0, e3.join("|"));
   await ctx.close();
+
+  // 11. round 3: 40px tiles and gaps at 320px, the Tier 1 label, the bracket nudge, one end-card pattern
+  ctx = await browser.newContext({ viewport: { width: 320, height: 568 }, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); const e5 = []; p.on("pageerror", e => e5.push(e.message));
+  await p.goto(page);
+  const setLine = (n, cur) => p.evaluate(([n, cur]) => {
+    const E = window.__six.E, s = JSON.parse(JSON.stringify(window.__six.state));
+    const id = E.BANK.findIndex(b => b.n === n), b = E.BANK[id];
+    s.lines[s.idx] = { id, t: b.t, n: b.n.split(" "), g: b.g, d: b.d, h: b.h, sol: b.s };
+    s.cur = cur || E.blank(s.lines[s.idx].n.length); s.done = false; s.over = false; s.ended = false; s.edits = 1;
+    window.__six.state = s;
+  }, [n, cur || null]);
+  const sizes = () => p.evaluate(() => [...document.querySelectorAll("#line .num, #line .gp")].map(e => { const r = e.getBoundingClientRect(); return Math.min(r.width, r.height); }));
+  for (const n of ["74 74 74 74 74", "9 9 9 9 9", "5 5 5 5", "3 3 3"]) {
+    await setLine(n);
+    const z = await sizes();
+    ck("320px: every tile and gap of " + n + " is at least 40px", z.length === 2 * n.split(" ").length - 1 && z.every(x => x >= 40), z.map(Math.round).join(","));
+    ck("320px: no horizontal scroll with " + n, await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+    ck("320px: the ? ring never touches a tile (" + n + ")", await p.evaluate(() => {
+      const t = [...document.querySelectorAll("#line .num")].map(e => e.getBoundingClientRect());
+      return [...document.querySelectorAll("#line .gp b")].every(b => { const r = b.getBoundingClientRect(); return t.every(q => r.right <= q.left || r.left >= q.right || r.bottom <= q.top || r.top >= q.bottom); });
+    }));
+  }
+  await setLine("9 9 9 9 9");
+  await shot(p, "320-five");
+  // a drag across the stacked line still groups, and the gaps still cycle
+  { const a = await p.locator('.num[data-i="1"]').boundingBox(), z = await p.locator('.num[data-i="3"]').boundingBox();
+    await p.mouse.move(a.x + a.width / 2, a.y + a.height / 2); await p.mouse.down(); await p.mouse.move(z.x + z.width / 2, z.y + z.height / 2, { steps: 6 }); await p.mouse.up();
+    ck("320px stacked line: a drag groups", JSON.stringify((await st(p)).cur.b) === "[[1,3,0]]"); }
+  await p.locator('.gp[data-g="3"]').click();
+  ck("320px stacked line: a gap tap sets it", (await st(p)).cur.g[3] === "+");
+  // the Tier 1 label lists brackets; a Tier 1 bracket line's Show answer says the line needs them
+  await setLine("4 4 4 4");
+  ck("Tier 1 label lists brackets", (await p.textContent("#tier")) === "Tier 1 · + − × ÷ and brackets", await p.textContent("#tier"));
+  ck("the status band is never empty on a live line", (await p.textContent("#hint")) === "Make 6 with the numbers in order.", await p.textContent("#hint"));
+  await p.click("#reveal");
+  ck("Show answer on a bracket line nudges to Brackets first", /needs \( \) Brackets\. Tap again to end the run\./.test(await p.textContent("#hint")) && !(await st(p)).done, await p.textContent("#hint"));
+  ck("the nudge does not wrap the status band at 320px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 50));
+  await p.click("#reveal");
+  ck("second tap still ends the run", (await st(p)).ended);
+  // one end-card pattern
+  await p.setViewportSize({ width: 375, height: 667 });
+  const newBox0 = await p.locator("#new").boundingBox();
+  ck("end card: page New game hidden, its space kept", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden") && newBox0 && newBox0.height > 30);
+  ck("end card: Run over offers See the board", await p.isVisible("#over-view") && (await p.textContent("#over-view")) === "See the board");
+  const boardY0 = (await p.locator("#board").boundingBox()).y;
+  await p.click("#over-view");
+  ck("See the board hides the card and shows the answered line", !(await p.isVisible("#over")) && /Tap the board for the summary/.test(await p.textContent("#hint")) && await p.locator("#line .num").count() === 4);
+  ck("See the board: New game is back, nothing jumps", await p.isVisible("#new") && Math.abs((await p.locator("#board").boundingBox()).y - boardY0) < 1);
+  await shot(p, "seeboard");
+  await p.locator('.num[data-i="0"]').click();
+  ck("a tap on the board brings the card back", await p.isVisible("#over"));
+  ck("the card's primary button has focus", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  await p.click("#over-view"); await p.keyboard.press("Escape");
+  ck("Escape brings the card back too", await p.isVisible("#over") && await p.evaluate(() => document.activeElement.id === "again"));
+  await p.keyboard.press("Enter");
+  ck("Enter on the focused primary starts a new run", (await st(p)).round === 1 && !(await st(p)).over);
+  // a cleared round: card focus, See the board, then Next round
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.idx = 5; s.cur = JSON.parse(JSON.stringify(s.lines[5].sol)); s.done = true; window.__six.state = s; });
+  await p.click("#next");
+  ck("round cleared: card focused on Next round", await p.isVisible("#over") && await p.evaluate(() => document.activeElement.id === "again" && document.activeElement.textContent === "Next round"));
+  ck("round cleared: See the board offered", await p.isVisible("#over-view"));
+  await p.click("#over-view"); await p.locator("#board").click({ position: { x: 20, y: 20 } });
+  ck("round cleared: board tap returns to the card", await p.isVisible("#over"));
+  await p.click("#again");
+  ck("Next round still climbs", (await st(p)).round === 2 && await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "visible"));
+  // the page still fits 390x844 with a stacked five-number line
+  await p.setViewportSize({ width: 390, height: 844 });
+  await setLine("74 74 74 74 74");
+  ck("390x844: a five-number line stacks its gaps and still fits", await p.locator("#line.stack").count() === 1 && await p.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight), await p.evaluate(() => document.documentElement.scrollHeight));
+  ck("round 3 checks: no page errors", e5.length === 0, e5.join("|"));
+  await ctx.close();
 };

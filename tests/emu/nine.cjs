@@ -27,13 +27,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("empty Best shows a dimmed none (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
   ck("R16 pills: You, Computer, Record (dimmed none), then Best", JSON.stringify(await p.$$eval(".stat > span", a => a.map(x => x.textContent))) === '["You","Computer","Record","Best"]' &&
      (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
-  ck("how-to discloses the computer's Pass and Add on Hard (R14) and the R2 rule", /On Hard the computer can also\s+Pass and Add\./.test(await p.textContent(".how")) && /unless you used Add or Pass in it/.test(await p.textContent(".how")));
+  ck("how-to discloses the computer's Pass and Add on Hard (R14) and the R2 rule", /On Hard the computer can also\s+Pass and Add\./.test(await p.textContent(".how")) && /unless you used Add, Pass or Peek\s+in it/.test(await p.textContent(".how")));
   ck("three tiles: the panel hugs its row (no 100px of dead space above and below)", await p.evaluate(() => { const b = document.getElementById("board").getBoundingClientRect(), t = document.querySelector(".heap.tile").getBoundingClientRect(); return t.top - b.top < 70 && b.height < b.width * 0.8; }));
   ck("restart says New game (R11)", (await p.textContent("#new")) === "New game");
   ck("disabled Take is the calm style, not gold", await p.evaluate(() => getComputedStyle(document.getElementById("take")).backgroundColor !== getComputedStyle(document.querySelector(".btn.primary:not(:disabled)") || document.body).backgroundColor && document.getElementById("take").disabled));
   // R5: an empty tray button explains itself in the hint line, by tap and by key
   await p.locator("#tray .pw").nth(1).click({ force: true });
-  ck("tapping an empty power-up explains it (R5)", /^Add: Add 1 to any tile.*Win a round without Add or Pass to earn one\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("tapping an empty power-up explains it (R5)", /^Add: Add 1 to a tile.*Win a round without Add, Pass or Peek to earn one\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("empty tray buttons are aria-disabled, never disabled", await p.locator('#tray .pw[aria-disabled="true"]').count() >= 3 && await p.locator("#tray .pw:disabled").count() === 0);
   ck("tray tooltip voice: '1: Undo. Take back your last turn.'", (await p.locator("#tray .pw").first().getAttribute("title")) === "1: Undo. Take back your last turn.");
   await p.keyboard.press("1");
@@ -53,8 +53,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 2. a click turn: tap a pip to choose the amount, then Take
   await forge(p, { heaps: [5, 3, 7] });
-  await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // pip 5 of 7: take 3, leaving 4
-  ck("tapping a pip sets the amount", (await p.textContent("#amount")).includes("Take 3 from the 7"));
+  await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // first tap on a tile picks it, take 1 (cold #31)
+  ck("the first tap on a tile picks it with a take of 1, even on a pip", (await p.textContent("#amount")).includes("Take 1 from the 7"));
+  await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // pip 5 of 7 on the chosen tile: take 3, leaving 4
+  ck("tapping a pip on the chosen tile sets the amount", (await p.textContent("#amount")).includes("Take 3 from the 7"));
   await p.click("#more"); await p.click("#less");
   await p.click("#take");
   ck("click take lowers the tile", (await S(p)).heaps[2] === 4);
@@ -101,8 +103,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R13: the card waits while the last take shows", !(await p.isVisible("#over")) && await p.locator(".heap.ghost.by-cpu").count() === 1 && /^Computer took 1 from the 1, gone\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await shot(p, "hold");
   await card(p);
-  ck("round lost by the computer's last take", (await p.textContent("#over-title")) === "Round lost");
-  ck("lost round card: summary line, no Undo offer", /^You 0 : 1 Computer · first to 3$/.test(await p.textContent("#over-text")) && !/Undo/.test(await p.textContent("#over")));
+  ck("round lost by the computer's last take: 'The computer wins round 1'", (await p.textContent("#over-title")) === "The computer wins round 1", await p.textContent("#over-title"));
+  ck("lost round card: '<detail> · <tally>', no Undo offer", (await p.textContent("#over-text")) === "The computer took the last tile · 0-1, first to 3" && !/Undo/.test(await p.textContent("#over")), await p.textContent("#over-text"));
+  ck("one end-card pattern: focus on the card's primary button", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
+  ck("one end-card pattern: the page's New game is hidden, its space kept", await p.evaluate(() => { const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && n.getBoundingClientRect().height > 20; }));
   await p.keyboard.press("1");
   s = await S(p);
   ck("undo after a lost round does nothing and says why (R1)", s.roundOver === "cpu" && s.power.you.undo === 1 && /Not after a round ends/.test(await p.textContent("#hint")));
@@ -110,6 +114,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R13: See the board hides the card and says how to get it back", !(await p.isVisible("#over")) && /Tap the board for the summary\./.test(await p.textContent("#hint")));
   await p.click("#board", { position: { x: 20, y: 20 } });
   ck("R13: a tap on the board brings the card back", await p.isVisible("#over"));
+  ck("See the board shows New game again only while the card is away (card back: hidden)", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "hidden"));
   await p.click("#again");
 
   // R2: a round won after Add pays nothing, and the card says why
@@ -117,10 +122,50 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const tot0 = await p.evaluate(() => Object.values(window.__nine.state.power.you).reduce((a, b) => a + b, 0));
   await p.keyboard.press("2"); await p.locator('.heap[data-i="0"]').click();
   await p.locator('.heap[data-i="0"]').click(); await p.click("#more"); await p.click("#take"); await card(p);
-  ck("R2: a round won after Add pays nothing and says so", (await p.textContent("#over-title")) === "Round won" &&
+  ck("R2: a round won after Add pays nothing and says so", /^You win round \d$/.test(await p.textContent("#over-title")) &&
      await p.evaluate(() => Object.values(window.__nine.state.power.you).reduce((a, b) => a + b, 0)) === tot0 - 1 &&
-     (await p.textContent("#over-note")) === "No power-up: you used Add or Pass this round.", await p.textContent("#over-note"));
+     (await p.textContent("#over-note")) === "No power-up: you used Add, Pass or Peek this round.", await p.textContent("#over-note"));
   await p.click("#again");
+  ck("leaving the card shows New game again", await p.evaluate(() => getComputedStyle(document.getElementById("new")).visibility === "visible"));
+
+  // R2 (round 3): Peek counts as help, and the card says so
+  await forge(p, { heaps: [0, 2, 0], you: { peek: 1, add: 0, pass: 0 } });
+  const tp = await p.evaluate(() => Object.values(window.__nine.state.power.you).reduce((a, b) => a + b, 0));
+  await p.keyboard.press("4"); await p.click("#take"); await card(p);
+  ck("R2: a round won after Peek pays nothing and says so", await p.evaluate(() => Object.values(window.__nine.state.power.you).reduce((a, b) => a + b, 0)) === tp - 1 &&
+     (await p.textContent("#over-note")) === "No power-up: you used Add, Pass or Peek this round.", await p.textContent("#over-note"));
+  await p.click("#again");
+
+  // the result holds 1.5 s on the board before the card, when you take last and when the computer does
+  const timeCard = (p) => p.evaluate(() => new Promise((res) => { const t0 = performance.now(), o = document.getElementById("over");
+    const iv = setInterval(() => { if (!o.hidden) { clearInterval(iv); res(performance.now() - t0); } }, 20); }));
+  await forge(p, { heaps: [0, 3, 0], s: { score: { you: 0, cpu: 0 } } });
+  await p.locator('.heap[data-i="1"]').click(); await p.click("#more"); await p.click("#more");
+  let tc = timeCard(p); await p.click("#take"); let ms = await tc;
+  ck("your winning take: the board holds at least 1.5 s before the card", ms >= 1450 && ms < 2600, Math.round(ms) + " ms");
+  await p.click("#again");
+  await forge(p, { heaps: [0, 0, 2], s: { score: { you: 0, cpu: 0 } } });
+  await p.locator('.heap[data-i="2"]').click(); // take 1, leaving 1: the computer takes the last
+  let tcpu = p.evaluate(() => new Promise((res) => { const o = document.getElementById("over");
+    const iv = setInterval(() => { const s = window.__nine.state; if (s.roundOver && !window.__t0) window.__t0 = performance.now(); if (!o.hidden) { clearInterval(iv); res(performance.now() - window.__t0); } }, 10); }));
+  await p.click("#take"); ms = await tcpu;
+  ck("the computer's winning take: the board holds at least 1.5 s before the card", ms >= 1450 && ms < 2600, Math.round(ms) + " ms");
+  await p.evaluate(() => { delete window.__t0; });
+  await p.click("#again");
+
+  // craft #11: status text never pushes the board down (every hint the game can show, at 375 and at 320)
+  for (const w of [375, 320]) {
+    await p.setViewportSize({ width: w, height: 812 });
+    const texts = ["", "Your turn: take from one tile.", "You took 7 from the 7, gone. Tap the board for the summary.",
+      "Computer used Add (4 to 5), then took 5 from the 5, gone. Your turn.", "Peek: no winning move here. Add or Pass can change that.",
+      "Add: Add 1 to a tile (up to 9), then take. Win a round without Add, Pass or Peek to earn one.",
+      "Undo: Take back your last turn. Nothing to take back yet this round.", "Switching now counts as a loss. Tap again to switch.",
+      "Pass: Skip your turn (once per round). Win a round without Add, Pass or Peek to earn one.",
+      "Peek: Show one winning move, if there is one. Win a round without Add, Pass or Peek to earn one."];
+    const tops = await p.evaluate((texts) => texts.map((t) => { document.getElementById("hint").textContent = t; return document.getElementById("board").getBoundingClientRect().top; }), texts);
+    ck("status text never moves the board at " + w + "px", tops.every((t) => t === tops[0]), JSON.stringify(tops));
+  }
+  await p.setViewportSize({ width: 375, height: 812 }); await p.evaluate(() => window.__nine.render());
 
   // R14: the computer's Pass on Hard is announced in the hint line, not a toast
   await forge(p, { heaps: [1, 2, 3], s: { diff: "hard", turn: "cpu" } });
@@ -131,17 +176,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 4. round end, match end, misere unlock, learn view
   await forge(p, { heaps: [0, 4, 0], s: { score: { you: 0, cpu: 0 }, round: 1 } });
-  await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take"); await card(p);
-  ck("last take wins the round", await p.isVisible("#over") && (await p.textContent("#over-title")) === "Round won");
+  await p.locator('.heap[data-i="1"]').click(); await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take"); await card(p);
+  ck("last take wins the round", await p.isVisible("#over") && (await p.textContent("#over-title")) === "You win round 1" && (await p.textContent("#over-text")) === "You took the last tile · 1-0, first to 3");
   await shot(p, "round");
   await p.click("#again");
   s = await S(p);
   ck("next round deals fresh tiles", s.round === 2 && !s.roundOver && s.heaps.every(v => v > 0));
   await forge(p, { heaps: [0, 0, 2], s: { score: { you: 2, cpu: 1 } } });
   await p.focus("#board"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown"); await p.keyboard.press("Enter");
-  await p.keyboard.press("Enter"); // Enter during the R13 look shows the card at once
+  await p.waitForTimeout(350); await p.keyboard.press("Enter"); // Enter during the R13 look shows the card at once (not the take's own Enter)
   ck("Enter during the look brings the card up", await p.isVisible("#over"));
-  ck("three rounds win the match", (await p.textContent("#over-title")) === "Match won");
+  ck("three rounds win the match: 'You win'", (await p.textContent("#over-title")) === "You win");
   ck("match card: summary line and New best (R8)", /^Match won 3-\d · 3 tiles$/.test(await p.textContent("#over-text")) && await p.isVisible("#over-best") && (await p.textContent("#over-best")) === "New best.");
   ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
   await shot(p, "match");
@@ -154,16 +199,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("misere starts a new run", s.misere && s.level === 3 && /last take loses/.test(await p.textContent("#hint")));
   await forge(p, { heaps: [0, 1, 0] });
   await p.locator('.heap[data-i="1"]').click(); await p.click("#take"); await card(p);
-  ck("misere: the last take loses", (await p.textContent("#over-title")) === "Round lost" && (await S(p)).score.cpu === 1);
+  ck("misere: the last take loses", /^The computer wins round \d$/.test(await p.textContent("#over-title")) && /^You took the last tile · /.test(await p.textContent("#over-text")) && (await S(p)).score.cpu === 1);
   await p.click("#learn-btn");
   ck("learn view shows binary and the nim-sum", await p.isVisible("#learn") && /Nim-sum \d{4}/.test(await p.textContent("#learn")));
   ck("learn says the goal plainly: leave a nim-sum of 0", /leave a nim-sum of 0/.test(await p.textContent("#learn")));
+  ck("learn opens with one plain sentence before any binary (cold #30)", await p.evaluate(() => { const f = document.querySelector("#learn > span"); return f.className === "plain" && /^Aim to leave the tiles balanced/.test(f.textContent) && !/binary|nim-sum|[01]{4}/i.test(f.textContent); }));
   await forge(p, { heaps: [9, 8, 7, 6, 5, 4, 3, 2, 1] });
   ck("nine tiles fit with binary labels", await p.locator(".heap .bin").count() === 9 && await p.evaluate(() => document.documentElement.scrollWidth <= 375));
   await shot(p, "learn");
   await forge(p, { heaps: [0, 0, 1], s: { score: { you: 0, cpu: 2 } } });
   await p.locator('.heap[data-i="2"]').click(); await p.click("#take"); await card(p);
-  ck("losing the match ends the run", (await p.textContent("#over-title")) === "Run over");
+  ck("losing the match ends the run: 'The computer wins' and the note says what a run is", (await p.textContent("#over-title")) === "The computer wins" && /^Run over: the next run starts again at 3 tiles\. Best: /.test(await p.textContent("#over-note")));
   ck("run over card: summary, New game, no Undo offer", /^Match lost \d-3 · 3 tiles$/.test(await p.textContent("#over-text")) && (await p.textContent("#again")) === "New game" && !/Undo/.test(await p.textContent("#over")));
   await shot(p, "runover");
   await p.click("#again");

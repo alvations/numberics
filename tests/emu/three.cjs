@@ -17,7 +17,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 0. the first-run explainer: shown once, blocks play while open, remembered, re-openable
   ck("first visit shows the explainer", await p.isVisible("#help"));
   ck("explainer teaches 1+2, equal, step, flush and rings", await p.locator("#help li").count() === 5 &&
-    /1 and 2/.test(await p.textContent("#help")) && /Equal/.test(await p.textContent("#help")) &&
+    /1 and 2/.test(await p.textContent("#help")) && /equal tiles merge/.test(await p.textContent("#help")) &&
     /3 and 6 make 9/.test(await p.textContent("#help")) && /Flush/.test(await p.textContent("#help")) && /ring/.test(await p.textContent("#help")));
   ck("cold #17: the help copy is exact (1 + 2 and 3 + 6 are the unequal pairs; 1s and 2s never pair; flush uses 3, 6, 9, 12)",
     await p.evaluate(() => { const t = document.getElementById("help").textContent.replace(/\s+/g, " ");
@@ -166,7 +166,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   s = await st(p); ck("undo (tray click) rewinds the third, stock included", s.grid[5] === 2 && s.power.third === 1 && s.power.undo === 0);
 
   // 4b. R15 (critic S2): a flush on a full stock says "Power-ups full"
-  await set(p, FLUSH, { score: 0, moves: 3, power: { undo: 9, smash: 9, swap: 9, third: 9 } });
+  await set(p, FLUSH, { score: 0, moves: 3, free: false, power: { undo: 9, smash: 9, swap: 9, third: 9 } });
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(150);
   ck("R15: a flush on a full stock says Power-ups full", (await p.textContent("#toast")) === "Flush 3-6-9, +54. Power-ups full" &&
     await p.evaluate(() => document.getElementById("toast").classList.contains("on")), await p.textContent("#toast"));
@@ -222,7 +222,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     await p.locator("#board.targeting").count() === 0);
   ck("craft #7: one New game on screen while the card shows; the page's button keeps its space", await p.evaluate(() => {
     const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && n.getBoundingClientRect().height > 0; }));
-  ck("subline reads '<detail> · score N'", (await p.textContent("#over-text")) === "12 flushes · 7 power-ups · score 12,345", await p.textContent("#over-text"));
+  ck("subline reads '<detail> · score N'", (await p.textContent("#over-text")) === "12\u00a0flushes\u00a0· 7\u00a0power\u2011ups\u00a0· score\u00a012,345", await p.textContent("#over-text"));
   await shot(p, "over");
   await p.click("#over-view");
   ck("See the board hides the card and shows the finished board", !(await p.isVisible("#over")) && await p.locator("#tiles .tile").count() === 16);
@@ -242,6 +242,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage();
   await p.goto(page);
   ck("320x568: the explainer title is on screen at the top", await p.evaluate(() => { const r = document.getElementById("help-title").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
+  ck("craft #2: 320x568: the whole explainer, Play included, fits without scrolling", await p.evaluate(() => { const c = document.querySelector("#help .card").getBoundingClientRect(); return c.top >= 0 && c.bottom <= innerHeight; }));
+  ck("craft #2: 320x568: the words get more room than the examples", await p.evaluate(() => { const li = document.querySelector("#help li"); return li.children[1].getBoundingClientRect().width > li.children[0].getBoundingClientRect().width; }));
   ck("320x568: the explainer scrolls to Play", await p.evaluate(() => { const h = document.getElementById("help"), b = document.getElementById("help-play");
     h.scrollTop = h.scrollHeight; const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
   ck("320x568: no sideways scroll", await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));

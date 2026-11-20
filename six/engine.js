@@ -388,6 +388,7 @@
   var POWERS = ["hint", "skip", "peek", "undo"];
   var DAILY = [1, 2, 3, 3, 4, 5];   // tiers of the six Daily lines
   var STREAK = 3;                    // lines in a row without help that earn one power-up
+  var PLAIN_FIRST = 3;               // Climb round 1 opens with this many lines that need no brackets
   function rnd(s) { var r = Kit.rand(s.seed); s.seed = r[1]; return r[0]; }
   function climbTier(s) { return s.round <= 5 ? s.round : [3, 4, 5][Math.floor(rnd(s) * 3)]; }
   function draw(s, tier, avoid) {
@@ -410,11 +411,17 @@
     tiers.forEach(function (t) { ids.push(draw(s, t, ids.concat(s.recent))); });
     // easiest first: by tier, then the tools a line needs, then measured difficulty (the draw is seeded, so the slots vary)
     var lines = ids.map(entry).sort(order);
-    // the very first line of a run (Climb round 1, every Daily) needs only + - x /: the tools come one at a time
+    // the first lines of a run need only + - x /, so the tools come one at a time: Climb round 1 opens with three
+    // plain lines (round 3: brackets turned up on line 4 under a label that did not name them), the Daily with one
     if (s.round === 1) {
-      var first = lines.findIndex(function (l) { return l.t === 1 && plain(l); });
-      if (first < 0) { var pid = drawPlain(s, ids.concat(s.recent)); ids[ids.indexOf(lines[0].id)] = pid; lines[0] = entry(pid); }
-      else if (first > 0) lines.unshift(lines.splice(first, 1)[0]);
+      var want = s.mode === "daily" ? 1 : PLAIN_FIRST;
+      for (var have = lines.filter(function (l) { return l.t === 1 && plain(l); }).length; have < want; have++) {
+        // swap out the easiest line that is not plain (the round's last, hardest line stays)
+        var x = lines.findIndex(function (l) { return !(l.t === 1 && plain(l)); });
+        var pid = drawPlain(s, ids.concat(s.recent));
+        ids[ids.indexOf(lines[x].id)] = pid; lines[x] = entry(pid);
+      }
+      lines.sort(function (a, b) { return (b.t === 1 && plain(b) ? 1 : 0) - (a.t === 1 && plain(a) ? 1 : 0) || order(a, b); });
     }
     s.lines = lines; s.idx = 0; s.recent = s.recent.concat(ids).slice(-24);
     startLine(s);
@@ -610,7 +617,7 @@
            UN: UN, unary: unary, solve: solve, tokenize: tokenize, parse: parse, evaluate: evaluate, calc: calc,
            OPS: OPS, JOPS: JOPS, SYM: SYM, blank: blank, literals: literals, normalize: normalize, text: text, value: value,
            treeToModel: treeToModel, groups: groups, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial, skill: skill, depths: depths,
-           BANK: BANK, POOL: POOL, order: order, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK,
+           BANK: BANK, POOL: POOL, order: order, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK, PLAIN_FIRST: PLAIN_FIRST,
            newGame: newGame, line: line, target: target, current: current, onTarget: onTarget, canJoin: canJoin,
            edit: edit, use: use, useable: useable, why: why, plain: plain, sameM: sameM, next: next, nextRound: nextRound, reveal: reveal, hintStep: hintStep, parts: parts };
 });
