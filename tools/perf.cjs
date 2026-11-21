@@ -153,7 +153,12 @@ async function runOnce(browser, base, page, view) {
   });
   const urlBefore = p.url();
   // Play: the game's demo state, then scripted input for PLAY_MS.
-  await p.evaluate(() => { try { if (typeof window.__demo === "function") window.__demo(); } catch (e) {} window.__perf.hook(); });
+  await p.evaluate(() => {
+    // a first-visit how-to (or any) sheet would swallow the scripted keys: close it before play
+    try { if (window.NumbericsUI && NumbericsUI.open && NumbericsUI.open()) NumbericsUI.close(); } catch (e) {}
+    try { if (typeof window.__demo === "function") window.__demo(); } catch (e) {}
+    try { if (window.NumbericsUI && NumbericsUI.open && NumbericsUI.open()) NumbericsUI.close(); } catch (e) {}
+    window.__perf.hook(); });
   await p.waitForTimeout(300);
   await p.evaluate(() => window.__perf.startFrames());
   const plan = PLAY[page.id] || GENERIC, vs = !!page.vs;
