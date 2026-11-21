@@ -3,8 +3,12 @@
 "use strict";
 module.exports = async function ({ browser, url, ck, shot }) {
   const page = url + "fibonacci/";
+  // the how-to sheet opens by itself on a first visit (REDESIGN.md 1.3); most checks start as a returning player
+  const seen = (c) => c.addInitScript(() => { try { const k = "numberics_progress_v1";
+    const o = JSON.parse(localStorage.getItem(k) || "null") || { v: 1, games: {}, howto: {}, daily: {} };
+    o.howto = o.howto || {}; o.howto.fibonacci = true; localStorage.setItem(k, JSON.stringify(o)); } catch (e) { /* storage blocked */ } });
   // 1. loads, plays by keyboard, animates, persists
-  let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 }); await seen(ctx);
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(page);
   ck("two starting tiles", await p.locator(".tile").count() === 2);
@@ -105,7 +109,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     for (let i = 2; i < 40; i++) if (d(i, i + 1) < 40) return false; for (let i = 2; i <= 30; i++) for (let j = i + 1; j <= i + 10; j++) if (d(i, j) < 15) return false; return true; }));
   ck("3 and 13, 34 and 144 now look clearly different", await p.evaluate(() => { const h = window.__fibonacci.hue, d = (a, b) => { const x = Math.abs(h(a) - h(b)) % 360; return Math.min(x, 360 - x); }; return d(3, 6) >= 40 && d(8, 11) >= 40; }));
   ck("1 and 2 look different (cream vs a hue)", await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[0] = 1; s.grid[1] = 2; window.__fibonacci.state = s;
-    const t = [...document.querySelectorAll(".tiles .tile")]; return getComputedStyle(t[0]).backgroundImage !== getComputedStyle(t[1]).backgroundImage && !t[1].classList.contains("lo2"); }));
+    const t = [...document.querySelectorAll(".tiles .tile > .face")]; return getComputedStyle(t[0]).backgroundImage !== getComputedStyle(t[1]).backgroundImage && !t[1].classList.contains("lo2"); }));
 
   // 5. award toast on a new highest tile of 55 (round 2 floor); 34 no longer pays
   const sum = () => p.evaluate(() => Object.values(window.__fibonacci.state.power).reduce((a, b) => a + b, 0));
@@ -185,7 +189,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
 
   // 7b. a save with a malformed Undo snapshot keeps the run and Undo fails quietly (critic nit 2)
-  ctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 } }); await seen(ctx);
   p = await ctx.newPage(); const e4 = []; p.on("pageerror", e => e4.push(e.message));
   await p.addInitScript(() => { try { if (!sessionStorage.getItem("seeded")) { sessionStorage.setItem("seeded", "1"); localStorage.setItem("numberics_fibonacci_v1", JSON.stringify({ bestScore: 7, bestTop: 3,
     state: { size: 4, grid: [1,2,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,3], score: 7, top: 3, moves: 4, seed: 9, over: false, power: { undo: 2, smash: 0, swap: 0, boost: 0 }, prev: { grid: "broken" } } })); } } catch (e) {} });
@@ -196,7 +200,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
 
   // 7d. phone: targeting hints never mention Esc (cold #5) and stay on one line, so the board does not jump
-  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true }); await seen(ctx);
   p = await ctx.newPage(); await p.goto(page);
   for (const [i, n] of [[1, "smash"], [2, "swap"], [3, "boost"]]) {
     await p.evaluate(() => { const s = window.__fibonacci.state; s.power = { undo: 0, smash: 1, swap: 1, boost: 1 }; window.__fibonacci.state = s; });
@@ -223,7 +227,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
 
   // 7c. R6 header at desktop: H1 is the game, subtitle links home, pills sit right of the title (board not pushed down)
-  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } }); await seen(ctx);
   p = await ctx.newPage(); await p.goto(page);
   ck("H1 is Fibonacci", (await p.textContent("h1")) === "Fibonacci");
   ck("subtitle starts with a Numberics link home", await p.evaluate(() => { const a = document.querySelector(".sub a"); return a && a.textContent === "Numberics" && a.getAttribute("href") === "../" && document.querySelector(".sub").firstElementChild === a; }));
@@ -247,12 +251,15 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
   p = await ctx.newPage(); const e2 = []; p.on("pageerror", e => e2.push(e.message));
   await p.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
-  await p.goto(page); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowDown"); await p.keyboard.press("ArrowRight");
+  await p.goto(page);
+  ck("storage blocked: the how-to opens (nothing is remembered) and Esc closes it", await p.locator("#sh-howto:not([hidden])").count() === 1);
+  await p.keyboard.press("Escape");
+  await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowDown"); await p.keyboard.press("ArrowRight");
   ck("runs with storage blocked", e2.length === 0 && await p.locator(".tile").count() >= 2 && (await p.evaluate(() => window.__fibonacci.state.moves)) >= 1, e2.join("|"));
   await ctx.close();
 
   // 9. reduced motion: no animation delay, still fully playable
-  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: "reduce" });
+  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: "reduce" }); await seen(ctx);
   p = await ctx.newPage(); const e3 = []; p.on("pageerror", e => e3.push(e.message));
   await p.goto(page);
   const before = await p.evaluate(() => window.__fibonacci.state.moves);
@@ -263,5 +270,176 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.evaluate(() => window.__demo());
   ck("demo state renders a mid-game", (await p.locator(".tile").count()) >= 8);
   ck("no page errors (reduced motion, demo)", e3.length === 0, e3.join("|"));
+  await ctx.close();
+
+  // ===== Phase D (REDESIGN.md 5.3, 5.11, 5.12, 7.3, 8.4, 1.3, 10) =====
+  const row16 = (a) => a.concat(new Array(16 - a.length).fill(0));
+  const put = (q, grid, extra) => q.evaluate(([g, x]) => { const s = window.__fibonacci.state; s.grid = g; s.top = Math.max(...g); s.prev = null; s.over = false;
+    s.free = false; s.marks = new Array(16).fill(0); s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; Object.assign(s, x || {}); window.__fibonacci.state = s; }, [grid, extra || null]);
+  // a recorder on the sound and haptics calls (the game looks NumbericsAudio up at each call)
+  const spy = (q) => q.evaluate(() => { const A = window.NumbericsAudio; window.__snd = [];
+    ["slide", "merge", "best", "power", "lose", "bad", "place", "tick", "buzz"].forEach(n => { const f = A[n]; A[n] = function (a) { window.__snd.push([n, a, Math.round(performance.now())]); return f && f.apply(A, arguments); }; }); });
+
+  // 10. how to play: a first visit opens the three steps once; the row under the board reopens them
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  p = await ctx.newPage(); const e5 = []; p.on("pageerror", e => e5.push(e.message));
+  await p.goto(page);
+  ck("first visit: the how-to sheet opens by itself", await p.locator("#sh-howto:not([hidden])").count() === 1);
+  ck("how-to title and three steps, each a picture and one sentence", (await p.textContent("#sh-howto h2")) === "How to play Fibonacci" &&
+    await p.locator("#sh-howto .step").count() === 3 && await p.locator("#sh-howto .step .pv .mt").count() >= 7);
+  const steps = await p.$$eval("#sh-howto .step p", a => a.map(x => x.textContent));
+  ck("how-to copy is the spec's (9.2)", JSON.stringify(steps) === JSON.stringify(["Swipe to slide every tile.",
+    "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5.", "Equal tiles do not join, except 1 and 1."]), steps.join("|"));
+  await shot(p, "howto");
+  const m0k = await p.evaluate(() => window.__fibonacci.state.moves);
+  await p.keyboard.press("ArrowLeft");
+  ck("a game key does nothing while the sheet is open", (await p.evaluate(() => window.__fibonacci.state.moves)) === m0k);
+  await p.keyboard.press("Escape");
+  ck("Esc closes the sheet and marks it seen", await p.locator("#sh-howto:not([hidden])").count() === 0 && await p.evaluate(() => window.NumbericsProgress.seenHowto("fibonacci")));
+  for (const k of ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"]) await p.keyboard.press(k);
+  ck("the board plays once the sheet is closed", (await p.evaluate(() => window.__fibonacci.state.moves)) > m0k);
+  await p.reload();
+  ck("a returning player is not shown it again", await p.waitForTimeout(150).then(() => p.locator("#sh-howto:not([hidden])").count()) === 0);
+  ck("the How to play row is collapsed, holds the full rules and the keys", await p.evaluate(() => { const d = document.querySelector("details.how");
+    return d && !d.open && /Equal tiles do not merge, except 1 \+ 1\./.test(d.textContent) && /Keys:/.test(d.textContent); }));
+  await p.click("details.how summary"); await p.click("#how-steps");
+  ck("the row's button opens the steps", await p.locator("#sh-howto:not([hidden]) .step").count() === 3);
+  await p.keyboard.press("Escape");
+  ck("44 px targets: tray, row, buttons, summary and game cards", await p.evaluate(() => [...document.querySelectorAll("#tray .pw, #new, details.how summary, #how-steps, #games a")]
+    .every(e => { const r = e.getBoundingClientRect(); return r.height >= 44 && r.width >= 44; })));
+  ck("the games list is the cards, Fibonacci first and marked current", await p.evaluate(() => { const a = [...document.querySelectorAll("#games a.card")];
+    return a.length === 10 && a[0].dataset.id === "fibonacci" && a[0].getAttribute("aria-current") === "page"; }));
+  ck("progress put: the Fibonacci card summary is written", await p.evaluate(() => { const g = window.NumbericsProgress.get("fibonacci"); return !!g && g.live === true && /^Score /.test(g.liveText); }));
+  ck("no page errors (how-to)", e5.length === 0, e5.join("|"));
+  await ctx.close();
+
+  // 11. motion: identity-keyed slides, the pop and appear after the slide, input during an animation, sounds on the beats
+  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } }); await seen(ctx);
+  p = await ctx.newPage(); const e6 = []; p.on("pageerror", e => e6.push(e.message));
+  await p.goto(page); await spy(p);
+  await put(p, row16([0, 0, 0, 1, 0, 0, 3, 4]));
+  const keep = await p.evaluate(() => { const n = document.querySelector('#tiles .tile[aria-label="tile 1"]'); window.__keep = n; return n.dataset.id; });
+  await p.keyboard.press("ArrowLeft");
+  const mid = await p.evaluate(() => new Promise(res => setTimeout(() => {
+    const n = window.__keep, L = document.getElementById("tiles"), m = L.querySelector(".tile.merged"), g = L.querySelectorAll(".tile.gone");
+    res({ same: n.isConnected && n.style.getPropertyValue("--c").trim() === "0", tx: new DOMMatrix(getComputedStyle(n).transform).m41,
+      merged: !!m && m.textContent === "8", gone: g.length, anim: m ? getComputedStyle(m.firstChild).animationName : "" }); }, 55)));
+  ck("the tile keeps its element and slides (no re-create): mid-slide it is between cells", mid.same && mid.tx > 5, JSON.stringify(mid));
+  ck("a joined tile pops on top while both sources sit under it", mid.merged && mid.gone === 2 && /pop/.test(mid.anim), JSON.stringify(mid));
+  await shot(p, "mid-slide");
+  await p.waitForTimeout(450);
+  ck("after the settle only the board's tiles remain", await p.evaluate(() => document.querySelectorAll("#tiles > .tile").length === window.__fibonacci.state.grid.filter(Boolean).length));
+  const snd = await p.evaluate(() => window.__snd.slice());
+  const sl = snd.find(x => x[0] === "slide"), mg = snd.find(x => x[0] === "merge");
+  ck("slide sounds at once; merge(index) as the slide ends", sl && mg && mg[1] === 5 && mg[2] - sl[2] >= 90 && mg[2] - sl[2] <= 200, JSON.stringify(snd));
+  ck("the score floats +N", await p.evaluate(() => true) && snd.some(x => x[0] === "buzz" && x[1] === "merge"));
+  // two quick inputs during an animation give two moves
+  await put(p, row16([1, 0, 0, 2]));
+  const mA = await p.evaluate(() => window.__fibonacci.state.moves);
+  await p.keyboard.press("ArrowRight");
+  const ghosts = await p.evaluate(() => [...document.querySelectorAll("#tiles > .tile.gone")].map(n => n.dataset.id));
+  await p.keyboard.press("ArrowDown");
+  ck("two quick keys during the slide make two moves", (await p.evaluate(() => window.__fibonacci.state.moves)) === mA + 2);
+  ck("the second input finished the first animation (its ghosts are gone at once)", ghosts.length === 2 &&
+    await p.evaluate((g) => g.every(id => !document.querySelector('#tiles > .tile[data-id="' + id + '"]')), ghosts), ghosts.join(","));
+  // the gold ring on a new paying top tile (55), with best() and power() after the pop
+  await p.evaluate(() => { window.__snd.length = 0; });
+  await put(p, row16([7, 8]));
+  await p.keyboard.press("ArrowLeft");
+  ck("a new 55 rings in gold", await p.locator("#tiles .tile .ring").count() === 1);
+  await p.waitForTimeout(700);
+  const s2 = await p.evaluate(() => window.__snd.map(x => x[0]));
+  ck("best() and power() chime after the pop; the ring is gone after it plays", s2.includes("best") && s2.includes("power") && await p.locator("#tiles .ring").count() === 0, s2.join(","));
+  // power-ups animate: Smash fades out, Boost pops, Swap slides, Undo cross-fades
+  await put(p, row16([3, 0, 0, 5]), { power: { undo: 1, smash: 1, swap: 1, boost: 1 } });
+  const box2 = await p.locator("#board").boundingBox();
+  const at2 = (cell) => p.mouse.click(box2.x + box2.width * ((cell % 4) + 0.5) / 4, box2.y + box2.height * (Math.floor(cell / 4) + 0.5) / 4);
+  const id3 = await p.evaluate(() => window.__fibonacci.ids[3]);
+  await p.keyboard.press("3"); await at2(0); await at2(3);
+  ck("Swap slides the same two elements to each other's cells", await p.evaluate((id) => { const n = document.querySelector('#tiles .tile[data-id="' + id + '"]'); return !!n && n.style.getPropertyValue("--c").trim() === "0"; }, id3));
+  await p.keyboard.press("4"); await at2(0);
+  ck("Boost pops the tile in place", await p.evaluate(() => document.querySelectorAll("#tiles .tile.nmm-bump").length === 1));
+  await p.keyboard.press("2"); await at2(3);
+  ck("Smash fades the tile out", await p.evaluate(() => document.querySelectorAll("#tiles .tile.nmm-out").length === 1));
+  ck("the run record counts power-ups used", await p.evaluate(() => window.__fibonacci.run.used === 3));
+  ck("no page errors (motion)", e6.length === 0, e6.join("|"));
+
+  // 12. frame and node budgets (REDESIGN.md 10): a scripted 60-move session, a move every 45 ms
+  await p.evaluate(() => { const s = window.NumbericsFibonacci.newGame(7); window.__fibonacci.state = s; });
+  const sess = await p.evaluate(() => new Promise(res => {
+    const L = document.getElementById("tiles"), onB = () => window.__fibonacci.state.grid.filter(Boolean).length;
+    const frames = []; let last = 0, stop = false, maxOver = 0, i = 0, moves0 = window.__fibonacci.state.moves;
+    function raf(t) { if (last) frames.push(t - last); last = t; maxOver = Math.max(maxOver, L.children.length - onB()); if (!stop) requestAnimationFrame(raf); }
+    requestAnimationFrame(raf);
+    const keys = ["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowDown"];
+    const iv = setInterval(() => {
+      if (i++ >= 60 || window.__fibonacci.state.over) { clearInterval(iv); setTimeout(() => { stop = true;
+        res({ frames: frames.slice(2), maxOver, n: L.children.length, board: onB(), moves: window.__fibonacci.state.moves - moves0 }); }, 450); return; }
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: keys[i % 4], bubbles: true }));
+    }, 45);
+  }));
+  const pct = (a, q) => { const s = a.slice().sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))] || 0; };
+  console.log("  fibonacci 60-move session: " + sess.moves + " moves, " + sess.frames.length + " frames, p95 " + pct(sess.frames, .95).toFixed(2) +
+    " ms, worst " + Math.max(...sess.frames).toFixed(2) + " ms, max extra nodes " + sess.maxOver);
+  ck("60-move session: frame p95 <= 17.5 ms (16.7 + vsync jitter)", pct(sess.frames, .95) <= 17.5, pct(sess.frames, .95));
+  ck("60-move session: frames over 20 ms at most 2%", sess.frames.filter(x => x > 20).length <= Math.ceil(sess.frames.length * 0.02), sess.frames.filter(x => x > 20).join(","));
+  ck("60-move session: tile nodes <= tiles + 8 at every frame, and exactly the tiles once settled", sess.maxOver <= 8 && sess.n === sess.board, JSON.stringify([sess.maxOver, sess.n, sess.board]));
+  ck("60-move session: most inputs moved", sess.moves >= 30, sess.moves);
+  await ctx.close();
+
+  // 13. reduced motion: by the OS, by the setting, and the setting "Full" beating the OS
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" }); await seen(ctx);
+  p = await ctx.newPage(); await p.goto(page);
+  await put(p, row16([0, 0, 0, 1, 0, 0, 3, 4])); await p.keyboard.press("ArrowLeft");
+  ck("OS reduce: the layer is reduced, no slide transition, the pop is a fade", await p.evaluate(() => { const L = document.getElementById("tiles"), m = L.querySelector(".tile.merged");
+    return L.classList.contains("nmm-reduced") && getComputedStyle(L.querySelector(".tile")).transitionDuration === "0s" && (!m || getComputedStyle(m.firstChild).animationName === "nmm-fade"); }));
+  await p.evaluate(() => window.NumbericsSettings.set({ motion: "full" }));
+  await put(p, row16([0, 0, 0, 1, 0, 0, 3, 4])); await p.keyboard.press("ArrowLeft");
+  ck("setting Full beats the OS: tiles slide again", await p.evaluate(() => { const L = document.getElementById("tiles");
+    return !L.classList.contains("nmm-reduced") && getComputedStyle(L.querySelector(".tile")).transitionDuration !== "0s"; }));
+  await ctx.close();
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await seen(ctx);
+  p = await ctx.newPage(); await p.goto(page);
+  await p.evaluate(() => window.NumbericsSettings.set({ motion: "reduced" }));
+  await put(p, row16([0, 0, 0, 1, 0, 0, 3, 4])); await p.keyboard.press("ArrowLeft");
+  ck("setting Less (device allows motion): no slide, read at the move", await p.evaluate(() => { const L = document.getElementById("tiles");
+    return L.classList.contains("nmm-reduced") && getComputedStyle(L.querySelector(".tile")).transitionDuration === "0s"; }));
+  await ctx.close();
+
+  // 14. trophies: every event of 8.4 on a scripted line, then the end card with its pills and the music duck
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await seen(ctx);
+  p = await ctx.newPage(); const e7 = []; p.on("pageerror", e => e7.push(e.message));
+  await p.goto(page);
+  const has = (id) => p.evaluate((x) => window.NumbericsTrophies.has(x), id);
+  const go = async (k) => { await p.keyboard.press(k); await p.waitForTimeout(350); };
+  await put(p, row16([14, 15])); await go("ArrowLeft");          // 610 + 987 = 1597, no power-ups used
+  ck("fib_89, fib_610 and fib_pure (987 unaided) fire on a move", await has("fib_89") && await has("fib_610") && await has("fib_pure"));
+  ck("fib_2584 not yet", !(await has("fib_2584")));
+  await put(p, row16([18, 19])); await go("ArrowLeft");          // 4181 + 6765 = 10946
+  ck("fib_2584 and fib_10946 fire", await has("fib_2584") && await has("fib_10946"));
+  await put(p, row16([1, 1, 0, 0, 2, 3, 0, 0, 3, 4])); await go("ArrowLeft");
+  ck("fib_chain: three joins in one move", await has("fib_chain"));
+  await put(p, [4, 5, 6, 7, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0]); await go("ArrowUp");
+  ck("fib_run (secret): a full row 5 8 13 21", await has("fib_run"));
+  await put(p, row16([1, 0, 0, 0, 2]), { moves: 499 }); await go("ArrowRight");
+  ck("fib_long (secret): move 500", await has("fib_long"));
+  // the end: a move that locks the board with no power-up left
+  await p.evaluate(() => { window.__duck = []; const m = window.NumbericsMusic || (window.NumbericsMusic = {}); const d = m.duck; m.duck = function (on) { window.__duck.push(on); return d && d.apply(m, arguments); }; });
+  await put(p, [4, 6, 4, 6, 6, 4, 6, 4, 4, 6, 4, 6, 6, 4, 6, 0]); // Right: equal tiles stay apart; the spawn (1 or 2) fits nowhere
+  await spy(p);
+  await p.keyboard.press("ArrowRight");
+  const ov = await p.evaluate(() => window.__fibonacci.state.over);
+  ck("scripted end: the move locked the board", ov);
+  await p.waitForSelector("#over", { state: "visible", timeout: 3000 }).catch(() => {});
+  ck("fam_first fires on the end event", await has("fam_first"));
+  ck("the end card shows the trophy as a pill", await p.locator("#over-tro .trophy").count() >= 1 && /Hello, numbers/.test(await p.textContent("#over-tro")));
+  ck("lose() at the lock; music ducks when the card shows", await p.evaluate(() => window.__snd.some(x => x[0] === "lose")) && await p.evaluate(() => window.__duck.indexOf(true) >= 0));
+  await shot(p, "over-trophy");
+  await p.reload();
+  ck("the pills survive a reload of the ended run", await p.locator("#over-tro .trophy").count() >= 1);
+  await p.evaluate(() => { window.__duck = []; const m = window.NumbericsMusic; const d = m.duck; m.duck = function (on) { window.__duck.push(on); return d && d.apply(m, arguments); }; });
+  await p.click("#again");
+  ck("New game un-ducks the music and clears the pills", await p.evaluate(() => window.__duck.indexOf(false) >= 0) && await p.evaluate(() => window.__fibonacci.endTro.length === 0 && window.__fibonacci.run.used === 0));
+  ck("no page errors (trophies)", e7.length === 0, e7.join("|"));
   await ctx.close();
 };

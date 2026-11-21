@@ -38,6 +38,7 @@
       <h2>No moves left</h2>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-tro" class="tro-pills" hidden></div>
       <div class="row">
         <button id="over-view" class="btn" type="button">See the board</button>
         <button id="again" class="btn primary" type="button">New game</button>
@@ -48,10 +49,17 @@
   <div class="row">
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Slide with arrow keys, WASD or a swipe. Neighbours in the sequence merge: 1+1, 1+2, 2+3, 3+5 and on.
-     Equal tiles do not merge, except 1 + 1. Every new highest tile from 55 up earns a power-up. Swapped and boosted
-     tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost. Pass 2584 and keep going.</p>
-  <nav id="games" class="games" data-root="../" data-current="fibonacci" aria-label="Numberics games"></nav>
+  <details class="how" id="how"><summary>How to play</summary>
+    <p>Slide with arrow keys, WASD or a swipe. Neighbours in the sequence merge: 1+1, 1+2, 2+3, 3+5 and on.
+       Equal tiles do not merge, except 1 + 1. Every new highest tile from 55 up earns a power-up. Swapped and boosted
+       tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost. Pass 2584 and keep going.</p>
+    <p>Keys: arrows or WASD slide. 1 to 4 pick a power-up, and U is Undo. Arrows and Enter aim it. Esc cancels.</p>
+    <p><button id="how-steps" class="btn" type="button">Show the three steps</button></p>
+  </details>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="fibonacci"></div>
+  </section>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

@@ -343,6 +343,33 @@ t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move neve
     }
     ok(/HUES\[\(level - 2\) % HUES\.length\]/.test(js), "the table cycles by level");
   });
+  // Phase D (REDESIGN.md 5.3, 7.3, 8.4, 1.3, 3.3)
+  t("D: tiles live in the shared keyed layer; no destroy-and-rebuild, no ANIM constant cached at load", () => {
+    ok(/M\.layer\(tilesEl/.test(js) && /M\.track\(ids, r\.trace, r\.spawned, nextId\)/.test(js), "layer + track");
+    ok(!/var ANIM\s*=/.test(js) && !/tilesEl\.textContent = ""/.test(js), "no ANIM, no rebuild");
+    ok(/function doMove\(dir\) \{\s*settle\(\);/.test(js), "a new input finishes the running animation first");
+  });
+  t("D: sounds on the beats (slide, merge(index), best, power, lose) through one timeline", () => {
+    ["slide", "merge", "best", "power", "lose"].forEach(n => ok(new RegExp('sfx\\("' + n + '"').test(js), n));
+    ok(/fx\.at\(slide, function \(\) \{ sfx\("merge", k\)/.test(js), "merge at the end of the slide");
+  });
+  t("D: trophy events and fields exactly as 8.4", () => {
+    ok(/trophy\("move", data\)/.test(js) && /value: N\.value\(state\.top\), merges: r\.merges\.length, grid: state\.grid\.map\(N\.value\), moves: state\.moves, run:/.test(js));
+    ok(/trophy\("end", \{ score: state\.score, value: N\.value\(state\.top\), run:/.test(js));
+    ok(/id="over-tro" class="tro-pills" hidden/.test(html) && /T\.pills\(\$\("over-tro"\), endTro\)/.test(js), "end-card pills");
+  });
+  t("D: progress put on every persist; music ducks with the end card", () => {
+    const per = js.slice(js.indexOf("function persist()"), js.indexOf("var fmt = K.fmt"));
+    ok(/NP\.put\(ID, \{ best:/.test(per) && /live: !state\.over && state\.moves > 0/.test(per));
+    ok(/NumbericsMusic\.duck\(on\)/.test(js) && /duck\(!over\.hidden\)/.test(js) && /duck\(false\)/.test(js));
+  });
+  t("D: the how-to is a collapsed row with the full rules and keys, and three steps from 9.2", () => {
+    ok(/<details class="how" id="how"><summary>How to play<\/summary>/.test(html) && !/<p class="how">/.test(html));
+    ["Swipe to slide every tile.", "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5.", "Equal tiles do not join, except 1 and 1."]
+      .forEach(s => ok(js.indexOf('"' + s + '"') >= 0, s));
+    ok(/seenHowto\(ID\)/.test(js) && /markHowto\(ID\)/.test(js));
+  });
+  t("D: the games list on the page is the cards (NumbericsNav)", () => ok(/<div id="games" class="cards" data-root="\.\.\/" data-current="fibonacci">/.test(html)));
   t("round 2: the help line, the tray and the engine agree on the 55 floor", () => {
     ok(/new highest tile from 55 up/.test(html) && /new top tile from 55\./.test(js));
     ok(!/from 34/.test(html) && !/from 34/.test(js)); eq(F.value(F.AWARD_FROM_INDEX), 55);

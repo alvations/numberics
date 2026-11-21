@@ -1,12 +1,16 @@
 /* SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 alvations (Melon Lab)
- * Numberics Fibonacci: browser client, modelled on the Endless client (../game.js).
- * The engine (engine.js on top of ../engine.js) owns every rule; this file only draws, listens, remembers. */
+ * Numberics Fibonacci: browser client, modelled on the Two client (../game.js).
+ * The engine (engine.js on top of ../engine.js) owns every rule; this file only draws, listens, remembers.
+ * Motion (docs/design/REDESIGN.md 5.3): tiles are kept by identity in the shared keyed layer (shared/motion.js), so every
+ * tile slides from its old cell to its new one as in the original 2048; a joined tile pops on top after the slide and a
+ * new tile appears after it. A new input finishes the running animation and is applied at once (5.11). Sounds, haptics
+ * and the move's trophy check run on one timeline, so finishing it drops nothing and bunches nothing (7.3). */
 (function () {
   "use strict";
-  var N = window.NumbericsFibonacci, K = window.NumbericsKit, P = window.NumbericsPower;
+  var N = window.NumbericsFibonacci, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
+  var ID = "fibonacci";
   var store = K.store("numberics_fibonacci_v1");
-  var ANIM = K.reducedMotion() ? 0 : 110;
 
   function int(v) { return Number.isInteger(v) && v >= 0; }
   function num(v) { return typeof v === "number" && isFinite(v) && v >= 0; }
@@ -25,18 +29,21 @@
   }
 
   var saved = store.load();
+  var fresh = !saved; // a first visit: the how-to sheet opens once (REDESIGN.md 1.3)
   var best = { score: num(saved && saved.bestScore) ? saved.bestScore : 0, top: int(saved && saved.bestTop) ? saved.bestTop : 0 };
   var state = saved && valid(saved.state) ? saved.state : N.newGame(K.freshSeed());
   // The best score before this run started, so the end card can say "New best." (R8).
   var runBest = saved && valid(saved.state) && num(saved.runBest) ? saved.runBest : best.score;
+  // The run record (REDESIGN.md 8.2): only for trophies, never a rule. used = power-ups used this run.
+  var run = saved && valid(saved.state) && saved.run && int(saved.run.used) ? { used: saved.run.used } : { used: 0 };
+  // Trophies earned by the run's last move and its end, shown as pills on the end card (8.1).
+  var endTro = saved && valid(saved.state) && state.over && Array.isArray(saved.endTro) ? saved.endTro.filter(function (x) { return typeof x === "string"; }) : [];
   var targeting = null;           // {name, picks:[], kbd} while a power-up waits for a target
   var cursor = 0;                 // keyboard cursor cell while targeting (R9)
   var note = "";                  // a tray explanation shown in the hint line until the next action (R5)
-  var timer = null, pendingFx = null;
-  // Round 3 end-card pattern (as Endless): the locked board shows undimmed for HOLD ms, then the card; "See the
+  // Round 3 end-card pattern (as Two): the locked board shows undimmed for HOLD ms, then the card; "See the
   // board" hides it again (a tap on the board, Esc or Enter brings it back). A run that loads already over shows the card.
-  var HOLD = 1500, holding = false, holdT = null, viewing = false, wasOver = !!state.over;
-  var els = [];                   // cell index -> tile element
+  var HOLD = 1500, holding = false, holdT = null, viewing = false, wasOver = !!state.over, ducked = false;
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), tilesEl = $("tiles"), cellsEl = $("cells"), marksEl = $("marks");
@@ -44,37 +51,67 @@
 
   function persist() {
     best.score = Math.max(best.score, state.score); best.top = Math.max(best.top, state.top);
-    store.save({ state: state, bestScore: best.score, bestTop: best.top, runBest: runBest });
+    store.save({ state: state, bestScore: best.score, bestTop: best.top, runBest: runBest, run: run, endTro: endTro });
+    // the card summary (shared/progress.js): what the games list and the Games sheet show for Fibonacci
+    var NP = window.NumbericsProgress;
+    if (NP) NP.put(ID, { best: best.score > 0 ? "Best " + fmt(best.score) : "", live: !state.over && state.moves > 0,
+      liveText: "Score " + fmt(state.score) });
   }
   var fmt = K.fmt;
+  // sounds and haptics (shared/audio.js); a missing module costs a sound, never the game
+  function sfx(name, arg) { var A = window.NumbericsAudio; try { if (A && A[name]) A[name](arg); } catch (e) { /* silent */ } }
+  function buzz(kind) { sfx("buzz", kind); }
+  function trophy(event, data) {
+    var T = window.NumbericsTrophies; if (!T || !T.report) return [];
+    try { return T.report(ID, event, data) || []; } catch (e) { return []; }
+  }
+  function duck(on) {
+    if (on === ducked) return; ducked = on;
+    try { if (window.NumbericsMusic && window.NumbericsMusic.duck) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ }
+  }
 
   // Big tiles read "F" with the Fibonacci index as a subscript (the engine label uses Unicode subscripts).
   function isSub(level) { return N.label(level).charAt(0) === "F"; }
   function spoken(level) { return isSub(level) ? "Fibonacci number " + N.fibIndex(level) : N.label(level); }
-  function setLabel(el, level) {
-    el.textContent = "";
+  function setLabel(face, node, level) {
+    face.textContent = "";
     if (isSub(level)) {
       var idx = String(N.fibIndex(level));
-      el.appendChild(document.createTextNode("F"));
-      var sub = document.createElement("sub"); sub.textContent = idx; el.appendChild(sub);
-      el.setAttribute("data-len", String(Math.min(6, 1 + idx.length)));
-    } else { var l = N.label(level); el.textContent = l; el.setAttribute("data-len", String(l.length)); }
-    el.setAttribute("aria-label", "tile " + spoken(level));
+      face.appendChild(document.createTextNode("F"));
+      var sub = document.createElement("sub"); sub.textContent = idx; face.appendChild(sub);
+      node.setAttribute("data-len", String(Math.min(6, 1 + idx.length)));
+    } else { var l = N.label(level); face.textContent = l; node.setAttribute("data-len", String(l.length)); }
+    node.setAttribute("aria-label", "tile " + spoken(level));
   }
   function place(el, cell) { el.style.setProperty("--r", Math.floor(cell / 4)); el.style.setProperty("--c", cell % 4); }
 
-  function render(fx) {
-    tilesEl.textContent = ""; els = [];
-    state.grid.forEach(function (lv, cell) {
-      if (!lv) return;
-      var el = document.createElement("div");
-      el.className = "tile" + (lv === 1 ? " lo" : "");
-      el.style.setProperty("--h", hue(lv));
-      place(el, cell); setLabel(el, lv);
-      if (fx && fx.merged && fx.merged[cell]) el.classList.add("pop");
-      if (fx && fx.spawned === cell) el.classList.add("new");
-      tilesEl.appendChild(el); els[cell] = el;
-    });
+  // ---- the keyed tile layer (REDESIGN.md 5.2, 5.3). ids[cell] is the client's identity map, never saved. ----
+  var layer = M.layer(tilesEl, {
+    cols: 4, rows: 4,
+    paint: function (node, t) {
+      var face = node.querySelector(".face");
+      node.classList.toggle("lo", t.lv === 1);
+      node.style.setProperty("--h", hue(t.lv));
+      setLabel(face, node, t.lv);
+    }
+  });
+  var fx = M.seq();               // the move's timeline: sounds, the ring, the trophy check
+  var ids = [], nextId = 1;
+  function rekey() { var k = M.rekey(state.grid, nextId); ids = k.ids; nextId = k.next; }
+  function tiles() {
+    var out = [];
+    for (var c = 0; c < 16; c++) if (state.grid[c]) out.push({ id: ids[c], cell: c, lv: state.grid[c] });
+    return out;
+  }
+  // draw the board: a re-key (load, New game, Undo, a test setting the state) or the effects of one move/power-up
+  function board(f, again) {
+    if (again) rekey();
+    layer.sync(tiles(), f || {});
+  }
+  // Whatever is still animating ends now; pending sounds are dropped with it (5.11).
+  function settle() { fx.finish(); layer.finish(); }
+
+  function render() {
     $("score").textContent = fmt(state.score);
     var bs = Math.max(best.score, state.score);
     $("best").textContent = bs ? fmt(bs) : "none"; $("best").classList.toggle("none", !bs); // R11: an empty best says none
@@ -87,23 +124,38 @@
     if (state.over && !wasOver) { // the run just ended: hold the final board first
       holding = true; viewing = false; clearTimeout(holdT);
       var gen = state.moves;
-      holdT = setTimeout(function () { holdT = null; if (holding && state.over && state.moves === gen) { holding = false; render(); } }, HOLD);
+      holdT = setTimeout(function () { holdT = null; if (holding && state.over && state.moves === gen) { holding = false; fx.finish(); render(); } }, HOLD);
+      endTro = endTro.concat(trophy("end", { score: state.score, value: N.value(state.top), run: { used: run.used } }));
+      persist();
     }
     if (!state.over) { holding = false; viewing = false; clearTimeout(holdT); holdT = null; }
     wasOver = !!state.over;
     over.hidden = !state.over || holding || viewing;
+    duck(!over.hidden);
     // one "New game" on screen at a time: the card's primary replaces the page button, whose space is kept
     $("new").style.visibility = state.over ? "hidden" : "";
     if (state.over) {
       K.clearToast(); // the end card is the only message (round 2: a toast sat on it)
       // R8: one summary line, "<Result> · <score>", and a new best says so.
       $("over-text").textContent = "Top tile " + N.label(state.top) + " · Score " + fmt(state.score);
-      $("over-best").hidden = !(state.score > runBest);
-      if (!over.hidden && !was) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
+      var nb = state.score > runBest;
+      $("over-best").hidden = !nb;
+      var T = window.NumbericsTrophies; if (T && T.pills) T.pills($("over-tro"), endTro);
+      if (!over.hidden && !was) {
+        if (nb) { sfx("best"); glow($("best").parentNode); } // the new best moment (8.5)
+        try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ }
+      }
     }
+  }
+  // a one-shot gold ring (opacity only) on a stat box
+  function glow(el) {
+    if (!el) return;
+    el.classList.remove("glow"); void el.offsetWidth; el.classList.add("glow");
+    setTimeout(function () { el.classList.remove("glow"); }, 460);
   }
   // "See the board" hides the card; a tap on the board, Esc or Enter brings it back (or skips the hold)
   function view(on) {
+    fx.finish();
     viewing = on; holding = false; note = ""; clearTimeout(holdT); holdT = null; render();
     if (on) { try { boardEl.focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
   }
@@ -167,7 +219,7 @@
         return id === "undo" && state.power.undo > 0 && !state.prev ? "Nothing to take back yet." : false;
       },
       onUse: activate,
-      onInfo: function (id, text) { flush(); targeting = null; note = text; render(); },
+      onInfo: function (id, text) { settle(); targeting = null; note = text; sfx("bad"); render(); },
     });
   }
   function renderHint() {
@@ -176,23 +228,38 @@
   }
   function toast(msg, kind) { K.toast(msg, kind); }
 
-  // ---- animation: slide the old tiles, then redraw authoritatively ----
-  function flush() { if (timer !== null) { clearTimeout(timer); timer = null; finalize(); } }
-  function finalize() { var fx = pendingFx; pendingFx = null; render(fx); }
+  // ---- the score float: "+N" rises 26 px and fades over 640 ms (opacity only under reduced motion) ----
+  var plusEl = null, plusT = null;
+  function plus(n) {
+    if (plusEl && plusEl.parentNode) plusEl.parentNode.removeChild(plusEl);
+    clearTimeout(plusT); plusEl = null;
+    if (!(n > 0)) return;
+    var el = document.createElement("span"); el.className = "plus"; el.setAttribute("aria-hidden", "true");
+    el.textContent = "+" + fmt(n);
+    $("score").parentNode.appendChild(el); plusEl = el;
+    var f = [{ opacity: 1, transform: "translateY(0)" }, { opacity: 0, transform: "translateY(-26px)" }];
+    M.play(el, f, { duration: M.T.plus, easing: M.E.out, fill: "forwards" }, f);
+    plusT = setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); if (plusEl === el) plusEl = null; }, M.T.plus + 40);
+  }
+  // ---- the gold ring on a new highest tile that pays (from 55): a span on the tile, CSS keyframes (style.css) ----
+  function ring(id) {
+    var node = layer.get(id); if (!node) return;
+    var r = document.createElement("span"); r.className = "ring"; r.setAttribute("aria-hidden", "true");
+    node.appendChild(r);
+    return r;
+  }
 
+  // ---- a move: state first, then the layer slides every tile; stats, tray, toast and save in the same handler ----
   function doMove(dir) {
-    flush();
+    settle();
     if (targeting) return;
     var r = N.move(state, dir);
     if (!r.moved) return;
     note = "";
-    var merged = {};
-    r.trace.forEach(function (t) {
-      var el = els[t.from]; if (el) place(el, t.to);
-      if (t.merge) merged[t.to] = true;
-    });
-    var before = state;
-    state = r.state; pendingFx = { merged: merged, spawned: r.spawned };
+    var before = state, t = M.track(ids, r.trace, r.spawned, nextId);
+    ids = t.ids; nextId = t.next;
+    state = r.state;
+    board(t);
     var top = r.milestones.length ? r.milestones[r.milestones.length - 1] : 0;
     if (top >= TOAST_FROM && !state.over) { // R7: when the move ends the game, the end card is the only message
       var why = "";
@@ -203,20 +270,41 @@
           : r.full || N.POWERS.every(function (k) { return before.power[k] >= N.POWER_CAP; }) ? ". Power-ups full." : "";
       toast("New tile " + N.label(top) + why, why && !r.awarded.length ? "info" : undefined);
     }
-    persist(); renderTray();
-    if (ANIM) { var gen = state.moves; timer = setTimeout(function () { if (state.moves === gen) { timer = null; finalize(); } }, ANIM); }
-    else finalize();
+    plus(state.score - before.score);
+    persist(); render();
+    // the timeline (REDESIGN.md 5.3, 7.3): slide now, the join sound as the slide ends, the ring and chimes after the pop
+    var slide = M.ms("slide"), after = slide + M.ms("pop");
+    sfx("slide");
+    if (r.merges.length) {
+      var k = Math.max.apply(null, r.merges);
+      fx.at(slide, function () { sfx("merge", k); buzz("merge"); });
+    }
+    var topId = top >= N.AWARD_FROM_INDEX ? ids[state.grid.indexOf(top)] : 0, paid = r.awarded.length > 0;
+    if (topId) {
+      var rg = ring(topId);
+      fx.at(after, function () { sfx("best"); buzz("big"); });
+      fx.at(after + 420 + 20, function () { if (rg && rg.parentNode) rg.parentNode.removeChild(rg); });
+    }
+    if (paid) fx.at(after + 140, function () { sfx("power"); });
+    if (state.over) fx.at(after, function () { sfx("lose"); buzz("lose"); });
+    // the move's trophy check runs at the pop, so its toast and chime land with what it names (8.4)
+    var data = { value: N.value(state.top), merges: r.merges.length, grid: state.grid.map(N.value), moves: state.moves, run: { used: run.used } };
+    var ended = state.over;
+    fx.at(after, function () {
+      var got = trophy("move", data);
+      if (ended && got.length) { endTro = endTro.concat(got); persist(); if (state.over) render(); }
+    });
   }
 
   // ---- power-ups ----
   function activate(name, kbd) {
-    flush(); note = "";
+    settle(); note = "";
     if (targeting && targeting.name === name) { targeting = null; return render(); }
     targeting = null;
     if (state.over) return render();
     if (name === "undo") {
       var u = N.use(state, "undo");
-      if (u.ok) { state = u.state; persist(); toast("Rewound one move"); return render(); }
+      if (u.ok) { state = u.state; run.used++; persist(); board({ fade: true }, true); toast("Rewound one move"); return render(); }
       return explain(name);
     }
     if (!state.power[name]) return explain(name);
@@ -228,6 +316,7 @@
   // A key (1 to 4, U) on a slot that cannot act explains it, like a tap does (R5).
   function explain(name) {
     var d = DEFS[N.POWERS.indexOf(name)];
+    sfx("bad");
     note = P.info(d, state.power, state.power[name] ? "Nothing to take back yet." : false, {}); return render();
   }
   // Keyboard targeting starts on the highest tile (the usual target).
@@ -255,20 +344,27 @@
     targeting.kbd = false; pickCell(cell);
   }
   function pickCell(cell) {
+    settle();
     var picks = targeting.picks;
     if (picks.length && picks[0] === cell) { picks.length = 0; return render(); } // tap the first pick again to drop it
     picks.push(cell);
     var need = targeting.name === "swap" ? 2 : 1;
-    if (picks.length < need) return render();
-    var name = targeting.name, wasTop = state.top;
-    var res = N.use(state, name, picks[0], picks[1]);
+    if (picks.length < need) { sfx("tick"); return render(); }
+    var name = targeting.name, wasTop = state.top, a = picks[0], b = picks[1];
+    var res = N.use(state, name, a, b);
     if (res.ok) {
-      state = res.state; targeting = null; persist();
+      state = res.state; targeting = null; run.used++; persist();
+      // 5.3: Smash fades the tile out, Boost pops it, Swap slides the two tiles to each other's cells
+      if (name === "smash") { var gone = ids[a]; ids[a] = 0; board({ out: [gone] }); }
+      else if (name === "boost") board({ pop: [ids[a]] });
+      else { var x = ids[a]; ids[a] = ids[b]; ids[b] = x; board({}); }
+      sfx("place"); buzz("tap");
       // gameplay nit: a Boost that makes a new highest tile pays nothing, so say why no reward came
       if (!state.over) toast(name === "boost" && state.top > wasTop && state.top >= N.AWARD_FROM_INDEX
         ? "Boosted to " + N.label(state.top) + ". Boosted tiles earn no reward." : PW[name] + "!");
     } else {
       targeting.picks = [];
+      sfx("bad");
       toast(name === "swap" ? "Pick two cells, at least one with a tile" : "Pick a tile, not an empty cell", "bad");
     }
     render();
@@ -277,6 +373,7 @@
   // ---- input ----
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (window.NumbericsUI && window.NumbericsUI.open && window.NumbericsUI.open()) return; // a sheet owns the keys
     var tag = e.target && e.target.tagName;
     // R9, R17: Enter or Space on a focused control belongs to that control, never to the game; typing in a
     // field is never a game key
@@ -301,24 +398,56 @@
   });
   boardEl.addEventListener("click", pick);
   K.swipe(boardEl, doMove);
-  // Round 3 (cold #5, as Endless): without a non-passive touchmove the browser runs its own scroll gesture for a
+  // Round 3 (cold #5, as Two): without a non-passive touchmove the browser runs its own scroll gesture for a
   // swipe, and the next tap (on a power-up just earned) only stops it: no click. Owning the move keeps the tap.
   boardEl.addEventListener("touchmove", function (e) { if (e.cancelable) e.preventDefault(); }, { passive: false });
 
   // ---- new game: two-step instead of a blocking confirm() dialog ----
   function startNew() {
-    flush(); targeting = null; note = "";
+    settle(); targeting = null; note = "";
     best.score = Math.max(best.score, state.score); runBest = best.score;
-    state = N.newGame(K.freshSeed()); persist(); render();
+    state = N.newGame(K.freshSeed()); run = { used: 0 }; endTro = [];
+    persist(); board({}, true); render(); duck(false);
   }
   K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, startNew);
   $("again").addEventListener("click", startNew);
   $("over-view").addEventListener("click", function () { view(true); });
 
+  // ---- how to play (REDESIGN.md 1.3, 9.2): three steps, each a small drawn picture and one sentence ----
+  function mt(lv) {
+    return '<span class="mt' + (lv === 1 ? " lo" : "") + '" style="--h:' + hue(lv) + '">' + N.label(lv) + "</span>";
+  }
+  var STEPS = [
+    ['<div class="mg" style="grid-template-columns:repeat(3,26px)">' + mt(1) + '<span class="op">&rarr;</span>' + mt(2) + "</div>",
+      "Swipe to slide every tile."],
+    ['<div class="eq">' + mt(2) + '<span class="op">+</span>' + mt(3) + '<span class="op">=</span>' + mt(4) + "</div>",
+      "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5."],
+    ['<div class="eq">' + mt(3) + '<span class="op">+</span>' + mt(3) + '<span class="op no">no</span></div>',
+      "Equal tiles do not join, except 1 and 1."]
+  ];
+  function howto() {
+    var U = window.NumbericsUI; if (!U || !U.sheet) return null;
+    var NP = window.NumbericsProgress; if (NP && NP.markHowto) { try { NP.markHowto(ID); } catch (e) { /* a nicety */ } }
+    return U.sheet("howto", function (body) {
+      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
+        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
+      }).join("") + "</div>";
+    }, { title: "How to play Fibonacci" });
+  }
+  $("how-steps").addEventListener("click", function () { howto(); });
+
+  board({}, true);
   render();
+  // the first visit to Fibonacci (no saved game, sheet never seen) opens the how-to once; ui.js loads after this file
+  window.addEventListener("DOMContentLoaded", function () {
+    var NP = window.NumbericsProgress, seen = true;
+    try { seen = NP && NP.seenHowto ? NP.seenHowto(ID) : true; } catch (e) { seen = true; }
+    if (fresh && !seen) howto();
+  });
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
-    flush(); targeting = null;
+    settle(); targeting = null;
+    if (window.NumbericsUI && window.NumbericsUI.open && window.NumbericsUI.open()) window.NumbericsUI.close();
     var s = N.newGame(34), dirs = ["down", "left", "down", "right"];
     for (var k = 0; k < 600 && !s.over; k++) {
       var r = N.move(s, dirs[k % 4]);
@@ -327,10 +456,12 @@
       if (s.top >= 12 && s.grid.filter(Boolean).length >= 11 && new Set(s.grid).size >= 9) break; // top 233, varied
     }
     s.power = { undo: 1, smash: 2, swap: 1, boost: 1 };
-    state = s; note = ""; render();
+    state = s; note = ""; board({}, true); render();
   };
-  window.__fibonacci = { get state() { return state; }, set state(s) { state = s; render(); }, render: render,
+  window.__fibonacci = { get state() { return state; }, set state(s) { settle(); state = s; board({}, true); render(); }, render: render,
     get cursor() { return cursor; }, get targeting() { return targeting; }, hue: hue,
     get runBest() { return runBest; }, set runBest(v) { runBest = v; },
+    get run() { return run; }, get endTro() { return endTro; }, get ids() { return ids.slice(); },
+    layer: layer, howto: howto,
     get viewing() { return viewing; }, get holding() { return holding; }, showCard: function () { view(false); } };
 })();
