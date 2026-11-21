@@ -45,8 +45,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("every tile shows its number and its pips", await p.evaluate(() => [...document.querySelectorAll(".heap.tile")].every(t => +t.querySelector(".num").textContent === t.querySelectorAll(".pips i.on").length)));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= 375));
   ck("dealt start has a non-zero nim-sum", await p.evaluate(() => window.NumbericsNine.nimSum(window.__nine.state.heaps) !== 0));
-  ck("header: H1 Nine, subtitle is the Numberics link plus a tagline (R6)", (await p.textContent("h1")) === "Nine" &&
-     /^Numberics · [A-Z][^.]*\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 1);
+  ck("header: H1 Nine, a plain tagline, no 'Numberics ·' link (round 4: the top bar mark links home)", (await p.textContent("h1")) === "Nine" &&
+     (await p.textContent(".sub")).trim() === "Take dots in turns. The last dot wins." && await p.locator(".sub a").count() === 0);
+  ck("the games list has the family's one heading: 'More number games'", (await p.textContent("section.more > h2")) === "More number games" && await p.locator("section.more #games .card, section.more #games a").count() > 0);
   ck("empty Best shows a dimmed none (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
   ck("R16 pills: You, Computer, Record (dimmed none), then Best", JSON.stringify(await p.$$eval(".stat > span", a => a.map(x => x.textContent))) === '["You","Computer","Record","Best"]' &&
      (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
@@ -127,7 +128,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "hold");
   await card(p);
   ck("round lost by the computer's last take: 'The computer wins round 1'", (await p.textContent("#over-title")) === "The computer wins round 1", await p.textContent("#over-title"));
-  ck("lost round card: '<detail> · <tally>', no Undo offer", (await p.textContent("#over-text")) === "The computer took the last tile · 0-1, first to 3" && !/Undo/.test(await p.textContent("#over")), await p.textContent("#over-text"));
+  ck("lost round card: '<detail> · <tally>', no Undo offer", (await p.textContent("#over-text")) === "The computer took the last dot · 0-1, first to 3" && !/Undo/.test(await p.textContent("#over")), await p.textContent("#over-text"));
   ck("one end-card pattern: focus on the card's primary button", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
   ck("one end-card pattern: the page's New game is hidden, its space kept", await p.evaluate(() => { const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && n.getBoundingClientRect().height > 20; }));
   await p.keyboard.press("1");
@@ -200,7 +201,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 4. round end, match end, misere unlock, learn view
   await forge(p, { heaps: [0, 4, 0], s: { score: { you: 0, cpu: 0 }, round: 1 } });
   await p.locator('.heap[data-i="1"]').click(); await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take"); await card(p);
-  ck("last take wins the round", await p.isVisible("#over") && (await p.textContent("#over-title")) === "You win round 1" && (await p.textContent("#over-text")) === "You took the last tile · 1-0, first to 3");
+  ck("last take wins the round", await p.isVisible("#over") && (await p.textContent("#over-title")) === "You win round 1" && (await p.textContent("#over-text")) === "You took the last dot · 1-0, first to 3");
   await shot(p, "round");
   await p.click("#again");
   s = await S(p);
@@ -222,11 +223,22 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("misere starts a new run", s.misere && s.level === 3 && /last take loses/.test(await p.textContent("#hint")));
   await forge(p, { heaps: [0, 1, 0] });
   await p.locator('.heap[data-i="1"]').click(); await p.click("#take"); await card(p);
-  ck("misere: the last take loses", /^The computer wins round \d$/.test(await p.textContent("#over-title")) && /^You took the last tile · /.test(await p.textContent("#over-text")) && (await S(p)).score.cpu === 1);
+  ck("misere: the last take loses", /^The computer wins round \d$/.test(await p.textContent("#over-title")) && /^You took the last dot · /.test(await p.textContent("#over-text")) && (await S(p)).score.cpu === 1);
   await p.click("#learn-btn");
-  ck("learn view shows binary and the nim-sum", await p.isVisible("#learn") && /Nim-sum \d{4}/.test(await p.textContent("#learn")));
-  ck("learn says the goal plainly: leave a nim-sum of 0", /leave a nim-sum of 0/.test(await p.textContent("#learn")));
-  ck("learn opens with one plain sentence before any binary (cold #30)", await p.evaluate(() => { const f = document.querySelector("#learn > span"); return f.className === "plain" && /^Aim to leave the tiles balanced/.test(f.textContent) && !/binary|nim-sum|[01]{4}/i.test(f.textContent); }));
+  // round 4 (cold #33): Learn opens with one plain sentence; the binary is the second step
+  const learnSeen = () => p.evaluate(() => { const v = (e) => !!(e && e.offsetParent && getComputedStyle(e).visibility !== "hidden");
+    const shown = document.getElementById("learn").innerText;
+    return { plain: document.getElementById("learn-plain").textContent, shown, bins: [...document.querySelectorAll(".heap .bin")].filter(v).length, btn: document.getElementById("bin-btn").textContent,
+             exp: document.getElementById("bin-btn").getAttribute("aria-expanded") }; });
+  let ls = await learnSeen();
+  ck("Learn opens with one plain sentence and no binary at all (cold #33)", await p.isVisible("#learn") && /^Leave two equal tiles/.test(ls.plain) && !/binary|nim-sum|[01]{4}/i.test(ls.plain) &&
+     !/nim-sum|[01]{4}/i.test(ls.shown) && ls.bins === 0 && ls.btn === "Show the binary" && ls.exp === "false", JSON.stringify(ls));
+  await p.click("#over-view"); // the round card is up: look at the board, where Learn lives
+  await p.click("#bin-btn");
+  ck("the binary button works while looking at a finished board (it does not bring the card back)", await p.evaluate(() => window.__nine.viewing));
+  ls = await learnSeen();
+  ck("the second step shows the binary: tile labels, the goal and the live nim-sum", /Nim-sum \d{4}/.test(ls.shown) && /leave a nim-sum of 0/.test(ls.shown) && ls.btn === "Hide the binary" && ls.exp === "true", JSON.stringify(ls));
+  ck("the plain sentence still comes first", await p.evaluate(() => document.querySelector("#learn").firstElementChild.id === "learn-plain"));
   await forge(p, { heaps: [9, 8, 7, 6, 5, 4, 3, 2, 1] });
   ck("nine tiles fit with binary labels", await p.locator(".heap .bin").count() === 9 && await p.evaluate(() => document.documentElement.scrollWidth <= 375));
   await shot(p, "learn");
@@ -245,6 +257,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click('#diff button[data-diff="hard"]');
   ck("R12: switching level after a move records a lost match", await p.evaluate(() => window.__nine.record.lost) === rec0 + 1);
   ck("difficulty switches to hard", (await S(p)).diff === "hard" && (await p.textContent('#diff button[data-diff="hard"]')) === "Hard");
+  ck("the binary step is remembered (Hard Learn keeps it open)", await p.evaluate(() => window.__nine.prefs.bin === true));
   ck("Hard Learn: no live nim-sum, and it says so (R4)", !/Nim-sum \d/.test(await p.textContent("#learn")) && /Hard shows no live nim-sum \(Easy and Medium do\)/.test(await p.textContent("#learn")) && await p.locator(".heap .bin").count() > 0);
   // F9: a focused tile and the selected tile look different
   await forge(p, { heaps: [3, 4, 5] });
@@ -429,4 +442,59 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("progress: the card summary is written on persist", await p.evaluate(() => { const g = window.NumbericsProgress.get("nine"); return g && /^Won \d+, lost \d+$/.test(g.best) && typeof g.live === "boolean"; }));
   ck("no page errors (trophies)", e6.length === 0, e6.join("|"));
   await ctx.close();
+
+  // 10. round 4 (REVIEW*4): fades under Less motion, the colour cross-fade, touch, Larger text on small phones, 12 px labels
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" }); await seen(ctx);
+  p = await ctx.newPage(); const e7 = []; p.on("pageerror", e => e7.push(e.message));
+  await p.goto(page);
+  ck("Less motion keeps the tiles' opacity fade (critic nit 6: opacity is not motion)", await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector(".heap")).transitionDuration) > 0));
+  await ctx.close();
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true }); await seen(ctx);
+  p = await ctx.newPage(); p.on("pageerror", e => e7.push(e.message));
+  await p.goto(page);
+  await forge(p, { heaps: [5, 3, 7] });
+  await p.locator('.heap[data-i="2"]').click(); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); await p.click("#take"); // 7 -> 4
+  const tint = await p.evaluate(() => { const t = document.querySelector('.heap[data-i="2"] > .tint'); if (!t) return null;
+    const a = t.getAnimations()[0], k = a ? a.effect.getKeyframes() : [];
+    return { h: t.style.getPropertyValue("--h"), want: String(window.NumbericsKit.hue(7)), now: document.querySelector('.heap[data-i="2"]').style.getPropertyValue("--h"),
+             onlyOpacity: k.length > 0 && k.every(f => f.transform === undefined), z: getComputedStyle(document.querySelector('.heap[data-i="2"] > .num')).position }; });
+  ck("a take fades the old colour over the tile instead of snapping it (craft #42)", tint && tint.h === tint.want && tint.now !== tint.want && tint.onlyOpacity && tint.z === "relative", JSON.stringify(tint));
+  await p.waitForTimeout(450);
+  ck("the colour fade is gone once the pips have", await p.locator(".heap > .tint").count() === 0);
+  ck("touch: the steppers show no tap highlight box (cold #34)", await p.evaluate(() => ["more", "less", "take"].every(id => /rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(document.getElementById(id)).webkitTapHighlightColor))));
+  await ctx.close();
+  const large = (c) => c.addInitScript(() => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, text: "large" })); } catch (e) { /* blocked */ } });
+  const small = () => { const out = []; document.querySelectorAll("#app *").forEach(e => { if (!e.offsetParent || e.closest("#games") || e.closest("details.how")) return;
+    if (![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) return;
+    const f = parseFloat(getComputedStyle(e).fontSize); if (f < 12) out.push(e.className + " " + f.toFixed(1)); }); return out; };
+  for (const [w, h] of [[375, 667], [320, 568], [390, 844]]) {
+    ctx = await browser.newContext({ viewport: { width: w, height: h } }); await seen(ctx); await large(ctx);
+    p = await ctx.newPage(); p.on("pageerror", e => e7.push(e.message));
+    await p.goto(page);
+    await forge(p, { heaps: [6, 8, 9] });
+    await p.locator('.heap[data-i="2"]').click(); await p.click("#more"); await p.click("#more");
+    const am = await p.evaluate(() => { const a = document.getElementById("amount"), t = document.getElementById("take").getBoundingClientRect();
+      return { text: a.textContent, cut: a.scrollWidth > a.clientWidth + 1 || getComputedStyle(a).textOverflow === "ellipsis", takeBottom: t.bottom + scrollY, sw: document.documentElement.scrollWidth }; });
+    ck(w + "x" + h + " Larger text: the take line is whole, not 'Take 3 from the...' (craft #43)", am.text === "Take 3 from the 9" && !am.cut && am.sw <= w, JSON.stringify(am));
+    if (w === 375) ck("375x667 Larger text: the board and its Take button are on the first screen (all-ages #5)", am.takeBottom <= h, JSON.stringify(am));
+    await p.click("#learn-btn"); if ((await p.textContent("#bin-btn")) === "Show the binary") await p.click("#bin-btn");
+    await forge(p, { heaps: [9, 8, 7, 6, 5, 4, 3, 2, 1] });
+    ck(w + "x" + h + " Larger text, Learn and binary on, nine tiles: every label is at least 12 px", (await p.evaluate(small)).length === 0, JSON.stringify(await p.evaluate(small)));
+    if (w === 320) {
+      // three trophies on one round card: none is cut off, and the card's buttons stay in view (cold #16, craft #15)
+      await p.click("#learn-btn");
+      await forge(p, { heaps: [0, 0, 1], s: { score: { you: 0, cpu: 0 } } });
+      await p.evaluate(() => { window.__nine.state.turn = "you"; });
+      await p.locator('.heap[data-i="2"]').click(); await p.click("#take"); await card(p);
+      await p.evaluate(() => { const T = window.NumbericsTrophies; T.pills(document.getElementById("over-pills"), ["nine_round", "nine_ones", "nine_match"]); });
+      const fit = await p.evaluate(() => { const o = document.getElementById("over"), r = o.getBoundingClientRect(), b = document.getElementById("again").getBoundingClientRect();
+        const pills = [...document.querySelectorAll("#over-pills .trophy")];
+        const inside = pills.every(x => { const q = x.getBoundingClientRect(); return q.width > 0 && q.right <= r.right + 1 && q.left >= r.left - 1; });
+        return { n: pills.length, inside, btn: b.bottom <= r.bottom + 1 && b.top >= r.top, scroll: o.scrollHeight > o.clientHeight, glyph: !!o.querySelector(":scope > .glyph"), last: o.lastElementChild.classList.contains("row") }; });
+      ck("320 Larger text: three pills on the card, none cut sideways, buttons in view, the button row last", fit.n === 3 && fit.inside && fit.btn && fit.last, JSON.stringify(fit));
+      await shot(p, "card-320-large");
+    }
+    await ctx.close();
+  }
+  ck("no page errors (round 4)", e7.length === 0, e7.join("|"));
 };

@@ -346,9 +346,9 @@ t("R2 property: a power-up and the rest of its turn never raise the total stock 
           checked++;
           if (name === "undo") ok(tot(u.state) <= tot(s.prev), "undo returns at most the snapshot's stock, seed " + seed);
           else ok(tot(u.state) === before - 1, name + " itself pays nothing, seed " + seed);
-          if (name === "undo") { // Undo rewinds to your last turn: a move there pays exactly what it paid from that turn
-            F.legalMoves(u.state).forEach(m => { const r = F.play(u.state, m.from, m.to), o = F.play(s.prev, m.from, m.to);
-              ok(tot(r.state) <= tot(o.state) && !!r.awarded === !!o.awarded, "move after undo pays as from the snapshot, seed " + seed); });
+          if (name === "undo") { // Undo rewinds to your last turn; no move after it pays this round (mechanics #6)
+            F.legalMoves(u.state).forEach(m => { const r = F.play(u.state, m.from, m.to);
+              ok(!r.awarded && tot(r.state) === tot(u.state), "move after undo pays nothing, seed " + seed); });
           } else if (u.state.turn === "p" && !u.state.roundOver) { // Shield: you still move this turn
             F.legalMoves(u.state).forEach(m => { const r = F.play(u.state, m.from, m.to); ok(tot(r.state) < before, "move after " + name + ", seed " + seed); shieldMoves++; });
           }
@@ -360,6 +360,40 @@ t("R2 property: a power-up and the rest of its turn never raise the total stock 
     }
   }
   ok(checked > 300 && shieldMoves > 100, "exercised " + checked + " power-ups, " + shieldMoves + " moves after Shield");
+});
+t("R2 (mechanics #6): the repro: blunder, Undo, then win the round: the round pays nothing after the Undo", () => {
+  const none = { undo: 0, split: 0, shield: 0, nudge: 0 };
+  // you 4 1, computer 2 1: your 1 onto your 4 bursts your own tile (a blunder); Undo; then 4 onto 2 and 4 onto 1 win
+  let s = at([4, 1, 2, 1], "p", "hard", { power: { p: { undo: 1, split: 0, shield: 0, nudge: 0 }, c: Object.assign({}, none) } });
+  s = F.play(s, 1, 0).state; ok(!s.roundOver);
+  while (s.turn === "c" && !s.roundOver) s = F.aiTurn(s).state;
+  const u = F.use(s, "undo"); ok(u.ok, "undo"); s = u.state; eq(s.tiles, [4, 1, 2, 1]); ok(s.undone, "the round is marked");
+  const r1 = F.play(s, 0, 2); ok(r1.burst && !r1.awarded && r1.unpaid === "undo", "first burst after Undo pays nothing and says why");
+  s = r1.state; while (s.turn === "c" && !s.roundOver) s = F.aiTurn(s).state;
+  if (!s.roundOver) { const m = F.legalMoves(s).find(x => x.to === 3) || F.legalMoves(s)[0]; s = F.play(s, m.from, m.to).state; }
+  eq(s.power.p, none, "no power-up from the round (Undo spent, none earned)"); eq(s.earned, []);
+  // the next round pays again
+  let n = F.nextRound(Object.assign(s, { roundOver: s.roundOver || "p" })); ok(!n.undone, "a new round clears the mark");
+  n = Object.assign(n, { tiles: [4, 1, 1, 1], turn: "p" }); const r2 = F.play(n, 0, 2); ok(r2.burst && r2.awarded, "an honest burst in the next round pays");
+});
+t("R2 property (mechanics #6): in any round where you used Undo, nothing is earned after the Undo (random matches)", () => {
+  let rounds = 0, bursts = 0;
+  for (let seed = 1; seed <= 200; seed++) {
+    let s = F.newMatch(seed, F.LEVELS[seed % 3]), x = (seed * 2246822519 >>> 0) || 1, after = false, stockAt = 0;
+    s.power.p = { undo: 9, split: 0, shield: 0, nudge: 0 };
+    for (let g = 0; g < 500 && !s.matchOver; g++) {
+      if (s.roundOver) { if (after) rounds++; after = false; s = F.nextRound(s); continue; }
+      if (s.turn === "c") { s = F.aiTurn(s).state; continue; }
+      x ^= x << 13; x >>>= 0; x ^= x >>> 17; x ^= x << 5; x >>>= 0;
+      if (x % 4 === 0 && F.canUse(s, "undo")) { s = F.use(s, "undo").state; after = true; stockAt = tot(s); continue; }
+      const ms = F.legalMoves(s);
+      if (!ms.length) { s = F.pass(s).state; continue; }
+      const m = ms[(x >>> 9) % ms.length], r = F.play(s, m.from, m.to);
+      if (after) { if (r.burst && F.side(m.to) === "c") bursts++; ok(!r.awarded && tot(r.state) <= stockAt, "paid after Undo, seed " + seed); }
+      s = r.state;
+    }
+  }
+  ok(rounds > 100 && bursts > 50, "exercised " + rounds + " rounds with an Undo, " + bursts + " bursts after it");
 });
 t("R12: the match counts as played only once YOU move (the computer's opener is not you), until it is decided", () => {
   let s = F.newMatch(3, "medium"); ok(!F.played(s), "fresh");
@@ -399,7 +433,10 @@ t("R5/R17 client: number keys click the tray slot; Enter on a link or button is 
 t("how-to copy: 'at 5 or more' and 'you can always win', no jargon", () => {
   const h = fs.readFileSync(path.join(__dirname, "..", "five/index.html"), "utf8"), how = h.match(/<details class="how"><summary>How to play<\/summary>\s*<p>([\s\S]*?)<\/p>/)[1];
   ok(/5 or more bursts/.test(how) && /you can always win/.test(how) && !/seat|solved|perfect play/i.test(how), how);
-  ok(/<span>Record<\/span>/.test(h) && !/Matches/.test(h), "R16 pill names");
+  // cold #20 (round 4): the rounds of this match and the matches record are two clearly named boxes, not one pair
+  ok(/<span>Rounds<\/span><b id="rounds"/.test(h) && /<span>Matches<\/span><b id="matches" class="none">none<\/b>/.test(h) &&
+    !/<span>(You|Computer|Record)<\/span>/.test(h), "pill names: Rounds and Matches");
+  ok(/whoever burst them/.test(how) && !/Burst both computer tiles to win/.test(h), "cold #21: the round rule says whoever burst them");
 });
 t("round 3: one end-card wording (You win / The computer wins / round N), no old 'Round to' or 'Match to' lines", () => {
   const g = fs.readFileSync(path.join(__dirname, "..", "five", "game.js"), "utf8");
@@ -421,9 +458,19 @@ t("phase D client: first visit on Easy, progress put, trophy events by 8.4's nam
   ok(/M\.ms\("fly"\)/.test(g) && /M\.T\.burst/.test(g) && /M\.seq\(\)/.test(g) && !/K\.reducedMotion\(\)/.test(g) && !/var reduce\b/.test(g), "motion read live through NumbericsMotion");
   ok(/U\.howto\("five", \{ title: "Five", steps: STEPS, saved: !!saved/.test(g) && /onFirstClose: function \(\) \{ scheduleComputer\(\); \}/.test(g), "the shared how-to once (D8)");
   ok(/<details class="how"><summary>How to play<\/summary>/.test(h) && /id="over-pills" class="tro-pills"/.test(h) && /<div id="games" class="cards"/.test(h), "how-to row, pills, cards");
-  ["Tap your tile, then a tile to add it onto.", "A tile at five or more bursts.", "Burst both of the computer's tiles to win the round. First to three."].forEach(s => ok(g.indexOf(s) >= 0, s));
+  ["Tap your tile, then a tile to add it onto.", "A tile at five or more bursts.", "When both computer tiles have burst, the round is yours. First to three."].forEach(s => ok(g.indexOf(s) >= 0, s));
 });
 
+t("family (round 4): no 'Numberics \u00b7' subtitle link; the games list sits under 'More number games'", () => {
+  const h = fs.readFileSync(path.join(__dirname, "..", "five/index.html"), "utf8");
+  ok(!/<p class="sub"><a /.test(h), "subtitle link"); ok(/<h2 id="more">More number games<\/h2>\s*<div id="games"/.test(h), "games heading");
+});
+t("cold #22, R2: the round card never starts a line with the dot, and a round won after Undo says why it paid nothing", () => {
+  const g = fs.readFileSync(path.join(__dirname, "..", "five/game.js"), "utf8");
+  ok(/var D = "\\u00a0\\u00b7 "/.test(g) && !/" \\u00b7 "/.test(g), "dot glued to the part before it");
+  ok(/"-\\u2060"/.test(g), "the match score 3-0 never splits at its hyphen");
+  ok(/no power-up after Undo/.test(g) && /No reward after Undo this round/.test(g), "Undo note");
+});
 require("./conventions")(t, ok, ["five/engine.js", "five/game.js", "five/index.html", "five/style.css"]);
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

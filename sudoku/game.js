@@ -40,8 +40,9 @@
   function duck(on) { try { if (window.NumbericsMusic && window.NumbericsMusic.duck) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
   function sheetOpen() { try { return !!(window.NumbericsUI && window.NumbericsUI.open()); } catch (e) { return false; } }
 
-  // ---- the Daily: the same puzzle for everyone today; Easy Monday to Thursday, Medium Friday and Saturday, Hard Sunday ----
-  function dailyLevel(d) { var w = (d || new Date()).getDay(); return w === 0 ? "hard" : w >= 5 ? "medium" : "easy"; }
+  // ---- the Daily: the same puzzle for everyone today. Its level is the family's one rule (NumbericsProgress.dailyLevel:
+  // Easy Monday to Thursday, Medium Friday and Saturday, Hard Sunday), so the Today chip and this page always agree ----
+  function dailyLevel(d) { try { if (PR && PR.dailyLevel) return PR.dailyLevel(d); } catch (e) { /* no progress module */ } return "easy"; }
   function dailySeed() { return Kit.daySeed() >>> 0; }
 
   // ---- the run record (REDESIGN.md 8.1, 8.4): notes set by any pencil note, clean cleared by any placement that clashes.
@@ -262,6 +263,7 @@
         helped ? "No pure solve yet. Best with power-ups: " + fmt(helped.t) : "No solve yet on " + cap(state.difficulty);
     }
     Array.prototype.forEach.call($("levels").children, function (b) {
+      if (b.dataset.l === "daily" && b.getAttribute("aria-label") !== "Daily, " + cap(dayLevel())) label(b);
       b.setAttribute("aria-pressed", String(b.dataset.l === "daily" ? mode === "daily" : mode === "play" && b.dataset.l === state.difficulty));
     });
     var counts = new Array(10).fill(0); state.grid.forEach(function (v) { counts[v]++; });
@@ -306,12 +308,15 @@
   var ASSISTED = "Fastest with power-ups. Best counts only solves without them.";
   function record() { // a fresh solve: keep the best times, report the solve and say whether it is a record (R8)
     var d = state.difficulty, pw = S.total(state.used), t = secs(), isDaily = mode === "daily";
+    // a Daily left open across midnight is yesterday's puzzle: it is solved and shown, but it is not today's Daily
+    var todays = isDaily && (state.seed >>> 0) === dailySeed();
     note = { seed: state.seed };
-    if (isDaily) { note.daily = true; try { if (PR) PR.daily("sudoku", fmt(t)); } catch (e) { /* no summary */ } }
+    // the Today chip keeps the day's best time (TRIAGE4 D9: a lower time wins)
+    if (isDaily) { note.daily = true; try { if (PR && todays) PR.daily("sudoku", fmt(t), { score: t, low: true }); } catch (e) { /* no summary */ } }
     else if (!pw) { if (typeof bests[d] !== "number" || t < bests[d]) { bests[d] = t; note.pure = true; } }
     else if (!assisted[d] || t < assisted[d].t) { assisted[d] = { t: t, pw: pw }; note.pure = false; }
     // the trophies show as pills on the card (never a toast over the finished grid); the card plays their sound
-    var ids = report("solve", { difficulty: d, seconds: t, daily: isDaily, notes: !!run.notes, clean: !!run.clean,
+    var ids = report("solve", { difficulty: d, seconds: t, daily: todays, notes: !!run.notes, clean: !!run.clean,
       used: { reveal: +state.used.reveal || 0, check: +state.used.check || 0, cands: +state.used.cands || 0 } }, { quiet: true });
     if (ids.length) note.trophies = ids;
     cheer = { best: note.pure === true, trophies: ids.length };
@@ -382,12 +387,30 @@
   // The aiming instruction never sits on the cells it asks for (craft #1): the kit puts a toast just above the board,
   // and when the page is scrolled so that there is no room, this one moves just below the board instead.
   function aimToast(m) {
-    Kit.toast(m);
+    aimMsg = m; Kit.toast(m);
     try {
       var t = $("toast"), b = boardEl.getBoundingClientRect(), r = t.getBoundingClientRect();
       if (r.bottom > b.top && r.top < b.bottom) t.style.top = Math.max(12, Math.min(window.innerHeight - r.height - 12, b.bottom + 6)) + "px";
     } catch (e) { /* keep the kit position */ }
   }
+  // Every other toast (an earned power-up, a trophy, a note) never covers the difficulty row (TRIAGE4, craft #16, cold
+  // #40): the kit puts a toast just above the board, which is where that row sits here, so this page moves it into the
+  // band under the title (over the tagline and the stats, which are never tapped). A toast too tall for the band grows
+  // upward over the title, never down over a control. The trophies module raises its toasts through the kit, so one
+  // observer on the toast covers them all; the aiming toast keeps its own place.
+  var aimMsg = null;
+  function placeToast() {
+    try {
+      var t = $("toast"); if (!t.classList.contains("on") || (armed && t.textContent === aimMsg)) return;
+      var lv = $("levels").getBoundingClientRect(), h1 = document.querySelector("h1").getBoundingClientRect(), h = t.offsetHeight;
+      if (lv.bottom <= 0 || lv.top >= window.innerHeight) return;       // the row is off screen: nothing to cover
+      var top = h1.bottom + Math.max(0, (lv.top - h1.bottom - h) / 2);  // centred in the band when it fits
+      if (top + h > lv.top - 2) top = lv.top - 2 - h;                    // else up over the title, clear of the row
+      if (top < 8) top = Math.max(8, lv.bottom + 4); else top = Math.max(8, top); // scrolled away: just under the row
+      t.style.top = top + "px";
+    } catch (e) { /* keep the kit position */ }
+  }
+  try { new MutationObserver(placeToast).observe($("toast"), { attributes: true, attributeFilter: ["class"], childList: true }); } catch (e) { /* no observer */ }
   function finePointer() { try { return window.matchMedia("(pointer: fine)").matches; } catch (e) { return true; } }
   function target(id, c) {
     var n = id === "reveal" ? S.reveal(state, c) : S.fillBox(state, c);
@@ -431,7 +454,16 @@
   var playRisky = function () { return !!(play.state && play.state.moves > 0 && !play.state.solved); };
   function disarmLevel() {
     clearTimeout(levelT); levelArm = null;
-    Array.prototype.forEach.call($("levels").children, function (b) { b.textContent = b.dataset.l === "daily" ? "Daily" : cap(b.dataset.l); });
+    Array.prototype.forEach.call($("levels").children, function (b) { label(b); });
+  }
+  // the Daily segment names its level under the word (TRIAGE4 D9, all-ages #2): "Daily" over "Medium"; on the Daily
+  // it is the level of the puzzle on screen, elsewhere the level today's Daily has
+  function dayLevel() { return daily.state ? daily.state.difficulty : dailyLevel(); }
+  function label(b) {
+    var l = b.dataset.l;
+    if (l !== "daily") { b.textContent = cap(l); return; }
+    var lv = cap(dayLevel()); b.textContent = "Daily"; var sm = document.createElement("small"); sm.className = "lv"; sm.textContent = lv; b.appendChild(sm);
+    b.setAttribute("aria-label", "Daily, " + lv); b.title = "Today's puzzle, the same for everyone: " + lv;
   }
   function pickLevel(l, b) {
     finishFx(); sfx("tick");
@@ -446,8 +478,7 @@
     fresh(l);
   }
   LEVELS.concat(["daily"]).forEach(function (l) {
-    var b = document.createElement("button"); b.type = "button"; b.dataset.l = l; b.textContent = l === "daily" ? "Daily" : cap(l);
-    if (l === "daily") b.title = "Today's puzzle, the same for everyone: " + cap(dailyLevel());
+    var b = document.createElement("button"); b.type = "button"; b.dataset.l = l; label(b);
     b.addEventListener("click", function () {
       if (l !== "daily") return pickLevel(l, b);
       finishFx(); sfx("tick"); disarmLevel();

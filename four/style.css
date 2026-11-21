@@ -6,6 +6,8 @@
   gap:var(--sg); }
 .slot{ position:relative; background:var(--well); border-radius:50%; box-shadow:inset 0 .45cqw .9cqw rgba(0,0,0,.45); }
 .slot.aim{ background:var(--cell); }
+/* High contrast gives every hole a visible edge (round 4, craft #14) */
+:root[data-contrast="high"] .slot{ box-shadow:inset 0 .45cqw .9cqw rgba(0,0,0,.45), inset 0 0 0 1.5px var(--line-2); }
 /* the keyed disc layer (shared/motion.js) sits over the holes on the same grid; clicks go through to the board.
    A falling disc is clipped at the top edge of the grid (REDESIGN.md 5.5). */
 .board.four > .discs{ inset:var(--bgap); --gap:var(--sg); z-index:1; pointer-events:none; clip-path:inset(0 -16px -16px -16px); }
@@ -24,7 +26,8 @@
   background:radial-gradient(circle at 35% 30%, var(--hi), var(--own) 62%);
   box-shadow:inset 0 -.8cqw 0 rgba(0,0,0,.2), 0 .5cqw 1cqw rgba(0,0,0,.3); }
 .disc.p1{ --own:var(--accent); --hi:var(--accent-2); } .disc.p2{ --own:var(--cool); --hi:var(--cool-2); }
-.disc.ghost{ opacity:.38; }
+/* the aim ghost is a hollow ring in your colour, so it never reads as a played disc (round 4, craft #31) */
+.disc.ghost{ opacity:.7; background:none; box-shadow:inset 0 0 0 .6cqw var(--own); color:var(--own); }
 .disc.dim{ opacity:.3; }
 /* the winning line: a white ring on its four discs, every other disc dimmed; nothing grows or moves */
 .disc.win{ outline:3px solid var(--ink); outline-offset:2px; }
@@ -56,13 +59,23 @@
 .hint .pick button:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; }
 /* round 3 (craft #2): the band holds two lines, so status copy never pushes the board down */
 .hint{ min-height:max(2.8em, calc(var(--tap) + 4px)); line-height:1.4; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; }
-/* the games cards at the page foot (REDESIGN.md 3.1) */
-.foot-cards{ margin:22px 0 8px; }
+/* the games cards at the page foot under the family's one heading (REDESIGN.md 3.1, TRIAGE4 Family);
+   section.more, never the end card's .over.more */
+section.more{ margin:22px 0 8px; } section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
 /* round 3 (craft #3): at 320px the four pills stay on one row (RECORD no longer sits alone) */
 @media (max-width:360px){
   /* Tune's 44 px choices wrap under their label here: the band keeps room for both, so the board never moves */
   .hint{ min-height:calc(var(--tap) + 1.4em + 6px); }
+}
+/* round 4 (craft Larger text, all-ages #5): on a phone the four pills share one row at every text size, so the board
+   starts higher; a label that does not fit wraps to two lines and never drops below 12 px (REDESIGN 1.1) */
+@media (max-width:360px){
   .stats{ flex-wrap:nowrap; gap:6px; }
   .stat{ min-width:0; padding:6px 7px; }
-  .stat > span{ letter-spacing:.03em; font-size:.62rem; }
+  .stat > span{ letter-spacing:.03em; font-size:12px; line-height:1.1; }
+}
+@media (max-width:400px){
+  :root[data-text="large"] .stats{ flex-wrap:nowrap; gap:6px; }
+  :root[data-text="large"] .stat{ min-width:0; flex:1 1 auto; padding:6px 6px; }
+  :root[data-text="large"] .stat > span{ letter-spacing:.03em; line-height:1.1; }
 }

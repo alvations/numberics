@@ -3,7 +3,8 @@
  * this file only draws, listens, and remembers.
  * Motion (docs/design/REDESIGN.md 5.4): every tile keeps its element (NumbericsMotion.layer, keyed by identity) and
  * slides one cell over T.step; a merge pops on top after the slide; the dealt tile enters from outside the edge it was
- * swiped away from; a Flush plays after the slide: the rainbow sweeps the run, then each run tile shrinks away.
+ * swiped away from, with the slide; a Flush plays as the slide lands: the run leaves the board at once and its tiles,
+ * now only leaving ghosts, swell and shrink away under the rainbow (about 400 ms in all, TRIAGE4).
  * The state is authoritative before any animation starts: a new input finishes the running timeline at once
  * (flush()) and is applied immediately, so no input is ever dropped or delayed (5.11). Sounds follow the family's one
  * rule (shared/motion.js, TRIAGE4 D7): the pending ones play at once, one of each, and the new input's own play with it. */
@@ -33,6 +34,8 @@
   // only if this run already holds the record)
   var base = saved && Number.isFinite(saved.base) ? saved.base : (best.score > state.score ? best.score : 0);
   var seen = !!(saved && saved.seen);  // the old first-run explainer was dismissed once: the how-to counts as seen
+  // a flush was ever made on this device: until then the hint band says how to make one (cold #12)
+  var flushed = !!(saved && (saved.flushed || (saved.state && saved.state.flushes > 0)));
   var desk = false;                // a mouse and keyboard: targeting copy adds the arrow keys
   try { desk = window.matchMedia("(hover: hover) and (pointer: fine)").matches; } catch (e) { desk = false; }
   var viewing = false;             // "See the board": the end card is hidden to look at the finished board
@@ -51,7 +54,7 @@
 
   function persist() {
     if (state.score > best.score) { best.score = state.score; best.used = state.used; }
-    store.save({ state: state, bestScore: best.score, bestUsed: best.used, base: base, seen: seen });
+    store.save({ state: state, bestScore: best.score, bestUsed: best.used, base: base, seen: seen, flushed: flushed });
     try {
       if (PR) PR.put(ID, { best: best.score ? "Best " + K.fmt(best.score) : "", live: !state.over && state.moves > 0,
         liveText: "Score " + K.fmt(state.score) });
@@ -104,32 +107,30 @@
   function same(a, b) { for (var k = 0; k < a.length; k++) if (a[k] !== b[k]) return false; return true; }
   function cleared(grid, f) { var g = grid.slice(); f.cells.forEach(function (c) { g[c] = 0; }); if (f.value) g[f.at] = f.value; return g; }
 
-  // schedule one flush at time t on the board `cur` with id map `map`; returns {t, cur, map} after it
-  function schedFlush(t, f, cur, map, w) {
-    var red = M.reduced(), n = f.cells.length, runIds = f.cells.map(function (c) { return map[c]; });
-    var sweep = red ? 250 : 420 + M.T.waveGap * (n - 1), stag = red ? 0 : 40, out = M.T.popOut;
-    var after = cleared(cur, f), m2 = map.slice();
-    f.cells.forEach(function (c) { m2[c] = 0; });
-    if (f.value) { m2[f.at] = nextId++; }
+  // one flush beat (TRIAGE4, mechanics #2/#3, craft #27): at time t every run in `group` leaves the board in one sync, so
+  // from that frame on the drawn tiles are the engine's board (an input then acts on what is shown). The run tiles stay
+  // only as leaving ghosts (`gone`, theme.css): the rainbow sweeps them while they swell and shrink away, 20 ms apart,
+  // in FLUSH_MS. Returns {t, map} after the beat: t is when its ghosts are gone.
+  var FLUSH_MS = 300, FLUSH_GAP = 20;
+  function beat(t, group, cur, map) {
+    var red = M.reduced(), after = cur.slice(), m2 = map.slice(), outIds = [];
+    group.forEach(function (f) {
+      f.cells.forEach(function (c) { if (map[c] && outIds.indexOf(map[c]) < 0) outIds.push(map[c]); m2[c] = 0; });
+      after = cleared(after, f);
+      if (f.value) m2[f.at] = nextId++;
+    });
     tl.at(t, function () {
-      runIds.forEach(function (id, k) {
-        var el = L.get(id); if (!el) return;
-        el.style.setProperty("--d", (red ? 0 : k * M.T.waveGap) + "ms");
-        el.classList.add("run"); el.classList.toggle("still", red);
+      group.forEach(function (f) {
+        f.cells.forEach(function (c, k) {
+          var el = L.get(map[c]); if (!el) return;
+          el.style.setProperty("--d", (red ? 0 : k * FLUSH_GAP) + "ms");
+          el.classList.add("run"); el.classList.toggle("still", red);
+        });
       });
+      L.sync(tilesOf(after, m2), { out: outIds });
     });
-    sounds.sound(t + sweep, function () { snd("pop", w); buzz("merge"); });
-    tl.at(t + sweep, function () {
-      runIds.forEach(function (id, k) {
-        var el = L.get(id); if (!el) return;
-        var face = el.querySelector(".face");
-        M.play(face, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(0)", opacity: 0 }],
-          { duration: out, delay: k * stag, easing: M.E.out, fill: "forwards" }, [{ opacity: 1 }, { opacity: 0 }]);
-      });
-    });
-    var end = t + sweep + out + stag * (n - 1);
-    tl.at(end, function () { L.sync(tilesOf(after, m2), {}); });
-    return { t: end + 80, cur: after, map: m2 };
+    sounds.sound(t, function () { snd("pop", group.length); buzz("merge"); });
+    return { t: t + (red ? M.T.fade : FLUSH_MS), map: m2 };
   }
 
   // the dealt tile: it starts one cell beyond the edge it was swiped away from and slides in (fx.enter)
@@ -159,6 +160,8 @@
     if (n === "swap" && targeting.picks.length) return keys ? "Now tap a neighbour to swap with. Esc cancels." : "Now tap a neighbour. Tap Swap to cancel.";
     return keys ? KHINT[n] + " Esc cancels." : HINT[n] + " Tap " + NAME[n] + " to cancel.";
   }
+  var TIP = "Tip: line up 3, 6, 9 in a row or column for a rainbow flush.";
+  function onlyUndo() { var can = E.POWERS.filter(function (p) { return E.usable(state, p); }); return can.length === 1 && can[0] === "undo"; }
   // stuck but not over: say what can still act (with only Undo left, say so plainly: gameplay #1, cold #19)
   function stuckHint() {
     var can = E.POWERS.filter(function (p) { return E.usable(state, p); });
@@ -194,11 +197,15 @@
       onUse: activate,
       onInfo: function (id, text) { note = text; chrome(); },
     });
+    // stuck with only Undo left: the run is over unless it is rewound, so it gets the end card too (cold #13), with Undo
+    var stuck = !state.over && !E.canMove(state) && onlyUndo();
     $("hint").textContent = targeting ? targetHint()
       : note ? note
       : state.over ? (viewing ? "Tap the board for the summary." : "")
+      : stuck ? ""
       : !E.canMove(state) ? stuckHint()
-      : !state.moves ? "Swipe to start: every tile moves one step." : "";
+      : !state.moves ? "Swipe to start: every tile moves one step."
+      : !flushed && !state.flushes ? TIP : "";
     Array.prototype.forEach.call(cellsEl.children, function (c, k) {
       c.classList.toggle("sel", !!(targeting && targeting.picks.indexOf(k) >= 0));
       c.classList.toggle("cur", !!(targeting && targeting.kbd && targeting.cur === k));
@@ -211,19 +218,25 @@
     boardEl.classList.toggle("targeting", !!targeting);
     if (!state.over) viewing = false;
     // the end card waits for the last animation of the run (finalFn), then shows
-    var wasOver = !$("over").hidden, card = !!state.over && !viewing && !finalFn;
+    var wasShown = !$("over").hidden, wasStuck = $("over").classList.contains("stuck"), wasOver = wasShown && !wasStuck;
+    var card = (!!state.over || stuck) && !viewing && !finalFn;
     $("over").hidden = !card;
+    $("over").classList.toggle("stuck", stuck);
+    $("over-view").hidden = stuck; $("over-undo").hidden = !stuck;
     // one end-card pattern (round 3): while the card shows, the page's New game is hidden with its space kept
     // (no gap jump, one New game on screen), and the card's primary button takes focus
     $("new").style.visibility = card ? "hidden" : "";
-    if (card && !wasOver && !sheetOpen()) $("again").focus({ preventScroll: true });
-    if (state.over) {
+    if (card && (!wasShown || wasStuck !== stuck) && !sheetOpen()) $(stuck ? "over-undo" : "again").focus({ preventScroll: true });
+    if (stuck) {
+      $("over-text").textContent = "Undo the last move to keep going, or start a new game.";
+      $("over-best").hidden = true; $("over-pills").hidden = true;
+    } else if (state.over) {
       // "<detail> · <score>", the family's subline form; no-break spaces and hyphen keep each part whole at 320 px
       $("over-text").textContent = state.flushes + (state.flushes === 1 ? " flush" : " flushes") + " · " +
         (state.used ? state.used + " power‑up" + (state.used === 1 ? "" : "s") : "pure run") + " · score " + K.fmt(state.score);
       $("over-best").hidden = !(state.score > base && state.score > 0);
     }
-    if (card && !wasOver) { duck(true); if (T) T.pills($("over-pills"), pills); }
+    if (card && !wasOver && state.over) { duck(true); if (T) T.pills($("over-pills"), pills); }
   }
   // the whole board at once, no slide (load, New game, Undo: a cross-fade)
   function render(fade) { rekey(); L.sync(tilesOf(state.grid, ids), fade ? { fade: true } : {}); chrome(); }
@@ -239,13 +252,23 @@
     if (T && !$("over").hidden) T.pills($("over-pills"), pills);
   }
 
-  // one toast per flush event (a reward); a flush a power-up set up scores but pays no power-up (R2)
+  // one toast per flush event (a reward); a flush a power-up set up scores but pays no power-up (R2). The hint band then
+  // says what the earned power-up does, until the next action (cold #12, #14: "Third" is not guessable from its name)
+  function earned(list) {
+    var got = []; list.forEach(function (f) { if (f.power && got.indexOf(f.power) < 0) got.push(f.power); });
+    if (!got.length) return "";
+    if (got.length > 1) return "Earned " + got.map(function (p) { return NAME[p]; }).join(" and ") + ". Tap one to see what it does.";
+    var d = DEFS[E.POWERS.indexOf(got[0])];
+    return "Earned " + (got[0] === "undo" ? "an " : "a ") + d.label + ": " + d.desc.charAt(0).toLowerCase() + d.desc.slice(1);
+  }
   function announce(list) {
     if (!list.length) return;
+    flushed = true;
     var f = list[0], tail = list.length > 1 ? "  (x" + list.length + " cascade)" : "";
     // R15: a flush on a full stock says so, never a silent missing reward
     var pays = f.power ? "  +" + NAME[f.power] : f.full ? ". Power-ups full" : f.paid ? "" : " (no power-up)";
-    K.toast("Flush " + f.values.join("-") + (f.value ? " = " + f.value : "") + ", +" + K.fmt(f.points) + pays + tail);
+    K.toast("Rainbow flush " + f.values.join("-") + (f.value ? " = " + f.value : "") + ", +" + K.fmt(f.points) + pays + tail);
+    note = earned(list);
   }
 
   // the last step of every timeline: the authoritative board, the end card, and the run's end
@@ -256,7 +279,7 @@
       // finished at once by a new input: the intermediate steps never ran, so draw the final board now (an
       // in-flight slide is not snapped: the transition retargets from where the tile is)
       if (atOnce) L.sync(tilesOf(state.grid, ids), {});
-      Array.prototype.forEach.call(tilesEl.querySelectorAll(".tile.run"), function (el) { el.classList.remove("run", "still"); });
+      Array.prototype.forEach.call(tilesEl.querySelectorAll(".tile.run:not(.gone)"), function (el) { el.classList.remove("run", "still"); });
       chrome();
       if (swipe) { var got = report("swipe", swipe); if (state.over) { pills = got.slice(); if (T) T.pills($("over-pills"), pills); } }
       if (state.over) { snd("lose"); buzz("lose"); reportEnd(); }
@@ -281,38 +304,28 @@
     var trace = [];
     r.trace.forEach(function (t) { if (t.merge) trace.push({ from: t.to, to: t.to, merge: true }); trace.push(t); });
     var tr = M.track(ids, trace, null, nextId), map = tr.ids; nextId = tr.next;
-    // flushes found before the tile was dealt come first; the rest were completed by the dealt tile
-    var fl = r.flushes, k = 0, cur = G;
-    while (k < fl.length && same(fl[k].before, cur)) { cur = cleared(cur, fl[k]); k++; }
-    var sp = r.spawned, spId = sp >= 0 ? nextId++ : 0;
+    // the flushes: runs on the board after the slide, and any the dealt tile completes. Clearing a run never moves a
+    // tile, so every one of them is on the board at once when the slide lands (the dealt tile included: its cell is the
+    // far end of a line that moved, always empty after the slide)
+    var fl = r.flushes, sp = r.spawned, spId = sp >= 0 ? nextId++ : 0;
     var STEP = M.ms("step"), topMerge = 0;
     r.trace.forEach(function (t) { if (t.merge) topMerge = Math.max(topMerge, G[t.to]); });
     var newBest = base > 0 && old.score <= base && state.score > base;
     var prevTop = old.top;
 
-    // t = 0: every tile slides one cell; the dealt tile slides in with them when no flush comes first
-    var tiles = tilesOf(G, map), fx = { merges: tr.merges };
-    if (sp >= 0 && k === 0) { map = map.slice(); map[sp] = spId; tiles.push({ id: spId, cell: sp, v: old.next }); fx.enter = enterFx(sp, spId, dir); }
+    // t = 0: every tile slides one cell and the dealt tile slides in with them, so it shows from the first frames
+    var tiles = tilesOf(G, map), fx = { merges: tr.merges }, shown = G;
+    if (sp >= 0) { map = map.slice(); map[sp] = spId; shown = G.slice(); shown[sp] = old.next; tiles.push({ id: spId, cell: sp, v: old.next }); fx.enter = enterFx(sp, spId, dir); }
     L.sync(tiles, fx);
     snd("slide"); buzz("tap");
     if (topMerge) sounds.sound(STEP, function () { snd("merge", E.rung(topMerge)); buzz("merge"); });
-    // then each flush in turn (a second one starts 80 ms after the first ends); a tile dealt after a flush
-    // enters once that flush has cleared its cell
-    var t = STEP, w = 1, curMap = map;
-    function chain(idx) { var res = schedFlush(t, fl[idx], cur, curMap, w++); t = res.t; cur = res.cur; curMap = res.map; }
-    cur = G;
-    for (var a = 0; a < k; a++) chain(a);
-    if (sp >= 0 && k > 0) {
-      var g2 = cur.slice(); g2[sp] = old.next; var m3 = curMap.slice(); m3[sp] = spId;
-      var at = t - 80;
-      tl.at(at, function () { L.sync(tilesOf(g2, m3), { enter: enterFx(sp, spId, dir) }); });
-      t = at + STEP + 80; cur = g2; curMap = m3;
-    }
-    for (a = k; a < fl.length; a++) chain(a);
-    ids = curMap;
+    // t = STEP: the slide has landed; every run leaves in one beat (one pop sound for the lot)
+    var end = Math.max(STEP, 1);
+    if (fl.length) { var bt = beat(STEP, fl, shown, map); end = bt.t; map = bt.map; }
+    ids = map;
     if (!same(ids.map(Boolean), state.grid.map(Boolean))) rekey(); // never expected: the board is the truth
     begin(settle(newBest, { flushes: fl.length, top: state.top, grid: state.grid.slice(), moves: state.moves, run: run() }));
-    tl.at(fl.length ? t - 80 : Math.max(STEP, 1), done);
+    tl.at(end, done);
 
     announce(fl);
     if (fl.some(function (f) { return f.power; })) sounds.sound(STEP, function () { snd("power"); });
@@ -391,12 +404,12 @@
     snd("place"); buzz("tap");
     if (res.flushes.length) {
       announce(res.flushes);
-      var t = M.ms("step"), cur = G, w = 1;
-      res.flushes.forEach(function (f) { var o = schedFlush(t, f, cur, map, w++); t = o.t; cur = o.cur; map = o.map; });
-      ids = map;
+      // the runs a power-up lines up are all on the board at once: one beat once the power-up's own motion has played
+      var o = beat(M.ms("step"), res.flushes, G, map);
+      ids = o.map;
       if (!same(ids.map(Boolean), state.grid.map(Boolean))) rekey();
       begin(settle(false));
-      tl.at(t - 80, done);
+      tl.at(o.t, done);
       chrome();
     } else {
       ids = map;
@@ -445,7 +458,7 @@
       text: "Each swipe moves tiles one step." },
     { picture: '<div class="eq">' + tiny(1) + '<span class="op">+</span>' + tiny(2) + '<span class="op">=</span>' + tiny(3) + "</div>",
       text: "1 and 2 make 3. From 3 up, equal tiles join." },
-    { picture: '<div class="eq">' + tiny(3) + tiny(6) + tiny(9) + "</div>", text: "Line up 3, 6, 9 for a rainbow flush." }
+    { picture: '<div class="eq">' + tiny(3) + tiny(6) + tiny(9) + "</div>", text: "Line up 3, 6, 9 in a row or column, either way round, for a rainbow flush and a power-up." }
   ];
   function markHowto() { try { if (PR) PR.markHowto(ID); } catch (e) { /* in memory */ } }
   var how = null;
@@ -460,6 +473,7 @@
   K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, startNew);
   $("again").addEventListener("click", function () { snd("tick"); startNew(); });
   $("over-view").addEventListener("click", function () { view(true); });
+  $("over-undo").addEventListener("click", function () { activate("undo"); boardEl.focus({ preventScroll: true }); });
 
   if (seen) markHowto();
   render(false);

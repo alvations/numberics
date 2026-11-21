@@ -18,7 +18,7 @@
   <header>
     <div class="brand">
       <h1>Four</h1>
-      <p class="sub"><a href="../">Numberics</a> &middot; Four in a row, or four that make ten.</p>
+      <p class="sub">Four in a row, or four that make ten.</p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>Your next</span><b id="next" class="mini you" aria-label="your next disc"></b></div>
@@ -58,11 +58,15 @@
     <p>Tap a column (or arrows and Enter) to drop your next disc. Win with four of yours in a row, or four
      of any colours that make ten, two of them yours. Half the discs are 1s. On Easy and Medium a blue ring is where
      the computer can win next, a red dashed ring a drop that lets it. Block a three or set up a ten to earn
-     power-ups; on Hard the computer uses them too.</p>
+     power-ups; on Hard the computer uses them too. A ten with two discs of each colour counts for whoever drops its
+     fourth disc.</p>
     <p>Keys: Left and Right pick a column, Enter or Down drops. 1 to 4 use a power-up (U is Undo), Esc cancels.</p>
     <p><button id="howto-open" class="btn" type="button" data-howto>Show the three steps</button></p>
   </details>
-  <div id="games" class="cards foot-cards" data-root="../" data-current="four" aria-label="Numberics games"></div>
+  <section class="more foot-cards" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="four"></div>
+  </section>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

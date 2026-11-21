@@ -19,7 +19,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("line drawn as tiles", await p.locator("#line .num").count() >= 3);
   ck("gold target shown", /^6/.test(await p.textContent("#target")));
   ck("unset gaps show ?", (await p.textContent("#val")).trim() === "= ?");
-  ck("R6 header: Numberics link then a tagline", (await p.textContent(".sub")) === "Numberics · Every line makes six, then 66, 6.6, 666." && (await p.getAttribute(".sub a", "href")) === "../");
+  ck("header: a plain tagline, no Numberics link (TRIAGE4 Family, cold #26)", (await p.textContent(".sub")) === "Put signs between the numbers to make six." && await p.locator(".sub a").count() === 0);
+  ck("one games heading over the cards (TRIAGE4 Family)", (await p.textContent("section.more h2")) === "More number games" && await p.locator("section.more #games").count() === 1);
   ck("the first line needs only + - x /", await p.evaluate(() => window.__six.E.plain(window.__six.state.lines[0])));
   ck("a fresh board prompts the first move", /Tap a gap/.test(await p.textContent("#hint")));
   // force a known line with a bracket and a sign: 8 8 8 -> (sqrt(8 / 8 + 8))!
@@ -216,7 +217,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the target is shown once in the board panel (the tier label names tools, not the target)",
     !/make|\b6\b/i.test(await p.textContent("#tier")) && (await p.textContent("#board .goal")) === "make6" && await p.evaluate(() => (document.querySelector("#board").innerText.match(/\bmake\b/gi) || []).length === 1));
   ck("an empty gap looks live: gold ring, bold ?", await p.evaluate(() => { const b = getComputedStyle(document.querySelector(".gp.empty b")); const gold = (n => { const pr = document.createElement("i"); pr.style.color = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); document.body.appendChild(pr); const c = getComputedStyle(pr).color; pr.remove(); return c; })("--accent"); return b.borderTopColor === gold && +b.fontWeight >= 700 && b.color === gold; }));
-  ck("Show answer looks like a run-ender in Climb", await p.locator("#reveal.ender").count() === 1);
+  // D10: Show answer is neutral (no red), quieter than Clear; armed, it says what it costs and turns full ink
+  const revealLook = () => p.evaluate(() => { const r = getComputedStyle(document.getElementById("reveal")), c = getComputedStyle(document.getElementById("clear"));
+    const pr = document.createElement("i"); pr.style.color = getComputedStyle(document.documentElement).getPropertyValue("--bad").trim(); document.body.appendChild(pr); const bad = getComputedStyle(pr).color; pr.remove();
+    return { color: r.color, border: r.borderTopColor, bad, clearBorder: c.borderTopColor, clearColor: c.color }; });
+  { const v = await revealLook();
+    ck("D10: Show answer is neutral, not red", v.color !== v.bad && v.border !== v.bad && v.border === v.clearBorder && v.color !== v.clearColor, JSON.stringify(v)); }
+  await p.click("#reveal");
+  { const v = await revealLook();
+    ck("D10: armed Show answer keeps its confirm, still not red", /Sure\? Ends run/.test(await p.textContent("#reveal")) && v.color === v.clearColor && v.border !== v.bad && !(await st(p)).done, JSON.stringify(v)); }
+  await p.waitForTimeout(3100);
+  ck("D10: the confirm lapses back to Show answer", (await p.textContent("#reveal")) === "Show answer" && await p.locator("#reveal.armed").count() === 0);
   // the mechanics repro: 3 ? 3 ? 3, drag 1-2, then 1-3 (add), then 1-3 again (remove): no "Maximum call stack size exceeded"
   await p.evaluate(() => {
     const E = window.__six.E, s = JSON.parse(JSON.stringify(window.__six.state));
@@ -281,7 +292,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   for (const n of ["74 74 74 74 74", "9 9 9 9 9", "5 5 5 5", "3 3 3"]) {
     await setLine(n);
     const z = await sizes();
-    ck("320px: every tile and gap of " + n + " is at least 40px", z.length === 2 * n.split(" ").length - 1 && z.every(x => x >= 40), z.map(Math.round).join(","));
+    const gw = await p.evaluate(() => [...document.querySelectorAll("#line .gp")].map(e => e.getBoundingClientRect().width));
+    const tw = await p.evaluate(() => [...document.querySelectorAll("#line .num")].map(e => { const r = e.getBoundingClientRect(); return [r.width, r.height]; }));
+    ck("320px: every gap of " + n + " is at least 44px wide (craft #9), every tile at least 26 wide and 44 tall", z.length === 2 * n.split(" ").length - 1 && gw.every(x => x >= 44) && tw.every(([w, h]) => w >= 26 && h >= 44), gw.map(Math.round) + " | " + tw.map(x => x.map(Math.round).join("x")));
     ck("320px: no horizontal scroll with " + n, await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
     ck("320px: the ? ring never touches a tile (" + n + ")", await p.evaluate(() => {
       const t = [...document.querySelectorAll("#line .num")].map(e => e.getBoundingClientRect());
@@ -301,7 +314,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("Tier 1 label lists brackets", (await p.textContent("#tier")) === "Tier 1 · + − × ÷ and brackets", await p.textContent("#tier"));
   ck("the status band is never empty on a live line", (await p.textContent("#hint")) === "Make 6 with the numbers in order.", await p.textContent("#hint"));
   await p.click("#reveal");
-  ck("Show answer on a bracket line nudges to Brackets first", /needs \( \) Brackets\. Tap again to end the run\./.test(await p.textContent("#hint")) && !(await st(p)).done, await p.textContent("#hint"));
+  ck("Show answer on a bracket line: the cost first, then the Brackets nudge (mechanics #2)", (await p.textContent("#hint")) === "Tap again to end the run. This line needs ( ) Brackets." && !(await st(p)).done, await p.textContent("#hint"));
   ck("the nudge does not wrap the status band at 320px", await p.evaluate(() => document.getElementById("hint").getBoundingClientRect().height < 50));
   await p.click("#reveal");
   ck("second tap still ends the run", (await st(p)).ended);
@@ -334,7 +347,15 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // the page still fits 390x844 with a stacked five-number line
   await p.setViewportSize({ width: 390, height: 844 });
   await setLine("74 74 74 74 74");
-  ck("390x844: a five-number line stacks its gaps and still fits", await p.locator("#line.stack").count() === 1 && (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
+  ck("390x844: a five-number line keeps its signs between the numbers (one row, cold #25) and still fits", await p.locator("#line.narrow").count() === 1 && await p.locator("#line.stack").count() === 0 && (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
+  for (const [w, h] of [[390, 844], [375, 667], [360, 740]]) {
+    await p.setViewportSize({ width: w, height: h }); await setLine("74 74 74 74 74"); await p.waitForTimeout(300); // the line slides in for 220 ms
+    ck(w + "px: five numbers in one row, each gap between its two tiles and at least 44 wide", await p.evaluate(() => {
+      const t = [...document.querySelectorAll("#line .num")].map(e => e.getBoundingClientRect()), g = [...document.querySelectorAll("#line .gp")].map(e => e.getBoundingClientRect());
+      return g.length === 4 && g.every((r, k) => r.width >= 44 && r.left >= t[k].right - 0.5 && r.right <= t[k + 1].left + 0.5 && Math.abs((r.top + r.bottom) / 2 - (t[k].top + t[k].bottom) / 2) < 2);
+    }), await p.evaluate(() => document.getElementById("line").className + " " + [...document.querySelectorAll("#line .num, #line .gp")].map(e => { const r = e.getBoundingClientRect(); return Math.round(r.left) + "+" + Math.round(r.width); }).join(",")));
+  }
+  await p.setViewportSize({ width: 390, height: 844 });
   ck("round 3 checks: no page errors", e5.length === 0, e5.join("|"));
   await ctx.close();
 
@@ -489,10 +510,19 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click('#modes button[data-mode="daily"]');
   await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.idx = 5; s.cur = JSON.parse(JSON.stringify(s.lines[5].sol)); s.done = true; s.solved = 4; window.__six.state = s; });
   await spyDuck(); await p.click("#next");
-  ck("six_daily: finish the Daily Six", await has(p, "six_daily") && await has(p, "fam_daily"));
+  // D9: four of six made (two given up with Show answer) is not a finished Daily: no trophy, no Today chip, no streak
+  ck("D9: an unfinished Daily earns no Daily trophy", !(await has(p, "six_daily")) && !(await has(p, "fam_daily")));
+  ck("D9: an unfinished Daily writes no Today chip and no Daily day", await p.evaluate(() => !window.NumbericsProgress.today().six && window.NumbericsTrophies.fam().dailyDays.length === 0));
+  ck("D9: the card says it is not finished", (await p.textContent("#over-title")) === "Daily Six over" && /^4 of 6 made · make all six to finish it$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
+  // all six made: finished
+  await p.click("#again"); await p.click('#modes button[data-mode="daily"]');
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.over = false; s.idx = 5; s.cur = JSON.parse(JSON.stringify(s.lines[5].sol)); s.done = true; s.solved = 6; s.used = 0; window.__six.state = s; });
+  await spyDuck(); await p.click("#next");
+  ck("six_daily: finish the Daily Six (all six made)", await has(p, "six_daily") && await has(p, "fam_daily"));
+  ck("D9: the card says done", (await p.textContent("#over-title")) === "Daily Six done");
   ck("end card: the trophy is a pill on the card", await p.isVisible('#over-pills .trophy[data-trophy="six_daily"]'));
   ck("end card: no toast over it", !(await p.locator("#toast.on").count()));
-  ck("Today: the Daily line is written", await p.evaluate(() => window.NumbericsProgress.today().six === "4 made"));
+  ck("Today: the Daily line is written with its score", await p.evaluate(() => { NumbericsKit.flush(); const d = JSON.parse(localStorage.getItem("numberics_progress_v1")).daily; const e = d[Object.keys(d)[0]].six; return window.NumbericsProgress.today().six === "6 made" && e.s === 0 && e.low === true; }));
   ck("music ducks under the end card", await p.evaluate(() => window.__duck[window.__duck.length - 1] === true));
   await shot(p, "end-pill");
   if (process.env.SIX_PILL) await p.screenshot({ path: process.env.SIX_PILL });
@@ -503,5 +533,43 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click("#reveal"); await p.click("#reveal");
   ck("Run over: the card shows, end reported (fam_first)", await p.isVisible("#over") && await has(p, "fam_first"));
   ck("trophy checks: no page errors", e8.length === 0, e8.join("|"));
+  await ctx.close();
+
+  // ---------- round 4 (TRIAGE4) ----------
+  for (const theme of ["light", "dark"]) {
+    ctx = await newCtx({ viewport: { width: 390, height: 844 } });
+    await ctx.addInitScript(t => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, theme: t })); } catch (e) { /* blocked */ } }, theme);
+    p = await ctx.newPage(); const e9 = []; p.on("pageerror", e => e9.push(e.message));
+    await p.goto(page);
+    await setL(p, "16 16 16");
+    await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.cur.u[1] = 1; s.cur.b = [[0, 1, 2]]; window.__six.state = s; });
+    // the sign chip on a number and the bracket chip are readable labels: at least 12 px, text unlike its chip
+    const lab = await p.evaluate(() => [".num .sg", ".bar i"].map(q => { const e = document.querySelector(q), c = getComputedStyle(e); return { q, fs: parseFloat(c.fontSize), color: c.color, bg: c.backgroundColor }; }));
+    ck(theme + ": sign and bracket chips are at least 12 px (craft #8)", lab.every(x => x.fs >= 12), JSON.stringify(lab));
+    const lum = c => { const v = c.match(/[\d.]+/g).slice(0, 3).map(x => { x = x / 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    const con = x => { const a = lum(x.color), b = lum(x.bg); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+    ck(theme + ": the sign chip text reads on its chip (contrast at least 4.5)", con(lab[0]) >= 4.5, con(lab[0]).toFixed(2));
+    ck(theme + ": with a sign on a number the hint says how it comes off (cold #27)", (await p.textContent("#hint")) === "Tap a number again to change its sign, or take it off.", await p.textContent("#hint"));
+    ck(theme + ": the expression line shows when it adds brackets or signs", await p.locator("#expr.same").count() === 0);
+    await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.cur.u[1] = 0; s.cur.b = []; s.cur.g = ["+", ""]; window.__six.state = s; });
+    ck(theme + ": plain signs only: the expression line is hidden (it repeats the tiles, craft #39), its height kept", await p.locator("#expr.same").count() === 1 && await p.evaluate(() => { const e = document.getElementById("expr"); return getComputedStyle(e).opacity === "0" && e.getBoundingClientRect().height > 10 && e.textContent.length > 0; }));
+    ck(theme + ": gap buttons at least 44 px wide on a 3-number line", await p.evaluate(() => [...document.querySelectorAll("#line .gp")].every(g => g.getBoundingClientRect().width >= 44)));
+    if (theme === "light") await shot(p, "light-signs");
+    ck(theme + ": no page errors", e9.length === 0, e9.join("|"));
+    await ctx.close();
+  }
+  // B3: 320 px with Larger text: no sideways scroll, and the tools stay inside the board (they wrap)
+  ctx = await newCtx({ viewport: { width: 320, height: 568 } });
+  await ctx.addInitScript(() => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, text: "large" })); } catch (e) { /* blocked */ } });
+  p = await ctx.newPage(); await p.goto(page); await p.evaluate(() => window.__demo());
+  ck("320 Larger text: no sideways scroll, every tool inside the board", await p.evaluate(() => {
+    const b = document.getElementById("board").getBoundingClientRect();
+    return document.documentElement.scrollWidth <= innerWidth && [...document.querySelectorAll("#board .tools .btn:not([hidden])")].every(x => { const r = x.getBoundingClientRect(); return r.left >= b.left && r.right <= b.right; });
+  }));
+  await ctx.close();
+  // desktop: gaps 44 wide too
+  ctx = await newCtx({ viewport: { width: 1280, height: 860 } });
+  p = await ctx.newPage(); await p.goto(page); await setL(p, "9 9 9 9 9");
+  ck("desktop: five-number gaps at least 44 px wide, square tiles in one row", await p.evaluate(() => [...document.querySelectorAll("#line .gp")].every(g => g.getBoundingClientRect().width >= 44)) && await p.locator("#line.narrow, #line.stack").count() === 0);
   await ctx.close();
 };

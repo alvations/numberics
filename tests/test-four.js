@@ -159,6 +159,19 @@ t("the computer blocks an immediate ten-line loss (the player holds the 3 it nee
   const s = board([[0, 0, 2, 1], [0, 1, 1, 4], [0, 2, 2, 2], [0, 3, 1, 1]], { turn: 2, next: [3, 1] });
   ok(blockRate(s, "hard", 4) >= 0.9, "hard"); ok(blockRate(s, "medium", 4) >= 0.75, "medium"); ok(blockRate(s, "easy", 4) >= 0.4, "easy");
 });
+// round 4 (TRIAGE4 Four, gameplay #1): Easy's loose turns let a plain vertical three through (5 of 20 games won straight
+// up the centre). Easy now always blocks a stack of three of the player's, on every seed; its other play stays loose.
+t("Easy always blocks a vertical four (centre column, on every seed)", () => {
+  const s = board([[0, 3, 1, 1], [1, 3, 1, 2], [2, 3, 1, 1], [0, 2, 2, 1], [0, 4, 2, 1]], { turn: 2, next: [1, 1], level: "easy" });
+  eq(blockRate(s, "easy", 3), 1, "centre");
+  const e = board([[0, 0, 2, 1], [1, 0, 1, 1], [2, 0, 1, 1], [3, 0, 1, 1], [0, 5, 2, 1]], { turn: 2, next: [1, 1], level: "easy" });
+  eq(blockRate(e, "easy", 0), 1, "edge column, on top of the computer's disc");
+  eq(F._verticalThreat(e.own, 1), 0); eq(F._verticalThreat(e.own, 2), -1);
+});
+t("Easy still takes its own colour win in one before blocking a vertical four", () => {
+  const s = board([[0, 3, 1, 1], [1, 3, 1, 2], [2, 3, 1, 1], [0, 0, 2, 1], [1, 0, 2, 1], [2, 0, 2, 1]], { turn: 2, next: [1, 1], level: "easy" });
+  eq(blockRate(s, "easy", 0), 1, "wins in column 0");
+});
 t("Easy is deterministic by seed", () => {
   const run = seed => { let s = F.newGame(seed, { level: "easy" }), cols = [];
     for (let k = 0; k < 10 && !s.over; k++) { if (s.turn === 1) s = F.drop(s, [3, 2, 4, 1, 5][k % 5]).state; else { const r = F.computerTurn(s); cols.push(r.actions[0].arg); s = r.state; } }
@@ -477,6 +490,7 @@ t("balance: a safe-move player beats Easy most of the time (target >= 65%)", () 
 t("balance: a safe-move player beats Medium often (measured 39% over 400)", () => { const r = botRate("medium", 60); ok(r >= 0.25 && r <= 0.6, "medium " + r); });
 // round 3 (TRIAGE3): the careful player plays only on what the page shows (takes its win, blocks a ring, never drops
 // in a marked column). Targets: Easy 70%+, Medium 40-50% (measured 78% and 44% over 400 games, tools/measure-four.js).
+// Round 4 (Easy blocks a vertical four): Easy measured careful 75%, safe 66% over 1000 games (was 77%, 70%).
 const M4 = require("../tools/measure-four.js");
 t("balance: the careful player beats Easy 70%+ of the time", () => { const r = M4.measure("easy", "careful", 200).rate; ok(r >= 0.68, "easy " + r); });
 t("balance: the careful player beats Medium about 40-50% of the time", () => { const r = M4.measure("medium", "careful", 100).rate; ok(r >= 0.33 && r <= 0.57, "medium " + r); });

@@ -29,7 +29,7 @@
   var saved = store.load() || {};
   var prefs = saved.prefs && typeof saved.prefs === "object" ? saved.prefs : {};
   prefs = { diff: N.DIFFS.indexOf(prefs.diff) >= 0 ? prefs.diff : "easy", misere: !!prefs.misere && !!prefs.unlocked,
-            learn: !!prefs.learn, unlocked: !!prefs.unlocked };
+            learn: !!prefs.learn, bin: !!prefs.bin, unlocked: !!prefs.unlocked };
   var best = saved.best && typeof saved.best === "object" ? saved.best : {};
   // Record (R16): matches won-lost across runs. Quitting a started match counts as a loss (R12).
   var record = saved.record && Number.isInteger(saved.record.won) && Number.isInteger(saved.record.lost) ? saved.record : { won: 0, lost: 0 };
@@ -93,7 +93,7 @@
     for (i = 0; i < n; i++) {
       var v = state.heaps[i], node = nodes[i];
       if (node.tagName !== (v ? "BUTTON" : "DIV")) { var nn = blankNode(v); node.parentNode.replaceChild(nn, node); nodes[i] = node = nn; }
-      if (v) paintTile(node, i, v, prefs.learn); else paintGone(node, i);
+      if (v) paintTile(node, i, v, prefs.learn && prefs.bin); else paintGone(node, i);
     }
   }
   function paintGone(g, i) {
@@ -170,6 +170,16 @@
       host.appendChild(el); fxNodes.push(el);
     }
     var num = el.querySelector(".num"), pips = el.querySelectorAll(".pips i"), stag = red ? 0 : M.T.pipStagger, out = M.T.pipOut;
+    var end = red ? Math.min(out, M.T.fade) : (n - 1) * stag + out;
+    // round 4 (craft #42): the colour no longer snaps to the new count's in one frame; the old colour lies over the
+    // tile and fades out while the pips leave (opacity only, so it stays under Less motion)
+    if (!zero) {
+      var tint = document.createElement("span"); tint.setAttribute("aria-hidden", "true");
+      tint.className = "tint tile" + (l.from === 1 ? " lo" : l.from === 2 ? " lo2" : "");
+      tint.style.setProperty("--h", K.hue(l.from)); host.insertBefore(tint, host.firstChild); fxNodes.push(tint);
+      anim(tint, [{ opacity: 1 }, { opacity: 0 }], { duration: Math.max(end, M.T.fade), easing: "linear", fill: "both" }, [{ opacity: 1 }, { opacity: 0 }]);
+      at(Math.max(end, M.T.fade), function () { drop(tint); });
+    }
     num.textContent = red && !zero ? l.to : l.from;
     for (var j = 0; j < n; j++) {
       var p = pips[l.from - 1 - j];
@@ -177,7 +187,6 @@
         { duration: out, delay: j * stag, easing: M.E.out, fill: zero ? "both" : "backwards" }, [{ opacity: 0.78 }, { opacity: 0 }]);
       (function (left) { at(j * stag, function () { if (!red && !(zero && left === 0)) num.textContent = left; sfx("pip"); }); })(l.from - 1 - j);
     }
-    var end = red ? Math.min(out, M.T.fade) : (n - 1) * stag + out;
     if (zero) {
       at(red ? 0 : end, function () {
         anim(el, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(.85)", opacity: 0.35, offset: 0.79 }, { transform: "scale(.85)", opacity: 0 }],
@@ -253,27 +262,26 @@
       am.appendChild(document.createTextNode("Take ")); var bb = document.createElement("b"); bb.textContent = amount; am.appendChild(bb);
       am.appendChild(document.createTextNode(" from the " + state.heaps[sel]));
     } else am.textContent = myTurn() ? "Pick a tile" : "Wait";
-    // learn line
-    // Learn: the goal in plain words, then the live nim-sum, which Easy and Medium show and Hard does not
-    var ln = $("learn"); ln.hidden = !prefs.learn; ln.textContent = "";
+    // Learn (round 4, cold #33): one plain sentence first; the binary (tile labels, the goal, the live nim-sum) is the
+    // second step, behind "Show the binary". Easy and Medium show the live nim-sum and Hard does not (R4).
+    var ln = $("learn"); ln.hidden = !prefs.learn;
     if (prefs.learn) {
-      // round 3 (cold #30): one plain sentence first, before any binary
-      var plain = document.createElement("span"); plain.className = "plain";
-      plain.textContent = "Aim to leave the tiles balanced (two equal tiles are balanced): the Learn numbers show how.";
-      ln.appendChild(plain);
-      var goal = document.createElement("span"); goal.className = "goal";
-      goal.textContent = "To win, leave a nim-sum of 0 after your move" + (state.misere ? " (Mis\u00e8re: once every tile is 1 or gone, leave an odd number of 1s)" : "") +
+      $("learn-plain").textContent = state.misere ?
+        "Leave two equal tiles and copy each take the computer makes on the other one, but when your move would leave only 1s, leave an odd number of them." :
+        "Leave two equal tiles, then copy each take the computer makes on the other one: the last dot is yours.";
+      var bb = $("bin-btn"); bb.textContent = prefs.bin ? "Hide the binary" : "Show the binary"; bb.setAttribute("aria-expanded", String(prefs.bin));
+      $("learn-deep").hidden = !prefs.bin;
+      $("learn-goal").textContent = "The trick for any number of tiles: leave a nim-sum of 0 after your move" + (state.misere ? " (Mis\u00e8re: once every tile is 1 or gone, leave an odd number of 1s)" : "") +
         ". Nim-sum: add the binary columns, dropping every carry.";
-      ln.appendChild(goal);
-      var sum = document.createElement("span"); sum.className = "sum";
+      var sum = $("learn-sum"); sum.textContent = "";
       if (state.diff === "hard") {
-        sum.className += " off"; sum.textContent = "Hard shows no live nim-sum (Easy and Medium do). Work it out from the binary.";
+        sum.className = "sum off"; sum.textContent = "Hard shows no live nim-sum (Easy and Medium do). Work it out from the binary.";
       } else {
+        sum.className = "sum";
         var x = N.nimSum(state.heaps);
         sum.appendChild(document.createTextNode("Nim-sum " + (state.heaps.filter(Boolean).map(bin).join(" ^ ") || bin(0)) + " = "));
         var xb = document.createElement("b"); xb.textContent = bin(x) + " (" + x + ")"; sum.appendChild(xb);
       }
-      ln.appendChild(sum);
     }
     $("learn-btn").setAttribute("aria-pressed", String(prefs.learn));
     var mb = $("misere"); mb.hidden = !prefs.unlocked;
@@ -315,7 +323,7 @@
     } else {
       $("over-title").textContent = (state.roundOver === "you" ? "You win" : "The computer wins") + " round " + state.round;
       var lastBy = state.last && state.last.who === "you" ? "You" : "The computer";
-      $("over-text").textContent = lastBy + " took the last tile · " + sc + ", first to " + N.WIN_ROUNDS;
+      $("over-text").textContent = lastBy + " took the last dot · " + sc + ", first to " + N.WIN_ROUNDS;
       $("over-note").textContent = state.roundOver === "you" ? aw : "";
       $("again").textContent = "Next round";
     }
@@ -462,7 +470,7 @@
     if (!hold && !viewing) return false;
     if (hold && Date.now() - holdAt < 300) return true; // round 3 craft #2: the Take click bubbled here and cut the hold
     clearTimeout(holdT); holdT = null; hold = false; viewing = false; render(); return true; }
-  boardEl.addEventListener("click", function (e) { if (!live() && !e.target.closest(".over") && !e.target.closest(".bar")) showCard(); });
+  boardEl.addEventListener("click", function (e) { if (!live() && !e.target.closest(".over") && !e.target.closest(".bar") && !e.target.closest(".learn")) showCard(); });
   function proceed() {
     fxFinish();
     var before = state;
@@ -548,6 +556,7 @@
   });
   function toggleLearn() { fxFinish(); sfx("tick"); prefs.learn = !prefs.learn; persist(); render(); }
   $("learn-btn").addEventListener("click", toggleLearn);
+  $("bin-btn").addEventListener("click", function () { fxFinish(); sfx("tick"); prefs.bin = !prefs.bin; persist(); render(); });
   $("new").addEventListener("click", function () { confirmNew($("new"), restart); });
 
   // ---- How to play (1.3, 9.8): opens once by itself on a first visit; the row under the board reaches it ----

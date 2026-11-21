@@ -19,7 +19,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.waitForSelector("#sh-howto:not([hidden])", { timeout: 3000 }).catch(() => {});
   ck("first visit opens the How to play sheet", await p.isVisible("#sh-howto") && await p.evaluate(() => NumbericsUI.current() === "howto"));
   ck("the sheet has three steps with the spec's words", await p.evaluate(() => [...document.querySelectorAll("#sh-howto .step p")].map(e => e.textContent).join("|")) ===
-    "Each swipe moves tiles one step.|1 and 2 make 3. From 3 up, equal tiles join.|Line up 3, 6, 9 for a rainbow flush.");
+    "Each swipe moves tiles one step.|1 and 2 make 3. From 3 up, equal tiles join.|Line up 3, 6, 9 in a row or column, either way round, for a rainbow flush and a power-up.");
   ck("each step has a drawn picture (3, 6, 9 wear the board's colours)", await p.locator("#sh-howto .step .pv").count() === 3 &&
     await p.locator("#sh-howto .pv .mt.three[data-band='2']").count() === 1);
   await p.waitForTimeout(300);
@@ -36,7 +36,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("Play closes the sheet", !(await p.isVisible("#sh-howto")) && await p.evaluate(() => !NumbericsUI.open()));
   ck("the how-to is remembered in progress", await p.evaluate(() => NumbericsProgress.seenHowto("three")));
   ck("fresh board hint fills the empty band", /Swipe to start/.test(await p.textContent("#hint")));
-  ck("subtitle: Numberics link then a tagline with a full stop", /^Numberics · Count in threes\.$/.test((await p.textContent(".sub")).trim()));
+  ck("subtitle: a plain tagline with a full stop, no Numberics link (the top bar mark links home)", (await p.textContent(".sub")).trim() === "Count in threes." && await p.locator(".sub a").count() === 0);
+  ck("the games list heading is the family's one label", (await p.textContent("#more")) === "More number games");
   ck("BEST is a dimmed none before any play (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
   ck("craft #5: the empty value uses the shared .stat .none style (same size as values, weight 600, muted)", await p.evaluate(() => {
     const n = getComputedStyle(document.getElementById("best")), v = getComputedStyle(document.getElementById("score")),
@@ -95,7 +96,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the run cleared from the board", !s.grid[8] && !s.grid[0] && !s.grid[4]);
   ck("flush scored sum x length = 54", s.score === 54);
   ck("flush earned one power-up", s.power.undo + s.power.smash + s.power.swap + s.power.third === 2);
-  ck("toast announces the flush", /^Flush 3-6-9, \+54\s+\+(Undo|Smash|Swap|Third)$/.test(flushToast), flushToast);
+  ck("toast announces the rainbow flush", /^Rainbow flush 3-6-9, \+54\s+\+(Undo|Smash|Swap|Third)$/.test(flushToast), flushToast);
+  ck("cold #14: the hint band says what the earned power-up does", /^Earned an? (Undo: take back the last move|Smash: remove one tile|Swap: trade two neighbouring tiles|Third: turn a 1 or a 2 into a 3)\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("then the trophy it earned toasts, once the flush has played", /^Trophy: First flush$/.test(await p.textContent("#toast")), await p.textContent("#toast"));
   ck("a flush toast is a reward (gold)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("bad"))));
   ck("the run marks are gone after the collapse", await p.locator("#tiles .tile.run").count() === 0);
@@ -178,7 +180,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 4b. R15 (critic S2): a flush on a full stock says "Power-ups full"
   await set(p, FLUSH, { score: 0, moves: 3, free: false, power: { undo: 9, smash: 9, swap: 9, third: 9 } });
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(150);
-  ck("R15: a flush on a full stock says Power-ups full", (await p.textContent("#toast")) === "Flush 3-6-9, +54. Power-ups full" &&
+  ck("R15: a flush on a full stock says Power-ups full", (await p.textContent("#toast")) === "Rainbow flush 3-6-9, +54. Power-ups full" &&
     await p.evaluate(() => document.getElementById("toast").classList.contains("on")), await p.textContent("#toast"));
   await p.waitForTimeout(700);
   // craft #1: arming a power-up clears a toast that sat over the hint line
@@ -208,7 +210,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 4d. gameplay #1 / cold #19: stuck with only Undo left says so plainly
   await set(p, [0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { next: 12, power: { undo: 1, smash: 0, swap: 0, third: 0 } });
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(300);
-  ck("stuck with only Undo: 'Undo a move, or start a new game.'", !(await st(p)).over && (await p.textContent("#hint")) === "Stuck. Undo a move, or start a new game.", await p.textContent("#hint"));
+  ck("cold #13: stuck with only Undo left shows the end card (not over: Undo can rewind)", !(await st(p)).over && await p.isVisible("#over") &&
+    (await p.textContent("#over h2")) === "No moves left" && (await p.textContent("#over-text")) === "Undo the last move to keep going, or start a new game.", await p.textContent("#over-text"));
+  ck("the stuck card offers Undo (focused) and New game, not See the board; the hint band is clear", await p.isVisible("#over-undo") && !(await p.isVisible("#over-view")) &&
+    await p.isVisible("#again") && await p.evaluate(() => document.activeElement.id === "over-undo") && (await p.textContent("#hint")) === "");
+  ck("the stuck card has the game glyph and no trophy pills", await p.locator("#over > .glyph").count() === 1 && !(await p.isVisible("#over-pills")));
+  await shot(p, "stuck");
+  await p.click("#over-undo");
+  ck("Undo on the stuck card rewinds and hides the card", !(await p.isVisible("#over")) && (await st(p)).power.undo === 0 && (await st(p)).grid[0] === 0);
   await set(p, [3, 12, 3, 12, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { power: { undo: 0, smash: 1, swap: 0, third: 0 } });
   ck("stuck with another power-up: 'Use a power-up'", (await p.textContent("#hint")) === "Stuck. Use a power-up to keep going.", await p.textContent("#hint"));
 
@@ -307,7 +316,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const probe = (key, ms, extra) => p.evaluate(([key, ms, extra]) => new Promise(res => {
     const box = document.getElementById("tiles").getBoundingClientRect(), snap = () => [...document.querySelectorAll("#tiles > .tile")].map(n => {
       const f = n.querySelector(".face"), r = f.getBoundingClientRect();
-      return { id: n.dataset.id, v: f.textContent, x: r.x - box.x, y: r.y - box.y, w: r.width, o: +getComputedStyle(f).opacity,
+      return { id: n.dataset.id, v: f.textContent, x: r.x - box.x, y: r.y - box.y, w: r.width, nw: n.getBoundingClientRect().width, o: +getComputedStyle(f).opacity,
         c: +n.style.getPropertyValue("--c"), r: +n.style.getPropertyValue("--r"), cls: n.className, anims: f.getAnimations().length + n.getAnimations().length }; });
     const before = snap(), m0 = window.__three.state.moves, t0 = performance.now(), log = [];
     window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
@@ -329,7 +338,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const dpath = pr.log.map(l => l.nodes.find(n => n.id === dealt.id)).filter(Boolean);
   ck("it enters from outside the right edge (starts one cell further right, fading in)", dpath[0].x > 3 * cellW + cellW * 0.5 && dpath[0].o < 1 &&
     Math.abs(dpath[dpath.length - 1].x - 3 * cellW) < 2 && dpath[dpath.length - 1].o === 1, JSON.stringify(dpath.slice(0, 3).map(n => [Math.round(n.x), n.o])));
-  ck("the board clips the entering tile (never drawn over the frame)", await p.evaluate(() => getComputedStyle(document.getElementById("tiles")).overflow === "clip"));
+  ck("the board clips the entering tile at the cell area, never over the frame or its padding (craft #28)", await p.evaluate(() => {
+    const t = document.getElementById("tiles"), a = t.getBoundingClientRect(), c = document.getElementById("cells").getBoundingClientRect();
+    return getComputedStyle(t).overflow === "clip" && [["x", "x"], ["y", "y"], ["width", "width"], ["height", "height"]].every(([k]) => Math.abs(a[k] - c[k]) < 0.5); }));
   await set(p, [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 5 });
   pr = await probe("ArrowDown", 150);
   const dd = pr.log[0].nodes.find(n => !pr.before.some(b => b.id === n.id));
@@ -341,29 +352,63 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("a merge: the two tiles slide into one cell and a new tile pops on top", pr.now.nodes.filter(n => /\bmerged\b/.test(n.cls)).length === 2 &&
     pr.now.nodes.filter(n => /\bgone\b/.test(n.cls)).length === 4 && pr.now.nodes.filter(n => /\bmerged\b/.test(n.cls)).map(n => n.v).sort().join() === "3,6", JSON.stringify(pr.now.nodes.map(n => [n.v, n.cls])));
   const popW = pr.log.map(l => l.nodes.find(n => n.id === mergedNode.id)).filter(Boolean).map(n => n.w);
-  ck("the pop swells past full size after the slide, then settles", Math.max(...popW) > popW[popW.length - 1] * 1.05 && Math.abs(popW[popW.length - 1] - (cellW - 8)) < 4 + cellW, popW.map(Math.round).join(","));
+  ck("the pop swells past full size after the slide, then settles", Math.max(...popW) > popW[popW.length - 1] * 1.05 && Math.abs(popW[popW.length - 1] - pr.log[pr.log.length - 1].nodes.find(n => n.id === mergedNode.id).nw) < 2, popW.map(Math.round).join(","));
   ck("after the beats only the board's tiles remain", pr.log[pr.log.length - 1].nodes.length === pr.grid.filter(Boolean).length);
 
-  // the flush: sweep along the run 60 ms apart, then each tile shrinks away 40 ms apart; a second flush follows
+  // the flush (TRIAGE4 mechanics #2/#3, craft #27): the moment the 100 ms slide lands, the drawn board IS the engine's
+  // board (the run's tiles are only leaving ghosts, the dealt tile is already in), the ghosts swell and shrink away under
+  // the rainbow with no still frame, and the whole flush is over well under 500 ms. Frame by frame.
+  const live = (l) => l.nodes.filter(n => !/\bgone\b/.test(n.cls));
+  const drawn = (l) => { const g = new Array(16).fill(0); live(l).forEach(n => { g[n.r * 4 + n.c] = +n.v; }); return g; };
+  await set(p, FLUSH, { moves: 5, score: 0, power: { undo: 1, smash: 0, swap: 0, third: 0 } });
+  pr = await probe("ArrowLeft", 700);
+  const eng = pr.grid.join();
+  const honest = pr.log.filter(l => l.t >= 125);
+  ck("from the first frame after the slide lands (125 ms), the drawn tiles are exactly the engine's board, dealt tile included",
+    honest.length > 10 && honest.every(l => drawn(l).join() === eng), JSON.stringify(honest.filter(l => drawn(l).join() !== eng).slice(0, 2).map(l => [Math.round(l.t), drawn(l).join()])) + " eng " + eng);
+  const dealtF = pr.now.nodes.find(n => !pr.before.some(b => b.id === n.id));
+  ck("the dealt tile is in the layer from the input on, and fully visible by the slide's end", !!dealtF &&
+    pr.log.filter(l => l.t >= 110).every(l => { const d = l.nodes.find(n => n.id === dealtF.id); return d && d.o === 1; }), JSON.stringify(dealtF));
+  const ghosts = pr.log.map(l => ({ t: l.t, g: l.nodes.filter(n => /\brun\b/.test(n.cls) && /\bgone\b/.test(n.cls)) }));
+  const gFirst = ghosts.find(x => x.g.length), gLast = ghosts.filter(x => x.g.length).pop();
+  ck("the run leaves as three ghosts as soon as the slide lands (100 to 140 ms)", !!gFirst && gFirst.g.length === 3 && gFirst.t >= 90 && gFirst.t < 140, gFirst && gFirst.t);
+  ck("the whole flush, slide included, is over in under 500 ms (no ghost left at 480 ms)", !!gLast && gLast.t < 480, gLast && gLast.t);
+  // no idle pause: on every frame while the ghosts are there, at least one of them changes size or opacity
+  let still = 0, prevG = null;
+  // (a frame where every ghost is already invisible is the end, not a pause)
+  ghosts.filter(x => x.g.some(n => n.o > 0.02 && n.w > 1)).forEach(x => { const sig = x.g.map(n => Math.round(n.w) + ":" + n.o.toFixed(2)).join(); if (prevG !== null && sig === prevG) still++; prevG = sig; });
+  ck("no dead pause: the ghosts change on every frame until they are gone", still <= 1, still);
+  ck("each ghost swells, then shrinks to nothing", [0, 1, 2].every(i => { const ws = ghosts.filter(x => x.g[i]).map(x => x.g[i].w); return Math.max(...ws) > cellW * 0.9 && Math.min(...ws) < cellW * 0.4; }),
+    JSON.stringify(ghosts.filter(x => x.g.length).map(x => x.g.map(n => Math.round(n.w)))));
+  ck("the busy flag clears by 500 ms", await p.evaluate(() => !window.__three.busy()));
+  // mechanics #2: an input during the flush acts on the board on screen
+  await set(p, FLUSH, { moves: 5, score: 0, power: { undo: 1, smash: 0, swap: 0, third: 0 } });
+  const mid = await p.evaluate(() => new Promise(res => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+    setTimeout(() => {
+      const g = new Array(16).fill(0);
+      document.querySelectorAll("#tiles > .tile:not(.gone)").forEach(n => { g[+n.style.getPropertyValue("--r") * 4 + +n.style.getPropertyValue("--c")] = +n.querySelector(".face").textContent; });
+      const s = JSON.parse(JSON.stringify(window.__three.state)), want = window.NumbericsThree.move(Object.assign({}, s, { grid: g }), "up").state.grid;
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp" }));
+      res({ shown: g, engine: s.grid, want, got: window.__three.state.grid });
+    }, 150);
+  }));
+  ck("a swipe 150 ms into a flush acts on the board on screen (mechanics #2)", mid.shown.join() === mid.engine.join() && mid.got.join() === mid.want.join(), JSON.stringify(mid));
+  // two runs from one swipe leave together, in the same single beat, and the pop plays once on it
   await set(p, [3, 0, 3, 0, 6, 0, 6, 0, 9, 0, 9, 0, 0, 0, 0, 0], { moves: 5, score: 0, power: { undo: 1, smash: 0, swap: 0, third: 0 } });
-  await p.evaluate(() => { window.__snd = []; const A = window.NumbericsAudio, t0 = performance.now(); window.__t0 = t0;
+  await p.evaluate(() => { window.__snd = []; const A = window.NumbericsAudio;
     ["slide", "merge", "pop", "power", "lose", "best"].forEach(n => { const o = A[n]; A[n] = function (x) { window.__snd.push([n, Math.round(performance.now() - window.__t0), x]); return o.apply(this, arguments); }; }); });
   await p.evaluate(() => { window.__t0 = performance.now(); });
-  pr = await probe("ArrowLeft", 1900);
+  pr = await probe("ArrowLeft", 700);
   const runs = pr.log.map(l => ({ t: l.t, run: l.nodes.filter(n => /\brun\b/.test(n.cls)).map(n => n.id).sort().join() }));
   const phases = [...new Set(runs.map(r => r.run))].filter(Boolean);
-  ck("two flushes from one swipe: the sweep marks one run, then the other", phases.length === 2 && phases.every(ph => ph.split(",").length === 3), JSON.stringify(phases));
-  const firstAt = runs.find(r => r.run).t, secondAt = runs.find(r => r.run === phases[1]).t;
-  ck("the first sweep starts after the 100 ms slide", firstAt >= 90 && firstAt < 160, firstAt);
-  ck("the second flush starts after the first ends (sweep 540 + clear 240 + 80 ms)", secondAt > 900 && secondAt < 1020, secondAt);
-  const shrink = pr.log.filter(l => l.t > 680 && l.t < 860).map(l => l.nodes.filter(n => /\brun\b/.test(n.cls)).map(n => Math.round(n.w)));
-  ck("each run tile shrinks to nothing after the sweep", shrink.some(ws => ws.some(w => w < cellW * 0.6)), JSON.stringify(shrink.slice(0, 4)));
+  ck("two flushes from one swipe leave together in one beat", phases.length === 1 && phases[0].split(",").length === 6, JSON.stringify(phases));
   ck("the two runs are gone and the board matches the engine", pr.log[pr.log.length - 1].nodes.length === pr.grid.filter(Boolean).length && [0, 1, 4, 5, 8, 9].every(c => !pr.grid[c]),
     JSON.stringify(pr.log[pr.log.length - 1].nodes.map(n => [n.r, n.c, n.v, n.cls])) + " " + pr.grid);
   let snd = await p.evaluate(() => window.__snd);
   const sAt = (n) => snd.filter(x => x[0] === n).map(x => x[1]);
-  ck("sounds on the beats: slide at the input, pop(1) then pop(2) as each run clears", sAt("slide")[0] < 40 && snd.filter(x => x[0] === "pop").map(x => x[2]).join() === "1,2" &&
-    sAt("pop")[0] > 600 && sAt("pop")[0] < 760 && sAt("pop")[1] > 1400, JSON.stringify(snd));
+  ck("sounds on the beats: slide at the input, one pop(2) as the runs leave at the slide's end", sAt("slide")[0] < 40 && snd.filter(x => x[0] === "pop").map(x => x[2]).join() === "2" &&
+    sAt("pop")[0] >= 90 && sAt("pop")[0] < 180, JSON.stringify(snd));
   // a new input finishes the timeline at once: final board, and the pending sounds play then, one of each (D7)
   await set(p, [3, 0, 3, 0, 6, 0, 6, 0, 9, 0, 9, 0, 0, 0, 0, 0], { moves: 5, score: 0 });
   await p.evaluate(() => { window.__snd = []; window.__t0 = performance.now(); });
@@ -371,7 +416,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   snd = await p.evaluate(() => window.__snd);
   ck("two quick inputs during an animation give two moves", pr.moves === pr.m0 + 2, pr.m0 + " -> " + pr.moves);
   const sl = snd.filter(x => x[0] === "slide"), pops = snd.filter(x => x[0] === "pop");
-  ck("the second input played the first flush's pending pop at once, once, before its own slide (D7)", pops.length === 1 && sl.length === 2 && pops[0][1] <= sl[1][1], JSON.stringify(snd));
+  ck("the second input played the flush's pending pop at once, once, before its own slide (D7)", pops.length === 1 && sl.length === 2 && pops[0][1] <= sl[1][1], JSON.stringify(snd));
   const last = pr.log[pr.log.length - 1].nodes;
   ck("after both, every node sits on its engine cell with its engine value", last.length === pr.grid.filter(Boolean).length &&
     last.every(n => String(pr.grid[n.r * 4 + n.c]) === n.v), JSON.stringify(last.map(n => [n.r, n.c, n.v])) + " " + pr.grid);
@@ -466,6 +511,56 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("no page errors in the trophy line", e10.length === 0, e10.join("|"));
   await ctx.close();
 
+  // 10b. cold #12: until a first flush, the hint band says how to make one; after one, it never shows again
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  p = await ctx.newPage(); const e10b = []; p.on("pageerror", e => e10b.push(e.message));
+  await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
+  await set(p, [0, 0, 3, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 0, flushes: 0 });
+  await p.keyboard.press("ArrowLeft"); await p.evaluate(() => window.__three.settle());
+  ck("before any flush, the hint band explains the rainbow flush", (await p.textContent("#hint")) === "Tip: line up 3, 6, 9 in a row or column for a rainbow flush.", await p.textContent("#hint"));
+  ck("the tip fits the hint band (two lines at most) at 390", await p.evaluate(() => { const h = document.getElementById("hint"); return h.scrollHeight <= h.clientHeight + 1; }));
+  await set(p, FLUSH, { moves: 5, score: 0 });
+  await p.keyboard.press("ArrowLeft"); await p.evaluate(() => window.__three.settle());
+  await p.keyboard.press("ArrowDown"); await p.evaluate(() => window.__three.settle());
+  ck("after a flush the tip is gone", !/^Tip:/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await p.click("#new"); await p.click("#new").catch(() => {});
+  await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp"); await p.evaluate(() => window.__three.settle());
+  ck("and it stays gone in a new game (remembered)", !/^Tip:/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await p.evaluate(() => NumbericsKit.flush());
+  await p.reload();
+  ck("remembered across a reload", await p.evaluate(() => { try { return JSON.parse(localStorage.getItem("numberics_three_v1")).flushed === true; } catch (e) { return false; } }));
+  ck("no page errors in the tip checks", e10b.length === 0, e10b.join("|"));
+  await ctx.close();
+
+  // 10c. B3 + Family: at 320 and 375 with Larger text, no sideways scroll and every label at least 12 px; Light theme shots
+  for (const [W, H] of [[320, 568], [375, 667]]) {
+    ctx = await browser.newContext({ viewport: { width: W, height: H } });
+    p = await ctx.newPage(); const e10c = []; p.on("pageerror", e => e10c.push(e.message));
+    await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
+    await p.evaluate(() => NumbericsSettings.set({ text: "large" }));
+    await p.evaluate(() => window.__demo()); await p.waitForTimeout(250);
+    ck(W + "px Larger text: no sideways scroll", await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), await p.evaluate(() => document.documentElement.scrollWidth));
+    const small = await p.evaluate(() => [...document.querySelectorAll("#app *")].filter(e => e.offsetParent && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim()) &&
+      !e.closest("#games .pv, #tiles, .card .pv") && parseFloat(getComputedStyle(e).fontSize) < 12).map(e => (e.id || e.className || e.tagName) + ":" + getComputedStyle(e).fontSize));
+    ck(W + "px Larger text: every label is at least 12 px", small.length === 0, JSON.stringify(small));
+    if (W === 320) {
+      await shot(p, "320-large");
+      await set(p, [0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { next: 12, used: 2, flushes: 7, score: 500, power: { undo: 0, smash: 0, swap: 0, third: 0 } });
+      await p.keyboard.press("ArrowLeft"); await p.evaluate(() => window.__three.settle()); await p.waitForTimeout(300);
+      ck("320px Larger text: the end card's buttons are on screen inside the board", await p.evaluate(() => { const b = document.getElementById("board").getBoundingClientRect();
+        return ["again", "over-view"].every(id => { const r = document.getElementById(id).getBoundingClientRect(); return r.left >= b.left - 1 && r.right <= b.right + 1 && r.bottom <= b.bottom + 1; }); }));
+      await shot(p, "320-large-over");
+    }
+    ck(W + "px: no page errors", e10c.length === 0, e10c.join("|"));
+    await ctx.close();
+  }
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "light" });
+  p = await ctx.newPage();
+  await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
+  await p.evaluate(() => window.__demo()); await p.waitForTimeout(250);
+  await shot(p, "light");
+  await ctx.close();
+
   // 11. budgets (REDESIGN.md 10): a scripted 60-move session, a move every 45 ms; frames and tile nodes
   ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   p = await ctx.newPage(); const e11 = []; p.on("pageerror", e => e11.push(e.message));
@@ -492,8 +587,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   console.log("three budgets: moves " + bud.moves + ", frames " + fr.length + ", p95 " + p95.toFixed(1) + " ms, max " + fr[fr.length - 1].toFixed(1) + " ms, >17.5 ms " + (over * 100).toFixed(1) +
     "% (idle baseline: p95 " + idleP95.toFixed(1) + " ms, >17.5 ms " + (idleOver * 100).toFixed(1) + "%)");
   ck("60-move session: most inputs moved", bud.moves >= 40, bud.moves);
-  ck("frames: p95 within 17.5 ms (16.7 + headless vsync jitter, or the idle page's own p95 on a busy machine) and at most 5% more frames over than idle",
-    p95 <= Math.max(17.5, idleP95 + 0.5) && over <= idleOver + 0.05, "p95 " + p95 + " over " + over + " idle " + idleP95 + "/" + idleOver);
+  // S6: fixed bars, not relative to the idle page (a busy machine must not raise the bar); needs a quiet machine
+  ck("frames (needs a quiet machine): p95 at most 20 ms and at most 10% of frames over 17.5 ms",
+    p95 <= 20 && over <= 0.10, "p95 " + p95 + " over " + over + " idle " + idleP95 + "/" + idleOver);
   ck("tile nodes never exceed the board's tiles + 8", bud.nodes.every(([d, e]) => d <= e + 8), JSON.stringify(bud.nodes.filter(([d, e]) => d > e + 8)));
   ck("after the last move settles, one node per tile", bud.after[0] === bud.after[1], JSON.stringify(bud.after));
   ck("no page errors in the budget run", e11.length === 0, e11.join("|"));

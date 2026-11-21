@@ -492,7 +492,9 @@ t("valid() rejects broken saves", () => {
   });
   t("motion: the claim is a clip-path circle from the centre; the view switch a translate + scale FLIP", () => {
     ok(/@keyframes ft-claim\{ from\{ clip-path:circle\(0% at 50% 50%\)/.test(css)); ok(/circle\(75% at 50% 50%\)/.test(css));
-    ok(/translate: tx \+ "px " \+ ty \+ "px", scale: sx \+ " " \+ sy/.test(js)); ok(/FLIP_MS = 380/.test(js));
+    // craft round 4 #44: one uniform scale (never sx, sy), staggered in number order; the browser test lays it out frame by frame
+    ok(/translate: tx \+ "px " \+ ty \+ "px", scale: s \+ " " \+ s \}/.test(js), "uniform scale"); ok(!/scale: sx/.test(js), "no non-uniform scale");
+    ok(/FLIP_MS = 320, FLIP_STAGGER = 24/.test(js) && /delay: i \* FLIP_STAGGER, fill: "backwards"/.test(js), "staggered");
     ok(/:root\[data-motion="reduced"\] \.ft\.claiming::after/.test(css), "reduced motion keyed on the in-app setting");
     ok(!/prefers-reduced-motion/.test(css), "html[data-motion] drives it, not the media query");
   });

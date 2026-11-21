@@ -290,10 +290,15 @@ t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move neve
 {
   const fs = require("fs"), path = require("path"), rd = f => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
   const html = rd("fibonacci/index.html"), js = rd("fibonacci/game.js");
-  t("R6 header: H1 Fibonacci, subtitle opens with a Numberics link home and one short sentence", () => {
+  t("R6 header, TRIAGE4: H1 Fibonacci, a plain subtitle (the card's line), no Numberics link (the top bar links home)", () => {
     ok(/<h1>Fibonacci<\/h1>/.test(html));
-    const m = html.match(/<p class="sub"><a href="\.\.\/">Numberics<\/a> &middot; ([^<]+)<\/p>/); ok(m, "sub pattern");
-    ok(/^[A-Z0-9][^.]*\.$/.test(m[1]) && m[1].length <= 30, "tagline " + m[1]);
+    const m = html.match(/<p class="sub">([^<]+)<\/p>/); ok(m, "sub pattern");
+    eq(m[1], "Join neighbours in the Fibonacci run.");
+    ok(rd("shared/nav.js").indexOf('"Join neighbours in the Fibonacci run."') >= 0, "the card says the same");
+  });
+  t("TRIAGE4 craft #12: the hint row starts with how to play, never blank on open", () => {
+    ok(/<p id="hint" class="hint" role="status">Swipe or use the arrow keys\.<\/p>/.test(html));
+    ok(/var START = "Swipe or use the arrow keys\.";/.test(js) && /!state\.moves \? START/.test(js));
   });
   t("R11: no bare hyphen as an empty stat value", () => ok(!/<b id="\w+"[^>]*>-<\/b>/.test(html) && !/: "-"/.test(js)));
   t("R5: tray defs, Undo first, each with a sentence description and how to earn it", () => {

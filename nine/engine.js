@@ -224,13 +224,22 @@
   }
 
   // ---- the computer ----
+  // measured (round 4, 2000 matches a level): a beginner (evens two tiles, else random) wins about 59% of Medium
+  // rounds on three tiles (46% with no slip), against 86% on Easy and 2% on Hard; perfect play still always wins
+  var MEDIUM_SLIP = 0.25;
   function randomMove(s) { return pickIn(s, legalMoves(s.heaps)); }
   function liveCount(h) { return h.filter(Boolean).length; }
   // Decide the computer's move on s (mutates s.seed only). Returns {tile, to}.
   function chooseMove(s) {
     var h = s.heaps, best = peek(h, s.misere);
     if (s.diff === "easy") return randomMove(s);
-    if (s.diff === "medium") return best && liveCount(h) <= 2 ? best : randomMove(s);
+    if (s.diff === "medium") {
+      // Medium plays the winning reply once two tiles remain, but slips MEDIUM_SLIP of the time with two tiles
+      // (round 4, mechanics #7: never slipping left a beginner no way to win). A lone last tile is always taken.
+      var n = liveCount(h);
+      if (best && (n === 1 || (n === 2 && rnd(s) >= MEDIUM_SLIP))) return best;
+      return randomMove(s);
+    }
     if (best) return pickIn(s, winningMoves(h, s.misere));
     // Hard, losing: stall with the smallest take so a slip by the player can still be punished.
     var live1 = []; h.forEach(function (v, i) { if (v) live1.push(i); });
@@ -253,7 +262,7 @@
     return take(s, m.tile, s.heaps[m.tile] - m.to).state;
   }
 
-  return { POWERS: POWERS, CPU_POWERS: CPU_POWERS, HARD_LOSING: HARD_LOSING, MAX: MAX, MIN_TILES: MIN_TILES, MAX_TILES: MAX_TILES, WIN_ROUNDS: WIN_ROUNDS, DIFFS: DIFFS,
+  return { POWERS: POWERS, CPU_POWERS: CPU_POWERS, HARD_LOSING: HARD_LOSING, MEDIUM_SLIP: MEDIUM_SLIP, MAX: MAX, MIN_TILES: MIN_TILES, MAX_TILES: MAX_TILES, WIN_ROUNDS: WIN_ROUNDS, DIFFS: DIFFS,
            nimSum: nimSum, winning: winning, legalMoves: legalMoves, winningMoves: winningMoves, peek: peek,
            newGame: newGame, nextRound: nextRound, nextMatch: nextMatch, take: take, use: use,
            canPass: canPass, canAdd: canAdd, canUndo: canUndo, started: started, chooseMove: chooseMove, cpuTurn: cpuTurn };

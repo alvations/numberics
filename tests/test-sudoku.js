@@ -385,6 +385,11 @@ t("sudoku: empty Best uses the family empty style (weight 600, value size), assi
   ok(/\.stat b\.none,\.stat \.none\{ color:var\(--mute\); font-weight:600; font-size:1\.1rem; \}/.test(c));
   ok(!/New best with power-ups/.test(g) && /classList\.toggle\("best", !!pure\)/.test(g));
 });
+t("the Daily's level and result go through the family's one rule (TRIAGE4 D9): NumbericsProgress.dailyLevel and daily(..., {score, low})", () => {
+  const g = fs.readFileSync(path.join(__dirname, "..", "sudoku", "game.js"), "utf8");
+  ok(!/getDay\(/.test(g), "game.js keeps no weekday rule of its own");
+  ok(/PR\.dailyLevel\(/.test(g) && /PR\.daily\("sudoku", fmt\(t\), \{ score: t, low: true \}\)/.test(g));
+});
 // theme.css would change the live look (owner rule), so the page check of conventions.js is skipped here
 require("./conventions")(t, ok, ["sudoku/engine.js", "sudoku/game.js", "sudoku/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

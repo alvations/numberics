@@ -156,12 +156,42 @@ t("Hard plays Pass or Add to turn a lost position around", () => {
   const e = N.cpuTurn(forge({ heaps: [1, 2, 3], turn: "cpu", diff: "easy", cpu: { pass: 1, add: 1 } }));
   eq(e.power.cpu, Object.assign({}, e.power.cpu, { pass: 1, add: 1 }), "Easy never plays power-ups");
 });
-t("Medium plays perfectly once two tiles remain", () => {
-  for (const seed of SEEDS) {
+t("Medium takes a lone last tile, and slips about a quarter of the time with two tiles (round 4, mechanics #7)", () => {
+  let slips = 0, tries = 0;
+  for (let seed = 1; seed <= 2000; seed++) {
     const s = forge({ seed, heaps: [0, 4 + seed % 5, 0, 1 + seed % 3, 0], turn: "cpu", diff: "medium" });
     if (!N.winning(s.heaps, false)) continue;
-    const r = N.cpuTurn(s); ok(!N.winning(r.heaps, false) || r.roundOver, "medium slipped " + s.heaps + " -> " + r.heaps);
+    tries++; const r = N.cpuTurn(s); if (N.winning(r.heaps, false)) slips++;
+    const one = N.cpuTurn(forge({ seed, heaps: [0, 1 + seed % 9, 0], turn: "cpu", diff: "medium" }));
+    eq(one.roundOver, "cpu", "a lone tile is always taken");
   }
+  const rate = slips / tries;
+  ok(rate > 0.18 && rate < 0.32, "Medium slip rate " + rate.toFixed(3) + " (MEDIUM_SLIP " + N.MEDIUM_SLIP + ")");
+});
+// mechanics #7: random and beginner bots on every level; Easy > Medium > Hard, and Medium can be won by a beginner
+function botRate(diff, bot, n) {
+  let won = 0, total = 0;
+  for (let g = 0; g < n; g++) {
+    let r = g * 2654435761 >>> 0;
+    const R = () => { r = (r * 1103515245 + 12345) >>> 0; return r / 4294967296; };
+    const rand = (s) => { const m = N.legalMoves(s.heaps); return m[Math.floor(R() * m.length)]; };
+    const beginner = (s) => {
+      const live = s.heaps.map((v, i) => [v, i]).filter((x) => x[0]);
+      if (live.length === 1) return { tile: live[0][1], to: 0 };
+      if (live.length === 2 && live[0][0] !== live[1][0]) { const hi = live[0][0] > live[1][0] ? 0 : 1; return { tile: live[hi][1], to: live[1 - hi][0] }; }
+      return rand(s);
+    };
+    let s = N.newGame(g * 7919 + 5, { diff });
+    while (!s.matchOver) { s = playRound(s, bot === "random" ? rand : beginner, N.cpuTurn); total++; if (s.roundOver === "you") won++; if (!s.matchOver) s = N.nextRound(s); }
+  }
+  return won / total;
+}
+t("bots: random and beginner win more on Easy than Medium than Hard; a beginner wins Medium rounds often", () => {
+  const rates = {};
+  for (const bot of ["random", "beginner"]) for (const diff of ["easy", "medium", "hard"]) rates[bot + " " + diff] = botRate(diff, bot, 300);
+  for (const bot of ["random", "beginner"]) ok(rates[bot + " easy"] > rates[bot + " medium"] && rates[bot + " medium"] > rates[bot + " hard"], bot + " " + JSON.stringify(rates));
+  ok(rates["beginner medium"] > 0.52, "a beginner should win over half the Medium rounds: " + rates["beginner medium"].toFixed(3));
+  ok(rates["random medium"] > 0.1, "a random tapper still wins some Medium rounds: " + rates["random medium"].toFixed(3));
 });
 t("Easy only ever makes legal moves", () => {
   for (const seed of SEEDS) {

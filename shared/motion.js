@@ -291,7 +291,7 @@
           if (red) flag(node, "nmm-fadein");
           else {
             var e0 = enter[id], dx = (e0.c - rc.c) * mt.x, dy = (e0.r - rc.r) * mt.y;
-            anim(face(node), [{ transform: "translate(" + dx + "px," + dy + "px)", opacity: 0 }, { opacity: 1, offset: Math.min(1, 60 / slide) },
+            anim(face(node), [{ transform: "translate(" + dx + "px," + dy + "px)", opacity: 0 }, { opacity: 1, offset: 0.4 },
               { transform: "translate(0,0)", opacity: 1 }], { duration: slide, easing: E.slide });
           }
         } else if (spawn[id]) flag(node, "new");

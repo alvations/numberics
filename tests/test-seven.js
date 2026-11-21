@@ -381,7 +381,7 @@ t("client: sounds are ones NumbericsAudio has, called through the timeline helpe
 t("client: trophy events are exactly Seven's three (8.4)", () => {
   const evs = [...new Set([...G.matchAll(/trophy\("(\w+)"/g)].map(m => m[1]))].sort();
   eq(evs, ["drop", "end", "level"]);
-  ok(/daily: mode === "daily"/.test(G), "end.daily must be a real boolean");
+  ok(/var daily = mode === "daily" && current\(\)/.test(G) && /daily: daily/.test(G), "end.daily must be a real boolean, and false for a Daily begun yesterday");
   ok(/PG\.put\("seven"/.test(G) && /PG\.daily\("seven"/.test(G), "progress put and the Daily record");
   ok(/U\.howto\("seven", \{ title: "Seven", steps: STEPS, saved: !!loaded/.test(G), "the shared how-to (D8)");
 });

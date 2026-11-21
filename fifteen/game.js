@@ -26,19 +26,22 @@
   var savedDiff = saved.state && F.DIFFS.indexOf(saved.state.diff) >= 0 ? saved.state.diff : "easy";
   var state = saved.state && F.valid(saved.state) ? saved.state : F.newMatch(K.freshSeed(), savedDiff);
   var view = saved.view === "grid" ? "grid" : "numbers";
-  // R12/R16: matches won and lost on this device; a quit live match counts as lost
-  var record = saved.record && typeof saved.record.won === "number" && typeof saved.record.lost === "number" ? saved.record : { won: 0, lost: 0 };
+  // R12/R16: matches won, lost and drawn on this device; a quit live match counts as lost. A drawn match is
+  // recorded too (round-4 mechanics #1: two drawn Hard matches left the Record at "none"); older saves have no drawn
+  function recOf(r) {
+    return r && typeof r.won === "number" && typeof r.lost === "number" ? { won: r.won, lost: r.lost, drawn: +r.drawn || 0 } : { won: 0, lost: 0, drawn: 0 };
+  }
+  var record = recOf(saved.record);
   // the same record per level, for the card (REDESIGN.md 8.5: cards show the current level's record)
   var levels = {};
-  F.DIFFS.forEach(function (d) {
-    var l = saved.levels && saved.levels[d];
-    levels[d] = l && typeof l.won === "number" && typeof l.lost === "number" ? { won: l.won, lost: l.lost } : { won: 0, lost: 0 };
-  });
+  F.DIFFS.forEach(function (d) { levels[d] = recOf(saved.levels && saved.levels[d]); });
   // run record (8.2): power-ups used, your first claim this round (fif_mid); runPrev is what Undo restores
   function runOf(r) { r = r || {}; return { used: +r.used || 0, first: r.first >= 1 && r.first <= 9 ? r.first : 0 }; }
   var run = runOf(saved.run), runPrev = saved.runPrev ? runOf(saved.runPrev) : null;
   var counted = !!saved.counted;         // this match's result is already in the record
   var seen = !!saved.seen;               // the one-line note on the first switch to Grid
+  // cold #10: the Grid view is the "aha", so after your first round (if you never opened Grid) one tip points at it
+  var nudged = !!saved.nudged || seen, TIP = "Tip: tap Grid to see the magic square.";
   var armed = null;                      // "erase" | "double" while a power-up waits for a pick
   var peek = null;                       // last Peek result, shown until the next board action
   var fresh = {};                        // numbers claimed or erased by the last action (fade in)
@@ -71,18 +74,19 @@
     tilesEl.appendChild(b); tiles.push(b);
   }
 
-  function tally() {                     // count a finished match once (a drawn match counts neither way)
+  function tally() {                     // count a finished match once: won, lost or drawn
     if (state.match && !counted) {
-      counted = true; var l = levels[state.diff];
-      if (state.match.winner === 1) { record.won++; l.won++; } else if (state.match.winner === 2) { record.lost++; l.lost++; }
+      counted = true; var l = levels[state.diff], k = state.match.winner === 1 ? "won" : state.match.winner === 2 ? "lost" : "drawn";
+      record[k]++; l[k]++;
     }
   }
+  function recText(r) { return r.won + "-" + r.lost + (r.drawn ? "-" + r.drawn : ""); }
   function persist() {
     tally();
-    store.save({ state: state, view: view, seen: seen, record: record, counted: counted, levels: levels, run: run, runPrev: runPrev });
+    store.save({ state: state, view: view, seen: seen, nudged: nudged, record: record, counted: counted, levels: levels, run: run, runPrev: runPrev });
     var l = levels[state.diff], on = live();
     try {
-      PR.put(ID, { best: l.won || l.lost ? DIFF[state.diff] + ": won " + l.won + ", lost " + l.lost : "", live: on,
+      PR.put(ID, { best: l.won || l.lost || l.drawn ? DIFF[state.diff] + ": won " + l.won + ", lost " + l.lost + (l.drawn ? ", drawn " + l.drawn : "") : "", live: on,
         liveText: on ? "Round " + state.round + " · You " + state.wins[1] + " : " + state.wins[2] + " Computer" : "" });
     } catch (e) { /* no progress */ }
   }
@@ -112,9 +116,11 @@
     boardEl.classList.toggle("targeting", !!armed);
     $("v-numbers").setAttribute("aria-pressed", String(view === "numbers"));
     $("v-grid").setAttribute("aria-pressed", String(view === "grid"));
+    $("v-grid").classList.toggle("nudge", note === TIP && view !== "grid");   // the one-time tip's pointer
     $("you").textContent = state.wins[1]; $("cpu").textContent = state.wins[2];
-    var rec = $("rec"), none = !record.won && !record.lost;
-    rec.textContent = none ? "none" : record.won + "-" + record.lost; rec.classList.toggle("none", none);
+    var rec = $("rec"), none = !record.won && !record.lost && !record.drawn;
+    rec.textContent = none ? "none" : recText(record); rec.classList.toggle("none", none);
+    rec.setAttribute("aria-label", "Matches won " + record.won + ", lost " + record.lost + ", drawn " + record.drawn);
     Array.prototype.forEach.call($("diff").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.d === state.diff)); });
     DEFS[1].earn = state.diff === "hard" ? "On Hard you get one after a drawn round." : EARN;
     P.tray($("tray"), DEFS, state.power, {
@@ -156,7 +162,10 @@
       : "You " + a + " : " + c + " Computer"];
     if (state.wins[0]) parts.push(state.wins[0] + " drawn");
     // the family headlines (TRIAGE3): "You win" / "The computer wins" / "Draw", plus " round N" for a round
-    $("over-title").textContent = (w === 1 ? "You win" : w === 2 ? "The computer wins" : "Draw") + (m ? "" : " round " + state.round);
+    // a match names itself in the heading (round-4 mechanics #2: a won match whose last round was drawn read "You win"
+    // over "Nobody made 15")
+    $("over-title").textContent = m ? (w === 1 ? "You win the match" : w === 2 ? "The computer wins the match" : "Match drawn")
+      : (w === 1 ? "You win" : w === 2 ? "The computer wins" : "Draw") + " round " + state.round;
     var trio = $("trio"); trio.textContent = "";
     if (res.line) {
       res.line.forEach(function (n, i) {
@@ -175,7 +184,8 @@
       var sp = document.createElement("span"); sp.textContent = t; txt.appendChild(sp);
     });
     var best = $("over-best"), msg = "", gold = false;
-    if (m) msg = "";                       // a new game starts a fresh stock, so a last reward means nothing
+    // a new game starts a fresh stock, so the card says so (round-4 mechanics #3: earned power-ups vanished unexplained)
+    if (m) msg = "Power-ups reset for each new match.";
     else if (res.winner === 1 && res.earned) { msg = "+1 " + PW[res.earned]; gold = true; }
     else if (res.winner === 1 && res.why === "full") msg = "Power-ups full.";            // R15
     else if (res.winner === 1 && res.why === "powered") msg = "No power-up: you used Erase or Double this round.";
@@ -189,7 +199,7 @@
   function cpuPending() { return F.playing(state) && state.turn === 2; }
   function hintText() {
     if (state.result) return viewing ? "Tap the board for the summary." : "";   // the card carries the result (R7)
-    if (note) return note;
+    if (note && note !== TIP) return note;
     if (cpuPending()) return "The computer is thinking.";
     var mine = state.owner.some(function (o) { return o === 1; });
     var lead = mine ? "" : "Round " + state.round + " of " + F.ROUNDS + ". ";
@@ -199,6 +209,7 @@
     if (peek) return peek.text;
     if (state.blocked) return "Now claim a number (not the one you erased).";
     if (cpuNote) return lead + cpuNote + " Your turn.";
+    if (note === TIP) return TIP;           // until your first action of round 2, or a look at Grid
     // Hard hands you an Erase after a drawn round: say so where it matters, at the start of the round
     if (lead && state.diff === "hard" && state.power.erase) return lead + "Your turn; you hold an Erase.";
     return lead + (state.owner.every(function (o) { return !o; }) ? "Your turn. Claim any number." : "Your turn.");
@@ -331,8 +342,10 @@
     armed = id; render();
   }
 
-  // the view switch is a FLIP (5.8): read the rects, lay out the new view, read again, animate translate + scale back
-  var FLIP_MS = 380, FLIP_E = "cubic-bezier(.3,.7,.2,1)";
+  // the view switch is a FLIP (5.8): read the rects, lay out the new view, read again, animate translate + scale back.
+  // Craft round 4 #44: the scale is UNIFORM (one factor, centre to centre), so a digit never squashes or stretches, and
+  // the tiles leave one after another in number order (FLIP_STAGGER apart), so they never pile up in the middle at once.
+  var FLIP_MS = 320, FLIP_STAGGER = 24, FLIP_E = "cubic-bezier(.3,.7,.2,1)", FLIP_TOTAL = FLIP_MS + 8 * FLIP_STAGGER;
   function rects() {
     var base = tilesEl.getBoundingClientRect();
     return tiles.map(function (el) { var r = el.getBoundingClientRect(); return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height }; });
@@ -342,21 +355,26 @@
     finishFx();
     var keep = numAt(cur); view = v; cur = cellOf(keep);   // the cursor stays on the same number
     // the one-line note goes in the hint line, so it covers nothing (cold #1)
+    if (v === "grid") nudged = true;       // found it: the tip is never needed
     if (v === "grid" && !seen && !quiet) { seen = true; note = "Same board: every line adds up to 15."; }
+    else if (note === TIP) note = "";
     var old = M.reduced() ? null : rects();
     persist(); render(); clearLine();
     if (old) {
       var now = rects();
       tiles.forEach(function (el, i) {
         var o = old[i], n = now[i]; if (!n.w || !n.h) return;
-        var sx = o.w / n.w, sy = o.h / n.h, tx = o.x - sx * n.x, ty = o.y - sy * n.y;
-        var a = M.play(el, [{ translate: tx + "px " + ty + "px", scale: sx + " " + sy }, { translate: "0px 0px", scale: "1 1" }],
-          { duration: FLIP_MS, easing: FLIP_E });
+        // one scale (the geometric mean keeps the area close); the old centre maps onto the new centre. The transform
+        // origin is the tile's top-left, and `scale` also scales the tile's own CSS translate (n.x, n.y), hence s * n
+        var s = Math.sqrt((o.w / n.w) * (o.h / n.h));
+        var tx = o.x + o.w / 2 - s * (n.x + n.w / 2), ty = o.y + o.h / 2 - s * (n.y + n.h / 2);
+        var a = M.play(el, [{ translate: tx + "px " + ty + "px", scale: s + " " + s }, { translate: "0px 0px", scale: "1 1" }],
+          { duration: FLIP_MS, easing: FLIP_E, delay: i * FLIP_STAGGER, fill: "backwards" });
         if (a) anims.push(a);
       });
     }
     snd("tick");
-    if (state.result && v === "grid") tl.at(old ? FLIP_MS : 0, drawLine);
+    if (state.result && v === "grid") tl.at(old ? FLIP_TOTAL : 0, drawLine);
   }
 
   // ---- match flow ----
@@ -373,7 +391,9 @@
     finishFx(); clearLine(); run.first = 0; runPrev = null; cardIds = [];
     cancelCpu(); clearHold(); armed = null; peek = null; fresh = {}; note = ""; cpuNote = "";
     var back = $("over").contains(document.activeElement);
-    state = F.nextRound(state); persist(); render();
+    state = F.nextRound(state);
+    if (!nudged && view !== "grid") { nudged = true; note = TIP; }   // once ever, as round 2 begins (cold #10)
+    persist(); render();
     if (back) tiles[numAt(cur) - 1].focus();
     if (cpuPending()) schedule();
   }
@@ -468,7 +488,7 @@
   window.__demo = function () {
     try { window.NumbericsUI.close(); } catch (e) { /* no sheet */ }
     finishFx(); clearLine();
-    cancelCpu(); clearHold(); armed = null; fresh = {}; note = ""; cpuNote = ""; record = { won: 2, lost: 1 };
+    cancelCpu(); clearHold(); armed = null; fresh = {}; note = ""; cpuNote = ""; record = { won: 2, lost: 1, drawn: 0 };
     var s = F.newMatch(2026, "medium");
     s.round = 3; s.wins = [1, 1, 0]; s.rounds = [1, 0];
     s.owner = [0, 1, 0, 2, 2, 0, 0, 1, 0];     // you 2 8, computer 4 5: you must block 6 (4+5+6)

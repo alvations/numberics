@@ -61,14 +61,19 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("tray has four power-ups", await p.locator("#tray .pw").count() === 4);
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   // R6 header, R11 naming
-  ck("subtitle starts with a Numberics link home", await p.evaluate(() => { const a = document.querySelector(".sub a"); return !!a && a.textContent === "Numberics" && a.getAttribute("href") === "../" && document.querySelector(".sub").firstElementChild === a; }));
+  // TRIAGE4 Family: the "Numberics ·" subtitle link is gone (the top bar mark links home)
+  ck("subtitle is plain: no Numberics link", await p.evaluate(() => !document.querySelector(".sub a") && document.querySelector(".sub").textContent === "Three numbers, fifteen exactly."), await p.textContent(".sub"));
+  ck("the top bar mark links home", await p.evaluate(() => [...document.querySelectorAll("#topbar a")].some(a => a.getAttribute("href") === "../")));
+  ck("one games heading: More number games, over the cards", await p.evaluate(() => { const h = document.querySelector("section.more > h2#more"); return !!h && h.textContent === "More number games" && h.nextElementSibling && h.nextElementSibling.id === "games"; }));
   ck("restart is New game", (await p.textContent("#new")).trim() === "New game");
   ck("no CPU anywhere on the page", !/\bCPU\b/i.test(await p.evaluate(() => document.body.innerText)));
   // R16: the duel pills, in order, and an empty record reads a dimmed "none"
   ck("pills are You, Computer, Record", (await p.locator(".stat > span").allTextContents()).join() === "You,Computer,Record", (await p.locator(".stat > span").allTextContents()).join());
   ck("empty record reads none, dimmed", (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
   ck("round number in the hint at the start of a round", /^Round 1 of 5\. Your turn/.test(await p.textContent("#hint")), await p.textContent("#hint"));
-  ck("R14: the how-to says the computer can use power-ups on Hard", /On Hard [\s\S]*computer can Erase and\s+Double/.test(await p.textContent(".how")) && /without Erase, Double or Peek/.test(await p.textContent(".how")) && /On Hard a draw gives you an Erase, so perfect play wins/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
+  ck("R14: the how-to says the computer can use power-ups on Hard", /On Hard [\s\S]*computer can Erase and\s+Double/.test(await p.textContent(".how")) && /without Erase, Double or Peek/.test(await p.textContent(".how")) && /On Hard the computer plays perfectly, so perfect play draws\. A drawn round gives you an Erase, so perfect play wins/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
+  // TRIAGE4: the how-to says power-ups last one match and points at Grid (cold #10, mechanics #3)
+  ck("how-to: power-ups last one match; Grid is the magic square", /power-ups last one match: each new match starts with one Undo/.test((await p.textContent(".how")).replace(/\s+/g, " ")) && /Grid shows the same nine numbers as a magic square/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
   await forge(p, { diff: "easy" });
   await tile(p, 5).click();
   ck("click claims 5 for you", (await S(p)).owner[4] === 1);
@@ -196,12 +201,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("then a normal claim", (await S(p)).owner[5] === 1);
   await p.waitForFunction(() => window.__fifteen.state.turn === 1 || !!window.__fifteen.state.result, null, { timeout: 3000 });
   // Undo: rewinds the turn and the reply
+  // round-4 critic S6: no skipped check counted as a pass. The fixture cannot end here: Medium blocks your 4 (5 + 6 + 4)
+  // and holds only 1 and 4 itself, so the round is always live when Undo is pressed
   s = await S(p);
-  if (!s.result) {
-    await p.keyboard.press("1");
-    s = await S(p);
-    ck("Undo rewound to before the Erase", s.owner.join() === B([5], [8, 1]).join() && s.power.undo === 0 && s.power.erase === 1, JSON.stringify(s.owner));
-  } else ck("Undo (round ended early, skipped)", true);
+  ck("Undo fixture: the round is still live after the computer's reply", !s.result && s.turn === 1, JSON.stringify(s.result));
+  await p.keyboard.press("1");
+  s = await S(p);
+  ck("Undo rewound to before the Erase", s.owner.join() === B([5], [8, 1]).join() && s.power.undo === 0 && s.power.erase === 1, JSON.stringify(s.owner));
   // Double: two claims in one turn, completing a 15
   await forge(p, { owner: B([8], [5, 3]), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 1 } });
   await p.keyboard.press("4");
@@ -260,9 +266,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, wins: [0, 2, 0], rounds: [1, 1], round: 3 });
   const rec0 = await p.evaluate(() => Object.assign({}, window.__fifteen.record));
   await tile(p, 7).click(); await card(p);
-  ck("3-0 ends the match with the overlay", await p.locator("#over").isVisible() && (await p.textContent("#over-title")) === "You win");
+  ck("3-0 ends the match with the overlay", await p.locator("#over").isVisible() && (await p.textContent("#over-title")) === "You win the match", await p.textContent("#over-title"));
   ck("R16 match summary", /^Match won 3-0 · Medium$/.test(await p.textContent("#over-text")), await p.textContent("#over-text"));
   ck("R16: the record counts the match once", (await p.textContent("#rec")) === (rec0.won + 1) + "-" + rec0.lost, await p.textContent("#rec"));
+  // round-4 mechanics #3: earned power-ups vanish at a new match, and the match card says so
+  ck("the match card says power-ups reset", (await p.textContent("#over-best")) === "Power-ups reset for each new match." && await p.locator("#over-best").isVisible(), await p.textContent("#over-best"));
   ck("match end offers New game, not Next round", await p.locator("#again").isVisible() && await p.locator("#next").isHidden() && (await p.textContent("#again")) === "New game");
   await shot(p, "match-over");
   await p.click("#again");
@@ -359,10 +367,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const hop = await p.evaluate(() => getComputedStyle(document.querySelector("#hash i")).opacity);
   ck("Numbers: no grid lines drawn", hop === "0", hop);
   ck("Numbers: the computer label fits inside its tile", await p.evaluate(() => { const t = document.querySelector('.ft[data-n="1"]'), s = t.lastChild; s.textContent = "computer"; const ok = s.scrollWidth <= t.clientWidth; s.textContent = ""; return ok; }));
-  await p.click("#v-grid"); await p.waitForTimeout(500); bx = await boxes();
+  await p.click("#v-grid"); await p.waitForTimeout(600); bx = await boxes();
   const rowOf = (ns) => new Set(ns.map(n => bx[n - 1].y)).size === 1;
   ck("Grid: the magic square 8 1 6 / 3 5 7 / 4 9 2", rowOf([8, 1, 6]) && rowOf([3, 5, 7]) && rowOf([4, 9, 2]) && bx[7].x < bx[0].x && bx[0].x < bx[5].x && bx[7].y < bx[2].y && bx[2].y < bx[3].y, JSON.stringify(bx));
-  await p.keyboard.press("v"); await p.waitForTimeout(450);
+  await p.keyboard.press("v"); await p.waitForTimeout(600);
   // keyboard over the two rows
   await p.evaluate(() => document.querySelector('.ft[data-n="5"]').focus());
   await p.keyboard.press("ArrowRight");
@@ -418,7 +426,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // a lost match reads "The computer wins", "Match lost 0-3 · Medium"
   await forge(p, { diff: "easy", owner: B([3, 4], [8, 1]), turn: 2, wins: [0, 0, 2], rounds: [2, 2], round: 3 });
   await card(p);
-  ck("lost match headline", (await p.textContent("#over-title")) === "The computer wins", await p.textContent("#over-title"));
+  ck("lost match headline", (await p.textContent("#over-title")) === "The computer wins the match", await p.textContent("#over-title"));
   ck("lost match subline", (await p.textContent("#over-text")) === "Match lost 0-3 · Easy", await p.textContent("#over-text"));
   ck("match card focuses New game", await p.evaluate(() => document.activeElement.id === "again"));
   // TRIAGE3: Peek counts as help; the copy says so
@@ -475,14 +483,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("view switch: each tile animates translate + scale (FLIP)", a1.some(a => a.props.includes("translate") && a.props.includes("scale")), JSON.stringify(a1));
   ck("view switch: no width or height in any animation", a1.every(a => !a.props.includes("width") && !a.props.includes("height")));
   const mid = await tile(p, 8).boundingBox();
-  await p.waitForTimeout(450);
+  await p.waitForTimeout(600);
   const end = await tile(p, 8).boundingBox();
   ck("view switch: mid-flight the tile is between its two places", Math.abs(mid.x - end.x) > 2 || Math.abs(mid.y - end.y) > 2, JSON.stringify([mid, end]));
-  ck("view switch: done after 380 ms", (await anims(p, 8)).length === 0);
+  ck("view switch: done after the staggered 512 ms", (await anims(p, 8)).length === 0);
   // two quick view switches during the FLIP give two switches
   await p.keyboard.press("v"); await p.keyboard.press("v");
   ck("two quick V presses give two switches", await p.evaluate(() => window.__fifteen.view === "grid"));
-  await p.waitForTimeout(450);
+  await p.waitForTimeout(600);
   // the winning triple: the pulse, then in Grid view a line drawn through the three (stroke-dashoffset)
   await forge(p, { diff: "easy", owner: B([], []), turn: 1 });
   await tile(p, 5).click();                                   // your first claim this round is 5 (fif_mid)
@@ -560,5 +568,111 @@ module.exports = async function ({ browser, url, ck, shot }) {
     else ck("full (" + mode.tag + "): the view switch moves", va.some(a => a.props.includes("translate")), JSON.stringify(va));
     ck("no page errors (" + mode.tag + ")", e9.length === 0, e9.join("|"));
     await c.close();
+  }
+
+  // 10. round 4 (TRIAGE4): draws recorded, the match heading, the label floor, the FLIP, the one-time Grid tip
+  {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 } }); await seenHow(c);
+    await c.addInitScript(() => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, motion: "full" })); } catch (e) {} });
+    const q = await c.newPage(); const e10 = []; q.on("pageerror", e => e10.push(e.message));
+    await q.goto(page);
+    // mechanics #1: a drawn match is recorded (it read "none" after two drawn Hard matches)
+    await forge(q, { diff: "hard", owner: B([1, 2, 4, 7], [3, 5, 6, 9]), turn: 1, wins: [4, 0, 0], rounds: [0, 0, 0, 0], round: 5 });
+    await tile(q, 8).click(); await card(q);
+    ck("draw fixture: the match is drawn", (await S(q)).match && (await S(q)).match.winner === 0);
+    ck("a drawn match is in the record (won-lost-drawn)", (await q.textContent("#rec")) === "0-0-1" && await q.locator("#rec.none").count() === 0, await q.textContent("#rec"));
+    ck("the record's label reads the draws aloud", /drawn 1/.test(await q.getAttribute("#rec", "aria-label")), await q.getAttribute("#rec", "aria-label"));
+    ck("the drawn match names itself in the heading", (await q.textContent("#over-title")) === "Match drawn", await q.textContent("#over-title"));
+    ck("the progress card counts the draw", await q.evaluate(() => /^Hard: won 0, lost 0, drawn 1$/.test(window.NumbericsProgress.get("fifteen").best)), await q.evaluate(() => JSON.stringify(window.NumbericsProgress.get("fifteen"))));
+    await q.click("#again");
+    await q.reload();
+    ck("the draw survives reload", (await q.textContent("#rec")) === "0-0-1", await q.textContent("#rec"));
+    // mechanics #2: a won match whose last round is drawn says "match" in the heading, not a bare "You win"
+    await forge(q, { diff: "hard", owner: B([1, 2, 4, 7], [3, 5, 6, 9]), turn: 1, wins: [3, 1, 0], rounds: [1, 0, 0, 0], round: 5 });
+    await tile(q, 8).click(); await card(q);
+    ck("a won match ending on a drawn round: heading says the match", (await q.textContent("#over-title")) === "You win the match", await q.textContent("#over-title"));
+    ck("and the record adds the win, not a draw", (await q.textContent("#rec")) === "1-0-1", await q.textContent("#rec"));
+    await shot(q, "match-card");
+    await q.click("#again");
+    // craft #8, #45, cold #37: the owner labels are at least 12 px and inside their tile, both views, 390 and 320 (Larger text)
+    const labels = () => q.evaluate(() => [...document.querySelectorAll(".ft small")].filter(s => s.textContent).map(s => {
+      const t = s.parentElement.getBoundingClientRect(), r = s.getBoundingClientRect();
+      return { n: s.parentElement.dataset.n, fs: parseFloat(getComputedStyle(s).fontSize), inside: r.left >= t.left - .5 && r.right <= t.right + .5 && r.top >= t.top - .5 && r.bottom <= t.bottom + .5 };
+    }));
+    for (const [w, hh, big] of [[390, 844, false], [320, 568, true], [320, 568, false]]) {
+      await q.setViewportSize({ width: w, height: hh });
+      await q.evaluate((big) => { if (big) document.documentElement.setAttribute("data-text", "large"); else document.documentElement.removeAttribute("data-text"); }, big);
+      for (const v of ["numbers", "grid"]) {
+        await forge(q, { diff: "easy", owner: B([2, 8], [4, 5]), turn: 1 });
+        if ((await q.evaluate(() => window.__fifteen.view)) !== v) { await q.click("#v-" + v); await q.waitForTimeout(600); }
+        const ls = await labels();
+        ck("labels at least 12 px and inside the tile (" + w + (big ? " Larger text" : "") + ", " + v + ")", ls.length === 4 && ls.every(l => l.fs >= 12 && l.inside), JSON.stringify(ls));
+        ck("no sideways scroll (" + w + (big ? " Larger text" : "") + ", " + v + ")", await q.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        if (w === 320 && big && v === "numbers") await shot(q, "320-large");
+      }
+    }
+    await q.evaluate(() => document.documentElement.removeAttribute("data-text")); await q.setViewportSize({ width: 390, height: 844 });
+    // craft #44: the Numbers to Grid switch never squashes a digit (one uniform scale) and the tiles leave one after another,
+    // so they never pile up in the middle. Every 10 ms of the switch is laid out by pausing the animations (no timing luck).
+    for (const v of ["grid", "numbers"]) {
+      if ((await q.evaluate(() => window.__fifteen.view)) === v) { await q.click("#v-" + (v === "grid" ? "numbers" : "grid")); await q.waitForTimeout(600); }
+      const f = await q.evaluate((v) => {
+        const tiles = [...document.querySelectorAll(".ft")];
+        document.getElementById("v-" + v).click();
+        const an = tiles.map(t => t.getAnimations().filter(a => a.effect && a.effect.getKeyframes().some(k => k.translate))[0]);
+        if (an.some(a => !a)) return { missing: true };
+        an.forEach(a => a.pause());
+        const total = Math.max(...an.map(a => a.effect.getComputedTiming().endTime));
+        an.forEach(a => { a.currentTime = total; });
+        const fin = tiles.map(t => { const r = t.getBoundingClientRect(); return r.width / r.height; });
+        let squash = 0, pile = 0;
+        for (let tm = 0; tm <= total; tm += 10) {
+          an.forEach(a => { a.currentTime = tm; });
+          const rs = tiles.map(t => t.getBoundingClientRect());
+          rs.forEach((r, i) => { squash = Math.max(squash, Math.abs(r.width / r.height / fin[i] - 1)); });
+          rs.forEach((a, i) => {
+            const deg = rs.filter((b, j) => j !== i && Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left)) * Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)) > .25 * Math.min(a.width * a.height, b.width * b.height)).length;
+            pile = Math.max(pile, deg);
+          });
+        }
+        an.forEach(a => a.finish());
+        return { total, squash, pile, delays: an.map(a => a.effect.getTiming().delay), scales: an.map(a => String(a.effect.getKeyframes()[0].scale)) };
+      }, v);
+      ck("switch to " + v + ": every tile moves", !f.missing, JSON.stringify(f));
+      if (f.missing) continue;
+      ck("switch to " + v + ": one uniform scale per tile (sx = sy)", f.scales.every(s => { const p = s.split(" "); return p.length === 1 || p[0] === p[1]; }), f.scales.join("|"));
+      ck("switch to " + v + ": no digit squashes or stretches (shape kept every 10 ms)", f.squash < 0.01, f.squash);
+      ck("switch to " + v + ": staggered, one tile after another", f.delays.every((d, i) => i === 0 || d > f.delays[i - 1]) && f.delays[8] - f.delays[0] >= 150, JSON.stringify(f.delays));
+      ck("switch to " + v + ": no pile in the middle (a tile overlaps at most 3 others; it was 5)", f.pile <= 3, f.pile);
+      ck("switch to " + v + ": the whole switch stays short (under 600 ms)", f.total < 600, f.total);
+    }
+    ck("no page errors (round 4)", e10.length === 0, e10.join("|"));
+    await c.close();
+  }
+  // cold #10: after your first round, one tip points at Grid (once ever; never if you already found Grid)
+  {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 } }); await seenHow(c);
+    const q = await c.newPage(); await q.goto(page);
+    const winRound = async (round) => {
+      await forge(q, { diff: "easy", owner: B([2, 6], [1, 3]), turn: 1, round, wins: round > 1 ? [0, 1, round - 2] : [0, 0, 0], rounds: round > 1 ? [1].concat(new Array(round - 2).fill(2)) : [], starter: round % 2 ? 1 : 2 });
+      await tile(q, 7).click(); await card(q); await q.click("#next");
+    };
+    await winRound(1);
+    await q.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });   // round 2: the computer opens
+    ck("tip after the first round points at Grid", (await q.textContent("#hint")) === "Tip: tap Grid to see the magic square." && await q.locator("#v-grid.nudge").count() === 1, await q.textContent("#hint"));
+    await shot(q, "grid-tip");
+    const fr = (await S(q)).owner.findIndex(o => !o) + 1; await tile(q, fr).click();
+    ck("the tip goes with your first action", !/Tip:/.test(await q.textContent("#hint")) && await q.locator("#v-grid.nudge").count() === 0, await q.textContent("#hint"));
+    await winRound(3);
+    await q.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
+    ck("the tip shows once only", !/Tip:/.test(await q.textContent("#hint")), await q.textContent("#hint"));
+    await c.close();
+    const c2 = await browser.newContext({ viewport: { width: 390, height: 844 } }); await seenHow(c2);
+    const q2 = await c2.newPage(); await q2.goto(page);
+    await q2.click("#v-grid"); await q2.click("#v-numbers");
+    await forge(q2, { diff: "easy", owner: B([2, 6], [1, 3]), turn: 1 });
+    await tile(q2, 7).click(); await q2.waitForSelector("#over:not([hidden])", { timeout: 4000 }); await q2.click("#next");
+    ck("no tip for a player who already found Grid", !/Tip:/.test(await q2.textContent("#hint")) && await q2.locator("#v-grid.nudge").count() === 0, await q2.textContent("#hint"));
+    await c2.close();
   }
 };

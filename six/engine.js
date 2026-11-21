@@ -398,9 +398,13 @@
   }
   // a plain line: one shortest solution uses only the four operators (no signs, no brackets)
   function plain(l) { return l.sol.u.every(function (u) { return !u; }) && !l.sol.b.length && l.sol.g.every(function (g) { return OPS.indexOf(g) >= 0; }); }
+  // a gentle line opens a run: plain, Tier 1 and at most GENTLE_MAX numbers (round 4, cold #24: five 4s on line 2
+  // was plain by the solver's measure but needs a trick a first-timer does not see)
+  var GENTLE_MAX = 4;
+  function gentle(l) { return l.t === 1 && l.n.length <= GENTLE_MAX && plain(l); }
   function drawPlain(s, avoid) {
-    var pool = POOL[1].filter(function (id) { return plain(entry(id)) && avoid.indexOf(id) < 0; });
-    if (!pool.length) pool = POOL[1].filter(function (id) { return plain(entry(id)); });
+    var pool = POOL[1].filter(function (id) { return gentle(entry(id)) && avoid.indexOf(id) < 0; });
+    if (!pool.length) pool = POOL[1].filter(function (id) { return gentle(entry(id)); });
     return pool[Math.floor(rnd(s) * pool.length)];
   }
   function order(a, b) { return a.t - b.t || (a.h || 0) - (b.h || 0) || a.d - b.d; }
@@ -415,13 +419,14 @@
     // plain lines (round 3: brackets turned up on line 4 under a label that did not name them), the Daily with one
     if (s.round === 1) {
       var want = s.mode === "daily" ? 1 : PLAIN_FIRST;
-      for (var have = lines.filter(function (l) { return l.t === 1 && plain(l); }).length; have < want; have++) {
-        // swap out the easiest line that is not plain (the round's last, hardest line stays)
-        var x = lines.findIndex(function (l) { return !(l.t === 1 && plain(l)); });
+      for (var have = lines.filter(gentle).length; have < want; have++) {
+        // swap out the easiest line that is not gentle (the round's last, hardest line stays)
+        var x = lines.findIndex(function (l) { return !gentle(l); });
         var pid = drawPlain(s, ids.concat(s.recent));
         ids[ids.indexOf(lines[x].id)] = pid; lines[x] = entry(pid);
       }
-      lines.sort(function (a, b) { return (b.t === 1 && plain(b) ? 1 : 0) - (a.t === 1 && plain(a) ? 1 : 0) || order(a, b); });
+      lines.sort(function (a, b) { return (gentle(b) ? 1 : 0) - (gentle(a) ? 1 : 0) || order(a, b); });
+      lines = lines.slice(0, want).concat(lines.slice(want).sort(order)); // the opening, then easiest first
     }
     s.lines = lines; s.idx = 0; s.recent = s.recent.concat(ids).slice(-24);
     startLine(s);
@@ -608,6 +613,9 @@
     if (s.mode === "climb") { s.over = true; s.ended = true; }
     return { ok: true, state: s };
   }
+  // D9 (TRIAGE4): a Daily counts as finished only when all six lines were made; a line given up with Show answer
+  // is not made (solved counts made lines only), so a Daily given up line by line ends unfinished
+  function dailyDone(s) { return !!s && s.mode === "daily" && !!s.over && s.solved >= s.lines.length; }
   function nextRound(state) {
     if (!state.over || state.mode === "daily" || state.ended) return { ok: false, state: state };
     var s = clone(state); s.round++; s.over = false; deal(s); return { ok: true, state: s };
@@ -617,7 +625,7 @@
            UN: UN, unary: unary, solve: solve, tokenize: tokenize, parse: parse, evaluate: evaluate, calc: calc,
            OPS: OPS, JOPS: JOPS, SYM: SYM, blank: blank, literals: literals, normalize: normalize, text: text, value: value,
            treeToModel: treeToModel, groups: groups, TIERS: TIERS, difficulty: difficulty, measure: measure, trivial: trivial, skill: skill, depths: depths,
-           BANK: BANK, POOL: POOL, order: order, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK, PLAIN_FIRST: PLAIN_FIRST,
+           BANK: BANK, POOL: POOL, order: order, POWERS: POWERS, DAILY: DAILY, STREAK: STREAK, PLAIN_FIRST: PLAIN_FIRST, GENTLE_MAX: GENTLE_MAX, gentle: gentle, dailyDone: dailyDone,
            newGame: newGame, line: line, target: target, current: current, onTarget: onTarget, canJoin: canJoin,
            edit: edit, use: use, useable: useable, why: why, plain: plain, sameM: sameM, next: next, nextRound: nextRound, reveal: reveal, hintStep: hintStep, parts: parts };
 });

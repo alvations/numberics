@@ -230,13 +230,20 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } }); await seen(ctx);
   p = await ctx.newPage(); await p.goto(page);
   ck("H1 is Fibonacci", (await p.textContent("h1")) === "Fibonacci");
-  ck("subtitle starts with a Numberics link home", await p.evaluate(() => { const a = document.querySelector(".sub a"); return a && a.textContent === "Numberics" && a.getAttribute("href") === "../" && document.querySelector(".sub").firstElementChild === a; }));
-  ck("subtitle tagline is one sentence with a full stop", /^Numberics · [A-Z0-9][^.]*\.$/.test((await p.textContent(".sub")).trim()));
+  // TRIAGE4: the subtitle is the plain line the card uses (no "2584" riddle), and no "Numberics ·" link (the top bar links home)
+  ck("subtitle is plain: 'Join neighbours in the Fibonacci run.' with no link", await p.evaluate(() => { const s = document.querySelector(".sub");
+    return s.textContent.trim() === "Join neighbours in the Fibonacci run." && !s.querySelector("a"); }));
+  ck("subtitle matches the Fibonacci card's line", await p.evaluate(() => { const c = document.querySelector('#games [data-id="fibonacci"] .blurb');
+    return !!c && c.textContent.indexOf(document.querySelector(".sub").textContent.trim()) >= 0; }));
+  // craft #12: the hint row is never blank on open; it says how to start, and clears after the first move
+  ck("a new game's hint says how to start", (await p.textContent("#hint")).trim() === "Swipe or use the arrow keys.");
   // craft #6: the pills sit under the title, where Two's are
   const pills = (q) => q.evaluate(() => { const b = document.querySelector(".brand").getBoundingClientRect(), s = document.querySelector(".stats").getBoundingClientRect(), t = document.getElementById("tray").getBoundingClientRect();
     return { under: s.top >= b.bottom, left: Math.round(s.left - b.left), top: Math.round(s.top), tray: Math.round(t.top) }; });
   const fp = await pills(p), ep2 = await ctx.newPage(); await ep2.goto(url); const ep = await pills(ep2); await ep2.close();
   ck("pills sit under the title at 1280, as in Two", fp.under && ep.under && fp.left === ep.left && Math.abs(fp.top - ep.top) <= 2 && Math.abs(fp.tray - ep.tray) <= 2, JSON.stringify([fp, ep]));
+  await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowUp"); await p.waitForTimeout(250);
+  ck("after the first move the start hint is gone", await p.evaluate(() => window.__fibonacci.state.moves > 0) && (await p.textContent("#hint")).trim() === "");
   // R17: Enter on a focused games-row link navigates and is never a game move
   const m0 = await p.evaluate(() => window.__fibonacci.state.moves);
   const link = p.locator("#games a[href]:not([aria-current])").first(), href = await link.getAttribute("href");
@@ -290,6 +297,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const steps = await p.$$eval("#sh-howto .step p", a => a.map(x => x.textContent));
   ck("how-to copy is the spec's (9.2)", JSON.stringify(steps) === JSON.stringify(["Swipe to slide every tile.",
     "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5.", "Equal tiles do not join, except 1 and 1."]), steps.join("|"));
+  // TRIAGE4 (cold): step 1 shows a slide, not a join: one number only (the same 3 before and after), in a row of cells
+  ck("how-to step 1 is a slide: the same number at both ends, nothing else", await p.evaluate(() => {
+    const pv = document.querySelector("#sh-howto .step .pv"), nums = [...pv.querySelectorAll(".mt:not(.cell)")].map(x => x.textContent);
+    return nums.length === 2 && nums[0] === nums[1] && pv.querySelectorAll(".mt.cell").length === 6; }));
+  ck("how-to step 1 fits its picture box, numerals at least 12 px", await p.evaluate(() => {
+    const pv = document.querySelector("#sh-howto .step .pv"), g = pv.firstElementChild.getBoundingClientRect(), b = pv.getBoundingClientRect();
+    return g.left >= b.left && g.right <= b.right && g.top >= b.top && g.bottom <= b.bottom &&
+      [...pv.querySelectorAll(".mt")].every(x => parseFloat(getComputedStyle(x).fontSize) >= 12); }));
   await shot(p, "howto");
   const m0k = await p.evaluate(() => window.__fibonacci.state.moves);
   await p.keyboard.press("ArrowLeft");

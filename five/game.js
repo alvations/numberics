@@ -8,7 +8,7 @@
   var store = K.store("numberics_five_v1");
   // motion is read per animation (M.reduced, M.ms); THINK and HOLD are pauses, kept under reduced motion (5.12)
   var THINK = 520, HOLD = 1500; // R13: the result shows before the card
-  var OUT_MS = 200, OUTLINE_MS = 160; // 5.6 burst: scale out, then the outline
+  var OUT_MS = 200, OUTLINE_MS = 160, FLASH_MS = 320; // 5.6 burst: scale out, then the outline; the flash under it
 
   function validState(s) {
     return s && Array.isArray(s.tiles) && s.tiles.length === 4 &&
@@ -128,6 +128,7 @@
       el.setAttribute("aria-label", owner + " tile " + (i % 2 ? "right" : "left") + ": " + (v ? v : "burst"));
     });
     $("you").textContent = state.wins.p; $("cpu").textContent = state.wins.c;
+    $("rounds").setAttribute("aria-label", "Rounds: you " + state.wins.p + ", computer " + state.wins.c);
     var none = !record.won && !record.lost; // R16: Record reads a dimmed "none" until a match is decided
     $("matches").textContent = none ? "none" : record.won + "-" + record.lost; $("matches").classList.toggle("none", none);
     // pips and tray are rebuilt only when they change
@@ -154,6 +155,7 @@
     if (armed) hint = PW_HINT[armed] + (keys ? " (Esc cancels)" : "");
     else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again: it counts as a loss.";
     else if (state.roundOver) hint = viewing ? "Tap the board for the summary." : holding || anim ? (state.roundOver === "draw" ? "Drawn: " + drawWhy() + "." : lastWords()) : "";
+    else if ((state.turn === "c" || busy) && !state.last) hint = "The computer goes first."; // craft nit 36: a fresh round
     else if (state.turn === "c" || busy) hint = "The computer is thinking\u2026";
     else if (N.mustPass(state)) hint = "Nothing to hit: tap your tile to pass.";
     else if (sel >= 0) hint = "Add " + state.tiles[sel] + " onto which tile? Your own other tile counts.";
@@ -171,9 +173,13 @@
       ttl.textContent = m ? (m === "p" ? "You win" : "The computer wins")
         : rw === "draw" ? "Draw in" + n : rw === "p" ? "You win" + n : "The computer wins" + n;
       var got = (state.earned || []).map(function (id) { return PW[id]; });
-      $("over-text").textContent = m ? (m === "p" ? "Match won " : "Match lost ") + state.wins.p + "-" + state.wins.c + " \u00b7 " + PW_LEVEL[state.level]
-        : (rw === "draw" ? cap(drawWhy()) : cardWords()) + " \u00b7 " + ("You " + state.wins.p + " : " + state.wins.c + " Computer").replace(/ /g, "\u00a0") + // the tally never breaks
-          (state.draws ? " \u00b7 " + state.draws + "\u00a0drawn" : "") + (got.length ? " \u00b7 earned\u00a0" + got.join(", ") : "");
+      // cold #22: a line never starts with the dot (it is glued to the part before it); R2: a round won after Undo says
+      // why it paid nothing
+      var D = "\u00a0\u00b7 ", nb = function (t) { return t.replace(/ /g, "\u00a0"); };
+      $("over-text").textContent = m ? nb((m === "p" ? "Match won " : "Match lost ") + state.wins.p + "-\u2060" + state.wins.c) + D + PW_LEVEL[state.level] // "3-0" never splits
+        : (rw === "draw" ? cap(drawWhy()) : cardWords()) + D + nb("You " + state.wins.p + " : " + state.wins.c + " Computer") + // the tally never breaks
+          (state.draws ? D + state.draws + "\u00a0drawn" : "") + (got.length ? D + "earned\u00a0" + got.join(",\u00a0") :
+            rw === "p" && state.undone ? D + nb("no power-up after Undo") : "");
       $("again").textContent = m ? "New game" : "Next round";
     }
     if (!over.hidden && wasHidden) $("again").focus({ preventScroll: true }); // focus: the card's primary
@@ -236,25 +242,35 @@
     if (a) a.onfinish = function () { if (el.parentNode) el.parentNode.removeChild(el); };
     else if (el.parentNode) el.parentNode.removeChild(el);
   }
-  var POP = [{ transform: "scale(.72)" }, { transform: "scale(1.14)", offset: 0.6 }, { transform: "scale(1)" }];
+  // the landing pop grows from the tile's own size (craft #3: never a small inset square on an empty slot first)
+  var POP = [{ transform: "scale(1)" }, { transform: "scale(1.14)", offset: 0.45 }, { transform: "scale(1)" }];
   function bump(i) {
     var t = slots[i].firstElementChild; if (!t) return;
     keep(M.play(t, POP, { duration: M.T.pop, easing: M.E.pop }, [{ opacity: 0.55 }, { opacity: 1 }]));
   }
-  // 8 shards: 6% squares, out 30 to 45%, turning 90 to 180 degrees (a fixed table)
-  var SHARD_D = [0.30, 0.42, 0.36, 0.45, 0.33, 0.40, 0.38, 0.31], SHARD_R = [90, 150, 120, 180, 105, 165, 135, 95];
+  // 8 shards (craft #3: clearly visible): 12% squares in the tile's own hue made bright, every other one gold, with a
+  // glow; out 45 to 70% of the tile, turning 90 to 180 degrees (a fixed table)
+  var SHARD_D = [0.48, 0.64, 0.56, 0.70, 0.52, 0.66, 0.60, 0.46], SHARD_R = [90, 150, 120, 180, 105, 165, 135, 95];
   function shards(r, v) {
     if (M.reduced()) return; // no flying shards under reduced motion (5.12)
-    var s = Math.max(4, r.w * 0.06), cx = r.x + r.w / 2 - s / 2, cy = r.y + r.h / 2 - s / 2;
+    var s = Math.max(8, r.w * 0.12), cx = r.x + r.w / 2 - s / 2, cy = r.y + r.h / 2 - s / 2;
     for (var k = 0; k < 8; k++) {
       var d = document.createElement("i"), ang = (k * 45 + (k % 2 ? 12 : -8)) * Math.PI / 180, dist = SHARD_D[k] * r.w;
-      d.className = "shard" + (v === 1 ? " lo" : v === 2 ? " lo2" : ""); d.style.setProperty("--h", K.hue(v));
+      d.className = "shard" + (k % 2 || v < 3 ? " gold" : ""); d.style.setProperty("--h", K.hue(v));
       d.style.left = cx + "px"; d.style.top = cy + "px"; d.style.width = s + "px"; d.style.height = s + "px";
       fxEl.appendChild(d);
       gone(d, M.play(d, [{ transform: "translate(0px,0px) rotate(0deg)", opacity: 1 },
         { transform: "translate(" + (Math.cos(ang) * dist).toFixed(1) + "px," + (Math.sin(ang) * dist).toFixed(1) + "px) rotate(" + (k % 2 ? -SHARD_R[k] : SHARD_R[k]) + "deg)", opacity: 0 }],
         { duration: M.T.burst, easing: M.E.out, fill: "forwards" }));
     }
+  }
+  // a light flash under the shards (craft #3): a soft disc in the tile's hue grows and fades (an opacity fade only under
+  // reduced motion)
+  function flash(r, v) {
+    var f = document.createElement("i"); f.className = "flash"; f.style.setProperty("--h", K.hue(v)); place(f, r);
+    fxEl.appendChild(f);
+    gone(f, M.play(f, [{ transform: "scale(.55)", opacity: 1 }, { transform: "scale(1.45)", opacity: 0 }],
+      { duration: FLASH_MS, easing: M.E.out, fill: "forwards" }, [{ opacity: 0.8 }, { opacity: 0 }]));
   }
   function burstFx(last, prev, to, final) {
     sfx("burst"); buzz("merge");
@@ -266,33 +282,56 @@
     // the deciding burst stays lit through the hold (craft #2, CSS .ghost.final); others scale out
     if (!final) gone(g, M.play(g, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.15)", opacity: 1, offset: 0.35 }, { transform: "scale(0)", opacity: 0 }],
       { duration: OUT_MS, easing: M.E.out, fill: "forwards" }, [{ opacity: 1 }, { opacity: 0 }]));
+    flash(to, hv);
     shards(to, hv);
     keep(M.play(slots[last.to], [{ opacity: 0 }, { opacity: 0, offset: OUT_MS / (OUT_MS + OUTLINE_MS) }, { opacity: 1 }],
       { duration: OUT_MS + OUTLINE_MS, pseudoElement: "::after" }, [{ opacity: 0 }, { opacity: 1 }]));
   }
+  // craft #3: where the flying copy must be gone. The copy fades from 10% overlap with the target to 45% (before it would
+  // reach the target's number at half); the landing is at 45%. Offsets are in the flight's eased progress (WAAPI keyframe
+  // offsets follow the effect easing); t is the landing as a share of the flight time, from the --e-fly curve.
+  var FLY_C = (String(M.E.fly).match(/-?\d*\.?\d+/g) || []).map(Number);
+  if (FLY_C.length !== 4 || FLY_C.some(isNaN)) FLY_C = [0.3, 0.7, 0.2, 1];
+  function overlapAt(p, dx, dy, w, h) { return Math.max(0, 1 - (1 - p) * Math.abs(dx) / w) * Math.max(0, 1 - (1 - p) * Math.abs(dy) / h); }
+  function progressFor(ov, dx, dy, w, h) { var lo = 0, hi = 1; for (var i = 0; i < 28; i++) { var m = (lo + hi) / 2; if (overlapAt(m, dx, dy, w, h) < ov) lo = m; else hi = m; } return hi; }
+  function timeFor(p) { // the share of the time at which the eased progress reaches p
+    var c = FLY_C, lo = 0, hi = 1, u, y;
+    for (var i = 0; i < 28; i++) { u = (lo + hi) / 2; y = 3 * (1 - u) * (1 - u) * u * c[1] + 3 * (1 - u) * u * u * c[3] + u * u * u; if (y < p) lo = u; else hi = u; }
+    u = (lo + hi) / 2; return 3 * (1 - u) * (1 - u) * u * c[0] + 3 * (1 - u) * u * u * c[2] + u * u * u;
+  }
+  function flightFade(dx, dy, w, h) {
+    var a = progressFor(0.1, dx, dy, w, h), b = Math.max(a + 0.02, progressFor(0.45, dx, dy, w, h));
+    return { a: a, b: b, t: Math.min(1, timeFor(b)) };
+  }
+  var landMs = 0; // when the last move lands, after its start
   function animate(prev, last, done) {
     settle(); fxEl.textContent = ""; // effect nodes stay bounded
     var kind = last && last.kind;
-    if (kind !== "add" && kind !== "nudge" && kind !== "split") { shown = null; busy = false; anim = false; render(); return done(); }
+    if (kind !== "add" && kind !== "nudge" && kind !== "split") { landMs = 0; shown = null; busy = false; anim = false; render(); return done(); }
     busy = true; anim = true; // no card mid-animation
     var final = !!(last.burst && state.roundOver);
-    var b = boardEl.getBoundingClientRect(), to = rectIn(slots[last.to], b), fly = 0; // one read (5.13)
+    var b = boardEl.getBoundingClientRect(), to = rectIn(slots[last.to], b), fly = 0, land = 0; // one read (5.13)
     if (kind === "add" && to.w) {
       var from = rectIn(slots[last.from], b), f = tileEl(prev[last.from]);
       fly = M.ms("fly");
       if (fly) {
-        // the copy reads "+3", not a second "3" (craft nit)
-        f.classList.add("fly"); f.textContent = "+" + prev[last.from]; place(f, from); fxEl.appendChild(f);
-        var dx = (to.x - from.x).toFixed(1), dy = (to.y - from.y).toFixed(1);
-        M.play(f, [{ transform: "translate(0px,0px)" }, { transform: "translate(" + dx + "px," + dy + "px)" }], { duration: fly, easing: M.E.fly, fill: "forwards" });
+        // the copy reads "+3", not a second "3" (craft nit). Craft #3 (round 4): it fades out as it reaches the target,
+        // gone before it covers half of it, and the number changes at that landing instant (land), so "+3" never sits
+        // on the target and the target never waits under it. Its own (unanimated) opacity is 0, so a dropped fill
+        // can never flash the copy back on its source.
+        f.classList.add("fly"); f.textContent = "+" + prev[last.from]; place(f, from); f.style.opacity = "0"; fxEl.appendChild(f);
+        var dx = to.x - from.x, dy = to.y - from.y, fade = flightFade(dx, dy, to.w, to.h);
+        land = Math.round(fly * fade.t);
+        M.play(f, [{ transform: "translate(0px,0px)", opacity: 1 }, { opacity: 1, offset: fade.a }, { opacity: 0, offset: fade.b },
+          { transform: "translate(" + dx.toFixed(1) + "px," + dy.toFixed(1) + "px)", opacity: 0 }], { duration: fly, easing: M.E.fly, fill: "forwards" });
         // the arc: a second, added track
         M.play(f, [{ transform: "translateY(0%) scale(1)" }, { transform: "translateY(-6%) scale(1.08)", offset: 0.5 }, { transform: "translateY(0%) scale(1)" }],
           { duration: fly, easing: "ease-in-out", composite: "add", fill: "forwards" });
         seq.at(fly, function () { gone(f, null); });
       }
     }
-    shown = prev.slice(); render();
-    seq.at(fly, function () { // the landing: the number changes now
+    shown = prev.slice(); render(); landMs = land;
+    seq.at(land, function () { // the landing: the number changes now
       shown = null; busy = false; anim = false; render();
       if (last.burst) burstFx(last, prev, to, final);
       else {
@@ -325,10 +364,10 @@
     // R7: a reward is a toast; a round result is the overlay alone (no "Burst!" note on the round-ending burst)
     // a reward on the round-ending burst is said on the card ("earned Shield"), never in a toast over the hold's hint
     if (res.awarded && !state.roundOver) K.toast("Burst! +" + PW[res.awarded]);
-    else if (res.unpaid && !state.roundOver) K.toast("Burst! No reward after Shield.", "info"); // R2
+    else if (res.unpaid && !state.roundOver) K.toast(res.unpaid === "undo" ? "Burst! No reward after Undo this round." : "Burst! No reward after Shield.", "info"); // R2
     else if (res.burst && who === "p" && !state.roundOver) K.toast("Burst!");
     animate(before, state.last, afterTurn);
-    if (res.awarded) seq.sound(M.ms("fly") + 140, function () { sfx("power"); });
+    if (res.awarded) seq.sound(landMs + 140, function () { sfx("power"); });
   }
   function afterTurn() {
     if (state.matchOver === "c") { // R7: no reward toast over a lost match
@@ -480,7 +519,7 @@
     { picture: function (el) { el.innerHTML = window.NumbericsNav ? window.NumbericsNav.preview("five") : ""; }, // the card's own picture, 2 + 3 = 5!
       text: "A tile at five or more bursts." },
     { picture: '<div class="five-pv3"><span class="five-out"></span><span class="five-out"></span><span class="five-pips"><i></i><i></i><i></i></span></div>',
-      text: "Burst both of the computer's tiles to win the round. First to three." }
+      text: "When both computer tiles have burst, the round is yours. First to three." } // cold #21: whoever burst them
   ];
   // the family's one sheet (shared/howto.js, TRIAGE4 D8): a first visit opens it once (never with a saved game);
   // the computer opens when it closes

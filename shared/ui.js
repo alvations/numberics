@@ -89,9 +89,9 @@
       if (o.querySelector(":scope > .glyph")) return;
       o.insertAdjacentHTML("afterbegin", T.glyph(name).replace("<svg ", '<svg class="glyph" '));
       n++;
-      // a card too tall for a small board scrolls with its buttons pinned (theme.css); .more draws the edge above the
+      // a card too tall for a small board scrolls with its buttons pinned (theme.css); .over-more draws the edge above the
       // buttons while anything is hidden under them, so the player sees there is more
-      var more = function () { o.classList.toggle("more", o.scrollTop + o.clientHeight < o.scrollHeight - 2); };
+      var more = function () { o.classList.toggle("over-more", o.scrollTop + o.clientHeight < o.scrollHeight - 2); };
       o.addEventListener("scroll", more, { passive: true }); o.addEventListener("animationstart", more);
       o.addEventListener("animationend", more);
     });

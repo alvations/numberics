@@ -6,6 +6,8 @@
 /* the holes use the dark well token (9.7), sunk into the board */
 .cells div{ background:var(--well); border-radius:50%; box-shadow:inset 0 3px 6px rgba(0,0,0,.45); transition:background-color 120ms; }
 .cells div.col{ background:#2f3346; }
+/* Light: the aimed column is a darker cream, not the dark theme's near-black holes (TRIAGE4 Family, Light theme) */
+:root[data-theme="light"] .cells div.col{ background:color-mix(in srgb, var(--board) 75%, var(--well)); }
 .board:not(.targeting) .cells div.top.col{ box-shadow:0 0 0 2px var(--accent) inset; }
 /* the disc layer is NumbericsMotion's keyed layer (shared/motion.js): its --gap is the well's own gap (.6 of the board
    gap, the board token values 10px and 8px written out so motion.js can read the pitch as a plain length) and the
@@ -44,11 +46,13 @@
 .stat b.next{ display:flex; justify-content:center; align-items:center; height:1.54rem; overflow:clip; }
 .stat b.next .mini{ width:1.5rem; height:1.5rem; font-size:.95rem; }
 /* an egg in the Next pill is named, so it never reads as an empty or broken disc (craft #3, cold #3) */
-.stat b.next .mini.egg{ font-size:.66rem; font-weight:700; letter-spacing:.02em; }
-.pw .mini{ font-size:.72rem; margin-right:5px; width:1.5em; height:1.5em; }
+.stat b.next .mini.egg{ width:auto; padding:0 5px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.02em; }
+.pw .mini{ font-size:12px; margin-right:5px; width:1.5em; height:1.5em; }
 /* drops left before the next row of eggs rises */
-.pips{ display:flex; justify-content:center; gap:4px; margin:8px 0 0; min-height:6px; flex-wrap:wrap; }
+.pips{ display:flex; justify-content:center; align-items:center; gap:4px; margin:8px 0 0; min-height:6px; flex-wrap:wrap; }
 .pips i{ width:6px; height:6px; border-radius:50%; background:var(--accent); }
+/* the count beside the dots, so the row reads as a counter, not a dotted rule (craft #40) */
+.pips b{ margin-left:6px; font-size:12px; line-height:1; font-weight:700; color:var(--mute); }
 .pips i.used{ background:var(--line); }
 .over .row{ margin:4px 0 0; }
 .over .btn[hidden]{ display:none; }
@@ -65,3 +69,5 @@ details.how .row{ margin:0 14px 12px; }
 .pips{ margin-top:6px; } #app > .row{ margin:8px 0 4px; } .how{ margin:6px 0; }
 /* the games cards at the page foot (REDESIGN.md 3.2: the text row is replaced by the cards), the row's old gap kept */
 #games.cards{ margin:10px 0 4px; }
+/* one heading over the cards, as on every game page (TRIAGE4 Family); section.more, never the card's .over.more */
+section.more{ margin:14px 0 4px; } section.more h2{ margin:0; font-size:var(--fs-lg); }

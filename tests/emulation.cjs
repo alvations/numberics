@@ -373,7 +373,8 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.evaluate(() => { window.__snd = []; });
   await forge(p, [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowRight"); await p.waitForTimeout(400);
-  ck("D-Two: a key inside the slide drops the pending join sound (no bunching)", await p.evaluate(() => window.__snd.filter(x => /^merge/.test(x)).length <= 1 && window.__snd[0] === "slide"), await p.evaluate(() => window.__snd.join()));
+  // TRIAGE4 D7 (critic S2): a key inside the slide plays the pending join at once, once, before its own slide; never dropped
+  ck("D-Two: a key inside the slide plays the pending join at once, then its own slide (D7)", await p.evaluate(() => window.__snd.join() === "slide,merge:4,slide"), await p.evaluate(() => window.__snd.join()));
   // Smash fades its tile out, Swap slides the two tiles to each other's cells (same elements), Boost pops in place
   await forge(p, [3, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2], { power: { undo: 0, smash: 1, swap: 1, boost: 1 } });
   const ids1 = await p.evaluate(() => window.__numberics.ids);
@@ -524,6 +525,37 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("budget: DOM nodes after 500 moves within 5% of after 10 (" + n10 + " -> " + n500 + ")", n500 <= n10 * 1.05, n10 + " " + n500);
   ck("budget: the move handler (state, layer sync, stats) median under 4 ms (input to first visual change within a frame)", bud.handlerMed < 4, JSON.stringify(bud));
   ck("no page errors in budget checks", e11.length === 0, e11.join("|"));
+  await ctx.close();
+
+  // 9. TRIAGE4 (craft #3, #12, #18; Family end card): the open hint, the "+N" above the SCORE label, the board's focus ring
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await ctx.addInitScript(HOW);
+  p = await ctx.newPage(); const e12 = []; p.on("pageerror", x => e12.push(x.message)); await p.goto(url);
+  ck("R4: the hint row is not blank on open: it says how to play", (await p.textContent("#hint")) === "Swipe or use the arrow keys.", await p.textContent("#hint"));
+  await forge(p, [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { score: 0 });
+  await p.keyboard.press("ArrowLeft");
+  const pl = await p.evaluate(() => { const q = document.querySelector(".stat .plus"), lab = document.getElementById("score").parentNode.querySelector("span");
+    if (!q) return null; const a = q.getBoundingClientRect(), b = lab.getBoundingClientRect(), v = document.getElementById("score");
+    return { bottom: a.bottom, labTop: b.top, fs: parseFloat(getComputedStyle(q).fontSize), vfs: parseFloat(getComputedStyle(v).fontSize), text: q.textContent }; });
+  ck("R4: the score +N sits above the SCORE label, never on it", !!pl && pl.bottom <= pl.labTop + 0.5, JSON.stringify(pl));
+  ck("R4: ...at the value's size (not a faint 11 px)", !!pl && pl.fs >= pl.vfs - 0.5 && pl.fs >= 16, JSON.stringify(pl));
+  await p.waitForTimeout(80);
+  const pl2 = await p.evaluate(() => { const q = document.querySelector(".stat .plus"), lab = document.getElementById("score").parentNode.querySelector("span");
+    return q ? { bottom: q.getBoundingClientRect().bottom, labTop: lab.getBoundingClientRect().top, op: +getComputedStyle(q).opacity } : null; });
+  ck("R4: ...and it is fully shown early, still clear of the label as it rises", !!pl2 && pl2.op > 0.9 && pl2.bottom <= pl2.labTop + 0.5, JSON.stringify(pl2));
+  await p.waitForTimeout(300);
+  ck("R4: the open hint clears after the first move", (await p.textContent("#hint")) === "");
+  // the board's ring: reach it from the keyboard (focus-visible), as a keyboard player would
+  await p.focus("#tray .pw:nth-child(4)"); await p.keyboard.press("Tab");
+  const ring = await p.evaluate(() => { const b = document.getElementById("board"), cs = getComputedStyle(b);
+    return { active: document.activeElement === b, style: cs.outlineStyle, w: parseFloat(cs.outlineWidth), color: cs.outlineColor }; });
+  ck("R4: the board shows the gold focus ring when tabbed to (craft #18)", ring.active && ring.style === "solid" && ring.w >= 2, JSON.stringify(ring));
+  await shot(p, "r4-board-focus");
+  // the end card: the game glyph on top, the button row its last child, and it fades in
+  await forge(p, [3, 4, 3, 4, 4, 3, 4, 3, 3, 4, 3, 4, 4, 3, 4, 3], { over: true, power: { undo: 0, smash: 0, swap: 0, boost: 0 }, top: 4 });
+  await p.evaluate(() => window.__numberics.showCard());
+  ck("R4: the end card carries the game glyph and ends with its button row", await p.evaluate(() => { const o = document.getElementById("over");
+    return !!o.querySelector(":scope > .glyph") && o.lastElementChild.classList.contains("row") && /nm-fadein/.test(getComputedStyle(o).animationName); }));
+  ck("no page errors in R4 checks", e12.length === 0, e12.join("|"));
   await ctx.close();
 
   // 7. desktop shot + swipe

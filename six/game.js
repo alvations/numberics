@@ -156,22 +156,28 @@
 
   // ---------- drawing ----------
   var boardEl = $("board"), lineEl = $("line"), barsEl = $("bars");
-  // Every tile and every gap is at least MIN px wide (round 3: at 320px a five-number line had 35px tiles and 23px
-  // gaps). When the board is too narrow for that in one row, the gaps drop to a row of their own under the seams.
-  var MIN = 40;
+  // Every gap is at least MIN px wide, a tap target (round 4, craft #9: 40 px was too narrow), and so is every square
+  // tile. When square tiles do not fit in one row, the tiles get narrower (at least NARROW px wide, still 52 px tall; a 360 px phone fits five),
+  // so the signs stay between the numbers (round 4, cold #25: with five numbers they had dropped under the tiles).
+  // Only a board too narrow even for that (five numbers at 320 px) puts the gaps in a row of their own under the seams.
+  var MIN = 44, NARROW = 26;
   function cols(n, stack) {
     var c = []; for (var k = 0; k < n; k++) { c.push(stack ? "minmax(0,1fr)" : "minmax(0,3fr)"); if (k < n - 1) c.push(stack ? "6px" : "minmax(" + MIN + "px,2fr)"); }
     return c.join(" ");
+  }
+  function fit(n, avail) { // "row" (square tiles), "narrow" (one row, narrower tiles) or "stack"
+    if (!(avail > 0) || avail >= n * MIN + (n - 1) * MIN) return "row";
+    return avail >= n * NARROW + (n - 1) * MIN ? "narrow" : "stack";
   }
   function room() { var cs = getComputedStyle(boardEl); return boardEl.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight); }
   function render() {
     var L = E.line(state), n = L.n.length, cur = state.cur, lits = E.literals(L.n, cur.g) || L.n.map(function (t, i) { return { i: i, j: i }; });
     var startOf = []; lits.forEach(function (l) { for (var k = l.i; k <= l.j; k++) startOf[k] = l.i; });
     var long = L.n.some(function (t) { return t.length > 1; }) && n >= 4;
-    var avail = room(), stack = avail > 0 && avail < n * MIN + (n - 1) * MIN;
+    var how = fit(n, room()), stack = how === "stack";
     var width = stack ? n * 52 + (n - 1) * 6 : n * 68 + (n - 1) * 44;
     [lineEl, barsEl].forEach(function (el) { el.style.gridTemplateColumns = cols(n, stack); el.style.maxWidth = width + "px"; });
-    lineEl.className = "line n" + n + (long ? " long" : "") + (stack ? " stack" : "");
+    lineEl.className = "line n" + n + (long ? " long" : "") + (stack ? " stack" : how === "narrow" ? " narrow" : "");
     boardEl.classList.toggle("stacked", stack);
     var gold = E.onTarget(state);
     boardEl.classList.toggle("gold", gold);
@@ -229,6 +235,8 @@
 
     var txt = E.text(L.n, cur), val = E.current(state);
     $("expr").textContent = txt === null ? "One number takes one decimal point" : txt;
+    // plain signs only: the text repeats the tiles, so it is hidden (kept for screen readers, height kept)
+    $("expr").classList.toggle("same", txt !== null && !cur.b.length && cur.u.every(function (u) { return !u; }) && cur.g.every(function (g) { return g !== "j" && g !== "."; }));
     var tv = $("val");
     if (val.v) tv.textContent = "= " + E.show(val.v);
     else tv.textContent = val.why === "gap" ? "= ?" : val.why === "dot" ? "= ?" : "= no exact value";
@@ -250,7 +258,6 @@
 
     $("next").hidden = !state.done || state.over;
     $("brk").hidden = state.done; $("clear").hidden = state.done; $("reveal").hidden = state.done;
-    $("reveal").classList.toggle("ender", state.mode === "climb"); // in Climb it ends the run: styled as such
     $("brk").setAttribute("aria-pressed", String(bracketMode));
     P.tray($("tray"), PW, state.power, { disabled: function (id) { return E.why(state, id) || !E.useable(state, id); },
       onUse: activate, earn: EARN, onInfo: function (id, t) { note = t; render(); } });
@@ -264,6 +271,8 @@
     else if (val.why === "math") h = "Each step must be a whole number or a fraction.";
     else if (!state.edits && !state.done && state.idx === 0 && state.round === 1) h = "Tap a gap for + − × ÷, a number for √ or !.";
     else if (state.over && viewing) h = "Tap the board for the summary.";
+    // a sign put on a number by a stray tap: say how it comes off (round 4, cold #27)
+    else if (!state.done && cur.u.some(function (u) { return u; })) h = "Tap a number again to change its sign, or take it off.";
     else if (!state.done) h = "Make " + L.g + " with the numbers in order."; // the band never sits empty (round 3)
     $("hint").textContent = h;
 
@@ -278,9 +287,10 @@
     var made = state.solved + " line" + (state.solved === 1 ? "" : "s") + " made";
     $("over-answer").hidden = true; $("over-best").hidden = true;
     if (state.over) {
-      if (state.mode === "daily") {
-        $("over-title").textContent = "Daily Six done";
-        $("over-text").textContent = state.solved + " of 6 made · " + pw;
+      if (state.mode === "daily") { // D9: finished only when all six lines were made
+        var full = E.dailyDone(state);
+        $("over-title").textContent = full ? "Daily Six done" : "Daily Six over";
+        $("over-text").textContent = state.solved + " of 6 made · " + (full ? pw : "make all six to finish it");
         $("again").textContent = "Play Climb";
       } else if (state.ended) {
         $("over-title").textContent = "Run over";
@@ -338,10 +348,14 @@
   var played = false;
   // the end of a Climb round, a Climb run or the Daily: the card is up first, so a trophy shows as a pill on it (R7)
   function endRun(revealed) {
-    var ids = report("end", { mode: state.mode, solved: state.solved, round: state.round, daily: state.mode === "daily" });
+    // D9 (TRIAGE4): a Daily counts as finished (trophies, the Today chip, the streak) only when all six lines were
+    // made; one given up with Show answer is not made. An unfinished Daily ends as "daily-open", daily:false.
+    var daily = state.mode === "daily", full = daily && E.dailyDone(state);
+    var ids = report("end", { mode: daily && !full ? "daily-open" : state.mode, solved: state.solved, round: state.round, daily: full });
     TR && TR.pills ? TR.pills($("over-pills"), ids) : null;
-    if (state.mode === "daily") { try { if (PG) PG.daily("six", state.solved + " made"); } catch (e) { /* no card line */ } }
-    if (revealed && state.mode === "climb") { snd("lose"); snd("buzz", "lose"); }
+    // the Today chip keeps the day's best: the fewest power-ups used (a replay of the Daily can only improve it)
+    if (full) { try { if (PG) PG.daily("six", "6 made" + (state.used ? " · " + state.used + " power-up" + (state.used === 1 ? "" : "s") : ""), { score: state.used | 0, low: true }); } catch (e) { /* no card line */ } }
+    if ((revealed && state.mode === "climb") || (daily && !full)) { snd("lose"); snd("buzz", "lose"); }
     else { snd("win"); snd("buzz", "win"); if (state.mode === "climb" && state.round > runBest) later(400, function () { snd("best"); }, true); }
   }
   function doEdit(act, quiet) { return apply(E.edit(state, act), quiet); }
@@ -453,20 +467,21 @@
   var revealArmed = null;
   function disarmReveal() {
     if (revealArmed) { clearTimeout(revealArmed); note = ""; }
-    revealArmed = null; $("reveal").textContent = "Show answer";
+    revealArmed = null; $("reveal").textContent = "Show answer"; $("reveal").classList.remove("armed");
   }
   $("reveal").addEventListener("click", function () {
     var b = $("reveal");
     if (!revealArmed) {
       var climb = state.mode === "climb";
       K.clearToast(); // a toast must never hide this warning (round 2: a Hint toast covered it and a run was lost)
-      b.textContent = climb ? "Sure? Ends run" : "Sure? Show it";
+      b.textContent = climb ? "Sure? Ends run" : "Sure? Show it"; b.classList.add("armed");
       note = climb ? "This ends the Climb run. Tap again to show it." : "This gives up the line. Tap again to show it.";
-      // a Tier 1 line that needs a group says so first (round 3: players gave up at the first bracket line)
-      if (E.line(state).h === 1 && !state.cur.b.length) note = "This line needs ( ) Brackets. " + (climb ? "Tap again to end the run." : "Tap again to give up.");
+      // a Tier 1 line that needs a group also says so (round 3: players gave up at the first bracket line), after the
+      // cost (round 4, mechanics #2: the warning comes first)
+      if (E.line(state).h === 1 && !state.cur.b.length) note = (climb ? "Tap again to end the run." : "Tap again to give up.") + " This line needs ( ) Brackets.";
       render();
       var asked = note;
-      revealArmed = setTimeout(function () { revealArmed = null; b.textContent = "Show answer"; if (note === asked) { note = ""; render(); } }, 3000); return;
+      revealArmed = setTimeout(function () { revealArmed = null; b.textContent = "Show answer"; b.classList.remove("armed"); if (note === asked) { note = ""; render(); } }, 3000); return;
     }
     disarmReveal(); note = "";
     var r = E.reveal(state); if (!r.ok) return;

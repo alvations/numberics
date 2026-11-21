@@ -169,6 +169,20 @@ t("round 3 (TRIAGE3 teaching): Climb round 1 lines 1-3 never need brackets, over
   }
   for (let day = 20261101; day <= 20261130; day++) ok(E.plain(E.newGame(day, "daily").lines[0]), "daily " + day);
 });
+t("round 4 (cold #24): a run opens gently: Climb lines 1-3 and the Daily's line 1 have at most four numbers", () => {
+  eq(E.GENTLE_MAX, 4);
+  ok(E.BANK.some(e => e.t === 1 && e.h === 0 && e.n === "4 4 4 4 4"), "the five 4s line is still in the bank, for later lines");
+  let fiveLater = 0;
+  for (let seed = 1; seed <= 2000; seed++) {
+    const s = E.newGame(seed, "climb");
+    for (let k = 0; k < E.PLAIN_FIRST; k++) ok(E.gentle(s.lines[k]) && s.lines[k].n.length <= 4, "seed " + seed + " line " + (k + 1) + ": " + s.lines[k].n.join(" "));
+    if (s.lines.slice(E.PLAIN_FIRST).some(l => l.n.length === 5)) fiveLater++;
+  }
+  ok(fiveLater > 0, "five-number lines still come, after the opening");
+  for (let day = 20261101; day <= 20261231; day++) {
+    const d = E.newGame(day, "daily"); ok(E.gentle(d.lines[0]), "daily " + day + ": " + d.lines[0].n.join(" "));
+  }
+});
 
 // ---- game ----
 function solveLine(s) {
@@ -181,7 +195,7 @@ function solveLine(s) {
 t("a new game is deterministic by seed, six lines of one tier, easiest first", () => {
   const a = E.newGame(42, "climb"), b = E.newGame(42, "climb");
   eq(a, b); eq(a.lines.length, 6); ok(a.lines.every(l => l.t === 1));
-  for (let k = 2; k < 6; k++) ok(E.order(a.lines[k - 1], a.lines[k]) <= 0, "sorted after the plain first line");
+  for (let k = 1; k < 6; k++) if (k !== E.PLAIN_FIRST) ok(E.order(a.lines[k - 1], a.lines[k]) <= 0, "the gentle opening and the rest each sorted");
   eq(new Set(a.lines.map(l => l.id)).size, 6, "distinct lines");
   eq(a.power, { hint: 1, skip: 0, peek: 0, undo: 1 });
 });
@@ -302,7 +316,7 @@ t("used rises by exactly one per power-up, Undo included", () => {
 t("the first line of a run needs only + - x / (no signs, no brackets), on every seed and Daily", () => {
   for (let seed = 1; seed <= 400; seed++) {
     const a = E.newGame(seed, "climb"); ok(E.plain(a.lines[0]), "climb seed " + seed + " " + a.lines[0].n.join(" "));
-    eq(a.lines[0].t, 1); for (let k = 2; k < 6; k++) ok(E.order(a.lines[k - 1], a.lines[k]) <= 0, "rest sorted " + seed);
+    eq(a.lines[0].t, 1); for (let k = 1; k < 6; k++) if (k !== E.PLAIN_FIRST) ok(E.order(a.lines[k - 1], a.lines[k]) <= 0, "rest sorted " + seed);
     eq(new Set(a.lines.map(l => l.id)).size, 6, "distinct " + seed);
     const v = E.value(a.lines[0].n, a.lines[0].sol).v; eq(v, E.literal(a.lines[0].g), "the plain solution works");
   }
@@ -321,6 +335,19 @@ t("Skip gives a new line in the same tier and resets the streak", () => {
   const old = E.line(s), r = E.use(s, "skip"); ok(r.ok);
   const nw = E.line(r.state); eq(nw.t, old.t); ok(nw.id !== old.id); eq(r.state.streak, 0); eq(r.state.power.skip, 0);
   ok(!r.state.lines.some((l, k) => k !== r.state.idx && l.id === nw.id), "not a line already in the round");
+});
+t("D9: a Daily is finished only when all six lines are made (Show answer lines do not count)", () => {
+  let d = E.newGame(20261121, "daily");
+  for (let k = 0; k < 6; k++) { ok(!E.dailyDone(d), "not before the end"); d = E.reveal(d).state; d = E.next(d).state; }
+  ok(d.over && d.solved === 0 && !E.dailyDone(d), "every line given up: over, not finished");
+  d = E.newGame(20261121, "daily");
+  for (let k = 0; k < 6; k++) { d = k === 2 ? E.reveal(d).state : solveLine(d); d = E.next(d).state; }
+  ok(d.over && d.solved === 5 && !E.dailyDone(d), "five made, one given up: not finished");
+  d = E.newGame(20261121, "daily");
+  for (let k = 0; k < 6; k++) { d = solveLine(d); d = E.next(d).state; }
+  ok(d.over && d.solved === 6 && E.dailyDone(d), "all six made: finished");
+  let c = E.newGame(5, "climb"); for (let k = 0; k < 6; k++) { c = solveLine(c); c = E.next(c).state; }
+  ok(c.over && !E.dailyDone(c), "a Climb round is never a Daily");
 });
 t("a round of six ends; Climb's next round climbs a tier; Daily does not continue", () => {
   let s = E.newGame(31, "climb");
@@ -450,7 +477,8 @@ t("engine is pure: no DOM, storage or clock", () => {
 t("client wiring for the redesign", () => {
   const src = fs.readFileSync(path.join(__dirname, "../six/game.js"), "utf8"), html = fs.readFileSync(path.join(__dirname, "../six/index.html"), "utf8");
   ok(/report\("solve", \{ tier: L\.t, helped: !!state\.helped, sqrt: n\.sqrt, fact: n\.fact, mode: state\.mode, round: state\.round,\s+streak: runs\[mode\]\.streak/.test(src), "solve fields");
-  ok(/report\("end", \{ mode: state\.mode, solved: state\.solved, round: state\.round/.test(src), "end fields");
+  ok(/report\("end", \{ mode: daily && !full \? "daily-open" : state\.mode, solved: state\.solved, round: state\.round, daily: full \}\)/.test(src), "end fields (D9: daily only when finished)");
+  ok(/if \(full\) \{ try \{ if \(PG\) PG\.daily\("six", [^;]*\{ score: state\.used \| 0, low: true \}\)/.test(src), "D9: the Today chip only for a finished Daily, scored by power-ups used (fewer is better)");
   ok(/PG\.put\("six"/.test(src) && /PG\.daily\("six"/.test(src) && /U\.howto\("six", \{ title: "Six", steps: STEPS, saved: !!loaded \|\| demoed \}\)/.test(src), "progress and the shared how-to (D8)");
   ok(/NumbericsMusic\.duck\(on\)/.test(src) && /TR\.pills\(\$\("over-pills"\)/.test(src), "duck and pills");
   ok(/<details class="how"><summary>How to play<\/summary>/.test(html) && /id="over-pills" class="tro-pills"/.test(html) && /id="games" class="cards"/.test(html), "page parts");

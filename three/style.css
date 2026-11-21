@@ -40,15 +40,19 @@
 .mini.one{ background:hsl(230 10% 78%); } .mini.two{ background:hsl(230 8% 64%); }
 .mini.three{ background:hsl(var(--h) var(--s,62%) var(--l)); }
 
-/* Flush (REDESIGN.md 5.4): the rainbow sweeps along the run (420 ms, 60 ms apart per tile, from game.js --d), then
-   game.js shrinks each run tile away. The sweep is colour and opacity, so it stays under reduced motion as a still
-   outline (html[data-motion], the in-app setting first, then the device) */
-.tiles > .tile.run{ z-index:2; }
-.tile.run::after{ content:""; position:absolute; inset:-3px; border-radius:calc(var(--tile-radius) + 3px); pointer-events:none;
+/* Flush (REDESIGN.md 5.4; TRIAGE4 mechanics #2/#3, craft #27, #29): the moment the slide lands, the run leaves the board
+   (game.js beat(): the layer keeps its tiles only as leaving ghosts, .gone under the others) and the dealt tile enters.
+   Each ghost swells and shrinks away while a bright rainbow sweeps it, 20 ms apart (--d), 260 ms each: the whole flush,
+   slide included, is under 400 ms with no still frame. Under reduced motion (html[data-motion], the in-app setting
+   first, then the device) the ghosts keep a still rainbow outline while they fade (colour and opacity, not motion). */
+.nmm-layer:not(.nmm-reduced) > .tile.run.nmm-out > .face{ animation:thr-flush 260ms var(--e-out) var(--d,0ms) both; }
+@keyframes thr-flush{ 0%{ transform:scale(1); opacity:1; } 30%{ transform:scale(1.1); opacity:1; } 100%{ transform:scale(0); opacity:0; } }
+.tile.run::after{ content:""; position:absolute; inset:0; border-radius:var(--tile-radius); pointer-events:none;
   background:linear-gradient(90deg,#ff5a52,#ff9f40,#ffe14a,#5fd37a,#4fb0ff,#7c7cff,#c77dff,#ff5a52) 0 0/300% 100%;
-  opacity:0; mix-blend-mode:screen; animation:sweep 420ms ease-out var(--d,0ms) both; }
-@keyframes sweep{ 0%{ opacity:0; background-position:100% 0; } 30%{ opacity:.85; } 100%{ opacity:0; background-position:0 0; } }
-.tile.run.still::after{ animation:none; opacity:1; mix-blend-mode:normal; background:none;
+  opacity:0; animation:sweep 260ms ease-out var(--d,0ms) both; }
+@keyframes sweep{ 0%{ opacity:0; background-position:100% 0; transform:scale(1); } 25%{ opacity:.9; transform:scale(1.08); }
+  100%{ opacity:0; background-position:0 0; transform:scale(.2); } }
+.tile.run.still::after{ animation:none; opacity:1; background:none; transform:none;
   border:3px solid; border-image:linear-gradient(90deg,#ff5a52,#ffe14a,#5fd37a,#4fb0ff,#c77dff) 1; border-radius:0; }
 :root[data-motion="reduced"] .tile.run::after{ animation:none; }
 /* the Best stat's gold ring on a new best (REDESIGN.md 8.5): opacity only */
@@ -69,11 +73,12 @@ details.how .btn{ min-height:var(--tap); }
 .more{ margin:22px 0 8px; }
 .more h2{ font-size:var(--fs-lg); margin:0 0 10px; }
 .more .cards{ grid-template-columns:repeat(2,minmax(0,1fr)); }
-/* the end card: See the board + New game side by side */
+/* the end card: See the board (or, stuck with only Undo left, Undo) + New game side by side */
 .over .row{ margin:4px 0 0; }
+.over .btn[hidden]{ display:none; }
 /* the board's focus and aiming rings sit inside the panel, never out toward the page edge */
 .board:focus-visible{ outline-offset:-2px; }
 .board.targeting{ box-shadow:inset 0 0 0 2px var(--accent); }
 /* A1 (REDESIGN.md 1.1: status copy is 14px): the hint band keeps room for two lines, as Four and Nine do, so a longer
    keyboard targeting line never moves the board */
-.hint{ min-height:2.9em; line-height:1.45; display:flex; align-items:center; justify-content:center; }
+.hint{ min-height:2.9em; line-height:1.45; display:flex; align-items:center; justify-content:center; text-wrap:balance; }

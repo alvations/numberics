@@ -259,8 +259,9 @@
   // Strength per level. loose: chance a turn picks at random among the columns the search does not see losing;
   // blunder: chance a loose turn ignores even that (any legal column). A win in one is always taken.
   // missTen (Easy): chance it misses a win in one that is only a ten-line (round 3, gameplay #9).
+  // blockVertical (Easy): a loose turn still blocks a stack of three of the player's (round 4, gameplay #1).
   // Tuned (round 3) against the careful player of tools/measure-four.js (blocks every ring, never drops in a marked column).
-  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.5, missTen: 0.4 }, medium: { depth: 6, nodes: 20000, loose: 0.75, blunder: 0.2 },
+  var LV = { easy: { depth: 2, nodes: 3000, loose: 1, blunder: 0.5, missTen: 0.4, blockVertical: true }, medium: { depth: 6, nodes: 20000, loose: 0.75, blunder: 0.2 },
              hard: { depth: 14, nodes: 40000, loose: 0.5, blunder: 0.15 } };
 
   function Search(own, num, toMove, masks, budget) {
@@ -447,6 +448,9 @@
         var r2 = rand(s.aiSeed); s.aiSeed = r2[1];
         col = ok[Math.floor(r2[0] * ok.length)];
       }
+      // Easy never lets a plain vertical four in: the most visible miss in the genre (TRIAGE4, gameplay #1). Only
+      // a stack of three of the player's discs is blocked for sure; every other threat keeps Easy's loose play.
+      if (lp.blockVertical && !won) { var vb = verticalThreat(s.own, 1); if (vb >= 0) col = vb; }
     }
     var d = drop(s, col);
     actions.push({ type: "drop", arg: col, cell: d.cell });
@@ -468,6 +472,14 @@
     var out = {}, any = false;
     Object.keys(scores).forEach(function (k) { if (!w[k]) { out[k] = scores[k]; any = true; } });
     return any ? out : null;
+  }
+  // the column where `p` (1 the player, 2 the computer) has three of its own stacked on top with room for a fourth
+  function verticalThreat(own, p) {
+    for (var i = 0; i < 7; i++) {
+      var c = ORDER[i], h = height(own, c);
+      if (h >= 3 && h < ROWS && own[(h - 1) * COLS + c] === p && own[(h - 2) * COLS + c] === p && own[(h - 3) * COLS + c] === p) return c;
+    }
+    return -1;
   }
   function immediateWin(s, n, own, num) {
     own = own || s.own; num = num || s.num;
@@ -514,5 +526,5 @@
   return { COLS: COLS, ROWS: ROWS, TEN: TEN, CAP: CAP, MINE: MINE, BAG: BAG, POWERS: POWERS, LEVELS: LEVELS, WINDOWS: WIN,
            newGame: newGame, drop: drop, use: use, legal: legal, height: height, canPop: canPop, threats: threats, opens: opens,
            linesAt: linesAt, computerTurn: computerTurn, bestMove: bestMove, analyse: analyse, rand: rand,
-           _setBag: setBag, _LV: LV };
+           _setBag: setBag, _LV: LV, _verticalThreat: verticalThreat };
 });

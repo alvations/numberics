@@ -7,7 +7,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const idle = (p) => p.waitForFunction(() => window.__five && !window.__five.busy && (window.__five.state.turn === "p" || window.__five.state.roundOver), null, { timeout: 5000 });
   const forge = (p, patch) => p.evaluate((patch) => {
     const s = JSON.parse(JSON.stringify(window.__five.state));
-    Object.assign(s, { turn: "p", roundOver: null, matchOver: null, shield: null, midTurn: false, prev: null, seen: {}, quiet: 0 }, patch);
+    Object.assign(s, { turn: "p", roundOver: null, matchOver: null, shield: null, midTurn: false, prev: null, seen: {}, quiet: 0, undone: false }, patch);
     window.__five.state = s;
   }, patch);
   const st = (p) => p.evaluate(() => window.__five.state);
@@ -30,7 +30,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let s = await st(p);
   ck("the computer opened the round", s.moves >= 1 && s.tiles.reduce((a, b) => a + b, 0) !== 4 || s.roundOver, JSON.stringify(s.tiles));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-  ck("R16: pills are You, Computer, Record; an empty Record reads a dimmed none", (await p.locator(".stat span").allTextContents()).join(",") === "You,Computer,Record" &&
+  // cold #20 (round 4): the rounds of this match and the matches record are two named boxes, not one pair of pairs
+  ck("R16, cold #20: pills are Rounds (you : computer) and Matches; an empty Matches reads a dimmed none", (await p.locator(".stat > span").allTextContents()).join(",") === "Rounds,Matches" &&
+    /^0:0$/.test((await p.textContent("#rounds")).replace(/\s/g, "")) && (await p.getAttribute("#rounds", "aria-label")) === "Rounds: you 0, computer 0" &&
     (await p.textContent("#matches")) === "none" && await p.locator("#matches.none").count() === 1);
   ck("R12: Level switch before your first move is one tap (the computer's opener is not you)", await p.evaluate(() => !window.NumbericsFive.played(window.__five.state)));
   await forge(p, { tiles: [2, 1, 1, 1] });
@@ -122,7 +124,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await slot(p, 0).click(); await slot(p, 3).click();
   await card(p);
   ck("round 3: match won reads 'You win'", (await p.textContent("#over-title")) === "You win" && (await p.textContent("#again")) === "New game", await p.textContent("#over-title"));
-  ck("round 3: match summary 'Match won 3-1 · Easy' (a first visit plays Easy)", (await p.textContent("#over-text")) === "Match won 3-1 · Easy", await p.textContent("#over-text"));
+  ck("round 3: match summary 'Match won 3-1 · Easy' (a first visit plays Easy)", (await p.textContent("#over-text")).replace(/\u00a0/g, " ").replace(/\u2060/g, "") === "Match won 3-1 · Easy", await p.textContent("#over-text"));
   ck("R8: the headline is white (--ink), not gold", await p.evaluate(() => getComputedStyle(document.getElementById("over-title")).color === (n => { const pr = document.createElement("i"); pr.style.color = getComputedStyle(document.documentElement).getPropertyValue(n).trim(); document.body.appendChild(pr); const c = getComputedStyle(pr).color; pr.remove(); return c; })("--ink")));
   ck("matches record counts the win", (await p.textContent("#matches")) === "1-0");
   await shot(p, "match");
@@ -141,7 +143,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ctx = await browser.newContext({ viewport: { width: 375, height: 667 } });
   p = await ctx.newPage(); const e4 = []; p.on("pageerror", e => e4.push(e.message));
   await go(p); await idle(p);
-  ck("R6: H1 is the game name, subtitle starts with the Numberics link", (await p.textContent("h1")) === "Five" && (await p.textContent(".sub a")) === "Numberics" && /^Numberics · [A-Z].*\.$/.test((await p.textContent(".sub")).trim()));
+  ck("R6, family: H1 is the game name, the subtitle is one plain line (no 'Numberics ·' link: the top bar mark links home)", (await p.textContent("h1")) === "Five" && await p.locator(".sub a").count() === 0 && /^[A-Z][^·]*\.$/.test((await p.textContent(".sub")).trim()));
+  ck("family: the games list sits under 'More number games'", (await p.textContent("#more")) === "More number games" && await p.locator("#more + #games").count() === 1);
   ck("how-to has no jargon, says 'at 5 or more' and 'you can always win'", await p.evaluate(() => { const t = document.querySelector(".how").textContent; return !/seat|solved|opens|perfect play/i.test(t) && /5 or more bursts/.test(t) && /you can always win/.test(t); }));
   ck("R11: restart says New game", (await p.textContent("#new")) === "New game");
   // R1: a lost round with a snapshot and Undo stock: Undo is aria-disabled and a tap explains why
@@ -159,7 +162,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R1: tapping it changes nothing and says why", s.matchOver === "c" && s.power.p.undo === undoLeft && undoLeft >= 2 && /Undo: Take back.*Not once a round is decided\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("R8: the lost-match headline fits one line at 375px", await p.evaluate(() => { const h = document.getElementById("over-title"); return h.textContent === "The computer wins" && h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
   ck("record counts the loss", (await p.textContent("#matches")) === "0-1");
-  ck("round 3: match lost summary 'Match lost 0-3 · Easy'", (await p.textContent("#over-text")) === "Match lost 0-3 · Easy", await p.textContent("#over-text"));
+  ck("round 3: match lost summary 'Match lost 0-3 · Easy'", (await p.textContent("#over-text")).replace(/\u00a0/g, " ").replace(/\u2060/g, "") === "Match lost 0-3 · Easy", await p.textContent("#over-text"));
   await shot(p, "lost-375");
   await p.click("#again"); await idle(p);
   // R5: an empty tray button explains itself in the hint line
@@ -357,7 +360,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     level: window.__five.state.level, moves: window.__five.state.moves }));
   ck("first visit: the How to play sheet opens by itself", how.open === "howto" && how.title === "How to play Five", JSON.stringify(how));
   ck("first visit: three steps, one sentence each, as 9.5 words them", JSON.stringify(how.steps) === JSON.stringify(["Tap your tile, then a tile to add it onto.",
-    "A tile at five or more bursts.", "Burst both of the computer's tiles to win the round. First to three."]) && how.pics === 3, JSON.stringify(how.steps));
+    "A tile at five or more bursts.", "When both computer tiles have burst, the round is yours. First to three."]) && how.pics === 3, JSON.stringify(how.steps));
   ck("first visit: the match is on Easy", how.level === "easy");
   await p.waitForTimeout(1300);
   ck("first visit: the computer waits while the steps are open", (await st(p)).moves === 0);
@@ -409,11 +412,40 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("5.6: the added tile's copy flies (two tracks, 260 ms, --e-fly, an added lift and swell)", fl.fly && fl.text === "+2" && fl.n === 2 && fl.dur.every(d => d === 260) &&
     fl.ease === "cubic-bezier(0.3, 0.7, 0.2, 1)" && fl.comp === "add" && /translateY\(-6%\) scale\(1\.08\)/.test(fl.lift), JSON.stringify(fl));
   ck("5.6: while it flies the target still shows its old number (the state is already 3)", fl.shown === "1" && fl.state === 3 && fl.same, JSON.stringify(fl));
-  await p.waitForTimeout(120); await shot(p, "mid-flight");
-  await p.waitForTimeout(170);
+  await p.waitForTimeout(40); await shot(p, "mid-flight");
+  await p.waitForFunction(() => document.querySelector('.slot[data-i="2"] .tile').textContent === "3", null, { timeout: 2000, polling: 2 });
   const ld = await p.evaluate(() => { const t = document.querySelector('.slot[data-i="2"] .tile'), a = t.getAnimations();
-    return { text: t.textContent, pop: a.some(x => x.effect.getKeyframes()[0].transform === "scale(0.72)" && x.effect.getTiming().duration === 180), fly: document.querySelectorAll("#fx .fly").length }; });
-  ck("5.6: on landing the number changes and the target pops (.72 to 1.14 to 1, 180 ms)", ld.text === "3" && ld.pop && ld.fly === 0, JSON.stringify(ld));
+    return { text: t.textContent, pop: a.some(x => x.effect.getKeyframes()[0].transform === "scale(1)" && /scale\(1\.14\)/.test(x.effect.getKeyframes()[1].transform) && x.effect.getTiming().duration === 180) }; });
+  ck("5.6, craft #3: on landing the number changes and the target pops from its own size (1 to 1.14 to 1, 180 ms)", ld.text === "3" && ld.pop, JSON.stringify(ld));
+  await p.waitForTimeout(300);
+  ck("5.6: the copy is gone after the flight", await p.evaluate(() => document.querySelectorAll("#fx .fly").length === 0));
+  // craft #3 (round 4), frame by frame on every flight shape (up, across, diagonal, and the computer's own): the "+N" copy
+  // never covers the target (at half overlap or more it is invisible), the target always holds a full-size tile (no empty
+  // frame, never shrunk below its size), its number changes once, and the copy's own resting opacity is 0 (a dropped fill
+  // cannot flash it back on its source)
+  const frames = async (tiles, from, to) => { await idle(p); await forge(p, { tiles });
+    return p.evaluate(async ([from, to]) => {
+      const rows = [], t0 = performance.now(), sl = document.querySelector('.slot[data-i="' + to + '"]'), sr = sl.getBoundingClientRect(), old = sl.firstElementChild.textContent;
+      window.__five.tap(from); window.__five.tap(to);
+      const f = document.querySelector("#fx .fly"), rest = f ? f.style.opacity : null;
+      await new Promise(res => { const step = () => {
+        const tile = sl.firstElementChild, fl = document.querySelector("#fx .fly"), r = { t: performance.now() - t0 };
+        r.text = tile ? tile.textContent : ""; r.op = tile ? +getComputedStyle(tile).opacity : 0;
+        const m = tile && getComputedStyle(tile).transform; r.sc = !m || m === "none" ? 1 : +m.split("(")[1].split(",")[0];
+        if (fl) { const b = fl.getBoundingClientRect(), ox = Math.max(0, Math.min(b.right, sr.right) - Math.max(b.left, sr.left)), oy = Math.max(0, Math.min(b.bottom, sr.bottom) - Math.max(b.top, sr.top));
+          r.ov = ox * oy / (sr.width * sr.height); r.fo = +getComputedStyle(fl).opacity; }
+        rows.push(r); if (r.t < 450) requestAnimationFrame(step); else res(); }; requestAnimationFrame(step); });
+      return { rows, old, rest };
+    }, [from, to]); };
+  for (const [name, tiles, from, to] of [["up", [2, 1, 1, 1], 0, 2], ["across", [2, 1, 1, 1], 0, 1], ["diagonal", [2, 1, 1, 1], 0, 3]]) {
+    const fr = await frames(tiles, from, to), R = fr.rows;
+    const covered = R.filter(r => r.ov >= 0.5 && r.fo > 0.05), empty = R.filter(r => !r.text || r.op < 0.99 || r.sc < 0.95); // the pop's settle dips to .98, never an inset square
+    const changes = R.map(r => r.text).filter((x, i, a) => i && x !== a[i - 1]).length, landed = R.findIndex(r => r.text !== fr.old);
+    ck("craft #3 (" + name + "): the '+N' never covers the target", R.some(r => r.fo > 0.5) && covered.length === 0, JSON.stringify(covered.slice(0, 3)));
+    ck("craft #3 (" + name + "): no empty or shrunken frame before the new value, one change", empty.length === 0 && changes === 1 && landed > 0 &&
+      R[landed].t < 200, JSON.stringify({ empty: empty.slice(0, 3), changes, at: landed >= 0 && R[landed].t }));
+    ck("craft #3 (" + name + "): the copy rests at opacity 0", fr.rest === "0", String(fr.rest));
+  }
   ck("7.3: land() at impact", await p.evaluate(() => window.__calls.sfx.includes("land")));
   // input during the computer's flight: two quick taps are applied at once (the flight ends, the move is made)
   await p.waitForFunction(() => window.__five.anim && window.__five.state.turn === "p", null, { timeout: 4000, polling: 5 });
@@ -427,9 +459,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   if ((await st(p)).roundOver) { await p.click("#again"); }
   await idle(p);
   // a burst (not the deciding one): 1 -> 1.15 -> 0 over 200 ms, 8 shards over 420 ms, then the outline fades in
-  await forge(p, { tiles: [4, 1, 2, 1] });
+  await idle(p); await forge(p, { tiles: [4, 1, 2, 1] });
   await p.evaluate(() => { window.__five.tap(0); window.__five.tap(2); });
-  await p.waitForTimeout(285);
+  await p.waitForFunction(() => document.querySelector("#fx .ghost"), null, { timeout: 2000, polling: 2 });
+  await p.waitForTimeout(60);
+  // craft #3 (round 4): shards clearly visible: at least 10% of the tile, a bright fill that stands off the board, and a flash
+  const vis = await p.evaluate(() => {
+    const lum = (c) => { const v = c.match(/[\d.]+/g).slice(0, 3).map(Number).map(x => { x /= 255; return x <= 0.03928 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4); }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; };
+    const board = lum(getComputedStyle(document.getElementById("board")).backgroundColor), w = document.querySelector('.slot[data-i="2"]').getBoundingClientRect().width;
+    const sh = [...document.querySelectorAll("#fx .shard")].map(e => { const L = lum(getComputedStyle(e).backgroundColor); return { size: e.getBoundingClientRect().width / w, ratio: (Math.max(L, board) + 0.05) / (Math.min(L, board) + 0.05) }; });
+    return { sh, flash: document.querySelectorAll("#fx .flash").length };
+  });
+  ck("craft #3: 8 shards at least 10% of the tile, each standing off the board (contrast 1.9 or more), and a flash", vis.sh.length === 8 && vis.sh.every(x => x.size >= 0.1 && x.ratio >= 1.9) && vis.flash === 1, JSON.stringify(vis));
   const bu = await p.evaluate(() => {
     const g = document.querySelector("#fx .ghost"), ga = g ? g.getAnimations() : [], sh = [...document.querySelectorAll("#fx .shard")];
     const sa = sh.map(s => s.getAnimations()[0]).filter(Boolean), out = document.getAnimations().filter(a => a.effect.pseudoElement === "::after");
@@ -440,8 +481,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("5.6: 8 shards fly out over 420 ms; the empty outline fades in", bu.shards === 8 && bu.sd === 420 && bu.outline >= 1, JSON.stringify(bu));
   ck("7.3: burst() at the burst", bu.burstSfx);
   await shot(p, "burst");
-  await p.waitForTimeout(500);
-  ck("the shards and the ghost clean themselves up", await p.evaluate(() => document.querySelectorAll("#fx .shard, #fx .ghost:not(.final)").length === 0));
+  await p.waitForTimeout(390); // the shards end 420 ms after the burst; the computer's reply starts 520 ms after it
+  ck("the shards, the flash and the ghost clean themselves up", await p.evaluate(() => document.querySelectorAll("#fx .shard, #fx .flash, #fx .ghost:not(.final)").length === 0));
   ck("no page errors (motion)", e8.length === 0, e8.join("|"));
 
   // 9. trophies on a scripted line, the end-card pills, the music duck, progress
@@ -540,7 +581,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
       }
       await sleep(25);
     }
-    await sleep(700); stop = true;
+    await sleep(1500); stop = true; // the computer's last reply (think 520 ms, landing, 420 ms of shards) has ended
     const fr = frames.slice(3).sort((a, b) => a - b);
     return { made, ms: Math.round(performance.now() - t0), n: fr.length, p95: fr[Math.floor(fr.length * 0.95)], worst: fr[fr.length - 1], over20: fr.filter(x => x > 20).length,
       maxExtra, maxFx, nodes10, nodesEnd: document.getElementsByTagName("*").length, fxEnd: document.getElementById("fx").children.length };
@@ -551,8 +592,47 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("10: frame p95 <= 16.7 ms desktop (0.8 ms vsync jitter allowed, as the motion probe)", sess.p95 <= 17.5, JSON.stringify(sess));
   ck("10: frames over 20 ms at most 2%", sess.over20 <= Math.ceil(sess.n * 0.02), JSON.stringify(sess));
   ck("10: tile nodes <= tiles on board + 8 at every frame (the copy and the ghost)", sess.maxExtra <= 8, JSON.stringify(sess));
-  ck("10: effect nodes bounded (copy + ghost + 8 shards) and cleaned up", sess.maxFx <= 10 && sess.fxEnd <= 1, JSON.stringify(sess));
+  ck("10: effect nodes bounded (copy + ghost + flash + 8 shards) and cleaned up", sess.maxFx <= 11 && sess.fxEnd <= 1, JSON.stringify(sess));
   ck("10: DOM nodes after the session within +5% of after 10 moves", sess.nodesEnd <= sess.nodes10 * 1.05, JSON.stringify(sess));
   ck("no page errors (session)", e12.length === 0, e12.join("|"));
   await ctx.close();
+
+  // 12. round 4 layout (craft #6, #8, B3; all ages #5): labels at least 12 px, no sideways scroll at 320 with Larger text,
+  // the whole board on screen on short phones, the end card fades in with the game glyph and shows every pill
+  const small = () => { const out = []; document.querySelectorAll("main *").forEach(e => {
+    if (e.closest(".cards,#fx,.tile,svg,.sheet")) return; // the card previews are decorative numerals; tiles are numbers
+    if (![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())) return;
+    const cs = getComputedStyle(e), r = e.getBoundingClientRect(); if (!r.width || cs.visibility === "hidden") return;
+    if (parseFloat(cs.fontSize) < 12) out.push((e.className || e.tagName) + " " + e.textContent.trim().slice(0, 12) + " " + cs.fontSize); }); return out; };
+  for (const [w, h, large] of [[390, 844, false], [320, 568, true], [375, 667, true], [375, 667, false]]) {
+    const c = await browser.newContext({ viewport: { width: w, height: h } });
+    if (large) await c.addInitScript(() => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ text: "large" })); } catch (e) { /* blocked */ } });
+    const q = await c.newPage(); const e13 = []; q.on("pageerror", e => e13.push(e.message));
+    await go(q); await idle(q);
+    await q.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__five.state)); s.shield = { side: "p", idx: 0 }; window.__five.state = s; });
+    const tag = w + "x" + h + (large ? " Larger text" : "");
+    const sm = await q.evaluate(small);
+    ck("craft #8: every label at least 12 px, the side labels and the Shield tag included (" + tag + ")", sm.length === 0 &&
+      await q.evaluate(() => [...document.querySelectorAll(".who")].every(e => parseFloat(getComputedStyle(e).fontSize) >= 12) &&
+        parseFloat(getComputedStyle(document.querySelector(".slot.shield"), "::before").fontSize) >= 12), JSON.stringify(sm));
+    ck("B3: no sideways scroll, top-bar buttons 44 x 44 (" + tag + ")", await q.evaluate(() => document.documentElement.scrollWidth <= innerWidth &&
+      [...document.querySelectorAll(".topbar .tb-btn")].every(b => { const r = b.getBoundingClientRect(); return r.width >= 43.5 && r.height >= 43.5; })));
+    if (w === 375) ck("all ages #5: the whole board, your tiles included, is on screen without scrolling (" + tag + ")", await q.evaluate(() =>
+      document.getElementById("board").getBoundingClientRect().bottom <= innerHeight + 15 && [0, 1].every(i => document.querySelector('.slot[data-i="' + i + '"]').getBoundingClientRect().bottom <= innerHeight)),
+      JSON.stringify(await q.evaluate(() => [document.getElementById("board").getBoundingClientRect().bottom, innerHeight])));
+    if (w === 320) { // the end card with three pills at the smallest phone: the glyph, the fade, every pill whole, the buttons in view
+      await forge(q, { tiles: [1, 0, 0, 4], wins: { p: 2, c: 0 }, level: "medium" });
+      await q.evaluate(() => { const T = window.NumbericsTrophies; T.report = () => ["five_match", "five_medium", "five_sweep"]; });
+      await slot(q, 0).click(); await slot(q, 3).click(); await card(q);
+      const cd = await q.evaluate(() => { const o = document.getElementById("over"), r = o.getBoundingClientRect(), b = document.getElementById("again").getBoundingClientRect();
+        return { glyph: !!o.querySelector(":scope > svg.glyph"), last: o.lastElementChild.classList.contains("row"), fade: getComputedStyle(o).animationName,
+          inView: b.bottom <= r.bottom + 1 && b.top >= r.top, pills: o.querySelectorAll(".tro-pills .trophy").length,
+          whole: [...o.querySelectorAll(".tro-pills .trophy")].every(t => { const q = t.getBoundingClientRect(); return t.scrollWidth <= t.clientWidth + 1 && q.left >= r.left - 1 && q.right <= r.right + 1; }), text: getComputedStyle(document.getElementById("over-text")).fontSize }; });
+      ck("family: the end card has the game glyph, fades in, keeps its buttons last and in view (" + tag + ")", cd.glyph && cd.last && /fadein/.test(cd.fade) && cd.inView && cd.pills >= 3 && cd.whole, JSON.stringify(cd));
+      await q.waitForTimeout(300); await shot(q, "card-320-large");
+    }
+    if (w === 375 && large) await shot(q, "375-large");
+    ck("no page errors (" + tag + ")", e13.length === 0, e13.join("|"));
+    await c.close();
+  }
 };

@@ -19,7 +19,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(page);
   ck("49 well cells", await p.locator(".cells div").count() === 49);
-  ck("header: game name, Numberics link, tagline with a full stop (R6)", (await p.textContent("h1")) === "Seven" && /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 1);
+  ck("header: game name, a plain tagline with a full stop, no Numberics link (R6, TRIAGE4 Family)", (await p.textContent("h1")) === "Seven" && /^[A-Z][^·]+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 0);
+  ck("one games heading: More number games (TRIAGE4 Family)", (await p.textContent("section.more h2")) === "More number games" && await p.locator("section.more #games").count() === 1);
+  await p.evaluate(() => { const s = window.__seven.state; if (s.next === 8) { s.next = 5; window.__seven.state = s; } }); // an egg in Next is explained first (section 12)
   ck("level is in the hint line", /^Level 1 · /.test(await p.textContent("#hint")));
   ck("discs drawn", await p.locator(".disc:not(.ghost)").count() > 0);
   ck("next disc preview", await p.locator("#next .mini").count() === 1);
@@ -388,6 +390,24 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await setup(p, endRows, { left: 1, next: 4, score: 300, prev: null, power: { undo: 0, smash: 0, hold: 0, crack: 0 } }); await drop(3);
   ck("trophy: Daily well (finish a Daily)", await has("sev_daily"));
   ck("the finished Daily is on the Today card", await p.evaluate(() => window.NumbericsProgress.today().seven === "300"));
+  // D9: today's Daily is one run. Its end card says so, shows the result and offers Classic; it stays finished
+  await p.waitForSelector("#over", { state: "visible", timeout: 2500 });
+  ck("D9: the Daily's end card says Today's Daily is done and shows the result", (await p.textContent("#over-best")) === "Today's Daily is done." &&
+    await p.isVisible("#over-best") && /score 300/.test(await p.textContent("#over-text")), await p.textContent("#over-best"));
+  ck("D9: the Today chip keeps the day's score (NumbericsProgress.daily with a score)", await p.evaluate(() => {
+    window.NumbericsKit.flush(); const d = JSON.parse(localStorage.getItem("numberics_progress_v1")).daily, e = d[Object.keys(d)[0]].seven; return !!e && e.s === 300; }));
+  ck("D9: no second run: the card's button is Play Classic", (await p.textContent("#again")) === "Play Classic");
+  await p.click("#again");
+  ck("D9: Play Classic goes to Classic", (await st(p)).mode === "classic");
+  await p.evaluate(() => { window.__snd = []; });
+  await p.click('#modes [data-mode="daily"]');
+  ck("D9: back in the Daily, today's run is still finished with its score", (await st(p)).over && (await st(p)).score === 300 && await p.isVisible("#over"));
+  ck("D9: revisiting a finished run does not replay the end sound", await p.evaluate(() => !window.__snd.some(x => /^(best|win|lose)$/.test(x[0]))), JSON.stringify(await p.evaluate(() => window.__snd.map(x => x[0]))));
+  ck("D9: the page's New game in the Daily reads Play Classic", (await p.textContent("#new")) === "Play Classic");
+  await p.goto(page + "?mode=daily");
+  const dbg = await p.evaluate(() => ({ s: window.__seven.state.over, sc: window.__seven.state.score, m: window.__seven.mode, vis: !document.getElementById("over").hidden, rev: window.__seven.revealing, best: document.getElementById("over-best").textContent }));
+  ck("D9: the Today chip's link opens the finished Daily, still locked", (await st(p)).over && (await st(p)).score === 300 && await p.isVisible("#over") &&
+    (await p.textContent("#over-best")) === "Today's Daily is done.", JSON.stringify(dbg));
   ck("no page errors in the motion and trophy run", e4.length === 0, e4.join("|"));
   await ctx.close();
 
@@ -460,5 +480,54 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("mode segments are 44 px targets", (await p.locator("#modes button").first().boundingBox()).height >= 44);
   await p.goto(page + "?mode=daily");
   ck("?mode=daily opens the Daily", (await st(p)).mode === "daily" && await p.locator('#modes [data-mode="daily"][aria-pressed="true"]').count() === 1);
+  ck("the how-to says the Next can be an egg you drop (cold #29)", await p.evaluate(() => window.NumbericsUI.close() || true) &&
+    /Next is sometimes a grey egg: drop it like a disc/.test(await p.evaluate(() => { window.__seven.howto(); return document.querySelector(".sheet .howto").textContent; })) &&
+    /across or down/.test(await p.textContent(".sheet .howto")));
+  await ctx.close();
+
+  // 11. a Daily begun before midnight and ended after it is not the new day's Daily (mechanics nit 3)
+  ctx = await newCtx({ viewport: { width: 390, height: 844 } });
+  p = await ctx.newPage(); await p.clock.setFixedTime(new Date(2026, 10, 21, 23, 58)); await p.goto(page + "?mode=daily");
+  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, score: 500, prev: null, power: { undo: 0, smash: 0, hold: 0, crack: 0 } });
+  await p.clock.setFixedTime(new Date(2026, 10, 22, 0, 3));
+  await p.focus("#board"); await p.keyboard.press("Enter"); await idle(p);
+  await p.waitForSelector("#over", { state: "visible", timeout: 2500 });
+  ck("yesterday's Daily ended after midnight is not on today's chip", (await st(p)).over && await p.evaluate(() => window.NumbericsProgress.today().seven === undefined));
+  ck("and it does not lock today's Daily: New game starts today's", (await p.textContent("#again")) === "New game" && (await p.textContent("#over-best")) !== "Today's Daily is done.");
+  await p.click("#again");
+  ck("today's Daily is the new day's well", await p.evaluate(() => { const s = window.__seven.state, f = window.NumbericsSeven.newGame(20261122, "daily");
+    return s.mode === "daily" && !s.over && s.drops === 0 && JSON.stringify(s.grid) === JSON.stringify(f.grid); }));
+  await ctx.close();
+
+  // 12. the chain toast never covers the level line (cold #30); an egg in Next is explained; the dots are a counter
+  for (const vp of [{ width: 390, height: 844 }, { width: 1280, height: 860 }, { width: 320, height: 568 }]) {
+    ctx = await newCtx({ viewport: vp }); p = await ctx.newPage(); await p.goto(page);
+    await p.evaluate(() => { const s = window.__seven.state; Object.assign(s, { left: 99, over: false, overflow: null, free: false, prev: null,
+      grid: [0,0,0,0,0,0,0,0,7,0,0,0,0,0,0,7,0,0,0,0,0,0,3,0,0,0,0,0,0,9,5,2,0,0,0,0,7,5,8,0,0,0,8,2,6,9,9,3,9], next: 7, seed: 3151602051 }); window.__seven.state = s; });
+    await p.focus("#board"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowRight");
+    await p.keyboard.press("Enter");
+    const ov = await p.evaluate(() => { const t = document.getElementById("toast"), a = t.getBoundingClientRect();
+      const hit = (id) => { const b = document.querySelector(id).getBoundingClientRect(); return !(a.bottom <= b.top || a.top >= b.bottom || a.right <= b.left || a.left >= b.right); };
+      return { on: t.classList.contains("on"), text: t.textContent, hit: hit("#hint"), stats: hit("header .stats"), a: [a.left, a.top, a.right, a.bottom] }; });
+    ck("the chain toast shows and covers neither the level line nor the score at " + vp.width, ov.on && /Chain of|Lucky Seven/.test(ov.text) && !ov.hit && !ov.stats, JSON.stringify(ov));
+    await idle(p);
+    await ctx.close();
+  }
+  ctx = await newCtx({ viewport: { width: 390, height: 844 } }); p = await ctx.newPage(); await p.goto(page);
+  await setup(p, ["5......", "e......", "e......", "e......", "e......", "e......", "e......"], { left: 1, next: 4, prev: null, power: { undo: 1, smash: 0, hold: 0, crack: 0 } });
+  await p.focus("#board"); await p.keyboard.press("Enter"); await idle(p);
+  const brink = (await st(p)).overflow;
+  await p.reload();
+  ck("a run on the brink (0 drops left) survives a reload, not replaced by a fresh run", !!brink && JSON.stringify((await st(p)).overflow) === JSON.stringify(brink) && (await st(p)).drops > 0);
+  await p.click("#over-end"); await p.reload();
+  ck("an ended run (0 drops left) survives a reload", (await st(p)).over && (await st(p)).drops > 0);
+  await p.click("#again");
+  ck("the drops counter has its number beside the dots (craft #40)", /^\d+ drops?$/.test(await p.textContent("#pips b")));
+  await setup(p, ["e......"], { next: 8, left: 9 });
+  ck("an egg in Next is explained in the hint line (cold #29)", (await p.textContent("#hint")) === "Next is an egg: drop it like any disc.");
+  ck("the Next egg label is at least 12 px", await p.evaluate(() => parseFloat(getComputedStyle(document.querySelector("#next .mini")).fontSize) >= 12));
+  for (let k = 0; k < 3; k++) { await setup(p, ["e......"], { next: 8, left: 9 }); await p.focus("#board"); await p.keyboard.press("Enter"); await idle(p); }
+  await setup(p, ["e......"], { next: 8, left: 9 });
+  ck("after three eggs the hint is the level line again", /^Level \d+ · /.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await ctx.close();
 };

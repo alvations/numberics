@@ -114,6 +114,8 @@ h1{ margin:0; font-size:var(--fs-2xl); line-height:1.05; letter-spacing:-.01em; 
   box-shadow:var(--sh-2), inset 0 0 0 1px var(--line);
   touch-action:none; user-select:none; -webkit-user-select:none; outline:none; container-type:size; }
 .board.targeting{ cursor:crosshair; box-shadow:var(--sh-2), 0 0 0 2px var(--accent); }
+/* TRIAGE4 (craft #18): a keyboard player sees that the board takes the arrow keys; the family's gold ring, as Sudoku's board */
+.board:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
 
 /* ===== number tile. A plain .tile is drawn as a face; in the keyed layer (motion.js) the .face inside it is.
    Blue and violet hues are lifted a little so --tile-ink keeps 4.5:1 on every hue (REDESIGN.md 1.1, tests/test-theme.js). ===== */
@@ -304,10 +306,13 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 @keyframes two-ring{ from{ box-shadow:0 0 0 0 var(--accent); opacity:1; } to{ box-shadow:0 0 0 .8cqw var(--accent); opacity:0; } }
 .tiles.nmm-reduced .tile.ring::after{ animation:two-ring-fade 420ms linear both; }
 @keyframes two-ring-fade{ from{ box-shadow:0 0 0 .8cqw var(--accent); opacity:1; } to{ box-shadow:0 0 0 .8cqw var(--accent); opacity:0; } }
-/* the score "+N" floats up 26 px and fades (640 ms); under reduced motion it only fades */
-.stat .plus{ position:absolute; left:0; right:0; top:4px; text-align:center; font-weight:800; color:var(--accent-text); pointer-events:none;
+/* the score "+N" (TRIAGE4, craft #3): it sits above the SCORE label, never on it, near the value's size with a halo in the
+   page colour so it reads over any text behind it; it floats up 16 px and fades (640 ms); under reduced motion it only fades */
+.stat .plus{ position:absolute; left:-8px; right:-8px; bottom:100%; text-align:center; font-weight:850; font-size:var(--fs-lg);
+  line-height:1.1; color:var(--accent-text); pointer-events:none; z-index:3; white-space:nowrap;
+  text-shadow:0 0 3px var(--bg), 0 0 6px var(--bg), 0 0 10px var(--bg);
   animation:two-plus 640ms var(--e-out) forwards; font-variant-numeric:tabular-nums; }
-@keyframes two-plus{ from{ opacity:1; transform:translateY(0); } to{ opacity:0; transform:translateY(-26px); } }
+@keyframes two-plus{ 0%{ opacity:0; transform:translateY(0); } 15%{ opacity:1; } 60%{ opacity:1; } 100%{ opacity:0; transform:translateY(-16px); } }
 :root[data-motion="reduced"] .stat .plus{ animation:two-fadeout 640ms linear forwards; }
 @keyframes two-fadeout{ to{ opacity:0; } }
 /* the New best moment: a gold ring on the Best stat (opacity, 420 ms) */
@@ -341,7 +346,7 @@ details.how p .btn{ margin-top:2px; }
 .nmm-layer.nmm-reduced > .tile.nmm-bump > .face,.nmm-layer.nmm-reduced > .tile.nmm-fadein > .face{ animation:nmm-fade var(--nmm-fade) linear backwards; }
 .nmm-layer.nmm-reduced > .tile.nmm-out > .face{ animation:nmm-fadeout var(--nmm-fade) linear forwards; }
 @keyframes nmm-pop{ 0%{ transform:scale(.72); } 60%{ transform:scale(1.14); } 100%{ transform:scale(1); } }
-@keyframes nmm-appear{ 0%{ opacity:0; transform:scale(.35); } 100%{ opacity:1; transform:scale(1); } }
+@keyframes nmm-appear{ 0%{ opacity:0; transform:scale(.35); } 40%{ opacity:1; } 100%{ opacity:1; transform:scale(1); } }
 @keyframes nmm-out{ to{ opacity:0; transform:scale(.6); } }
 @keyframes nmm-fade{ from{ opacity:0; } }
 @keyframes nmm-fadeout{ to{ opacity:0; } }
@@ -406,7 +411,7 @@ details.how p .btn{ margin-top:2px; }
 .over > .row:last-child,.over > .acts:last-child{ position:sticky; bottom:0; z-index:1; margin-bottom:0; padding:8px 0 20px; margin-top:-8px;
   background:var(--bg); border-radius:0; box-shadow:0 -10px 10px -6px var(--bg); }
 @media (max-width:400px){ .over > .row:last-child,.over > .acts:last-child{ padding-bottom:14px; } }
-.over.more > .row:last-child,.over.more > .acts:last-child{ border-top:1px solid var(--line-2); box-shadow:0 -10px 14px -6px rgba(0,0,0,.35); }
+.over.over-more > .row:last-child,.over.over-more > .acts:last-child{ border-top:1px solid var(--line-2); box-shadow:0 -10px 14px -6px rgba(0,0,0,.35); }
 /* D3: the Trophies sheet lists goals too: a not-yet-earned trophy is dimmed with its description */
 .tro-count{ margin:0 0 4px; color:var(--mute); font-size:var(--fs-sm); font-weight:650; }
 .tr.locked{ background:none; border-style:dashed; }

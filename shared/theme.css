@@ -300,7 +300,7 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .nmm-layer.nmm-reduced > .tile.nmm-bump > .face,.nmm-layer.nmm-reduced > .tile.nmm-fadein > .face{ animation:nmm-fade var(--nmm-fade) linear backwards; }
 .nmm-layer.nmm-reduced > .tile.nmm-out > .face{ animation:nmm-fadeout var(--nmm-fade) linear forwards; }
 @keyframes nmm-pop{ 0%{ transform:scale(.72); } 60%{ transform:scale(1.14); } 100%{ transform:scale(1); } }
-@keyframes nmm-appear{ 0%{ opacity:0; transform:scale(.35); } 100%{ opacity:1; transform:scale(1); } }
+@keyframes nmm-appear{ 0%{ opacity:0; transform:scale(.35); } 40%{ opacity:1; } 100%{ opacity:1; transform:scale(1); } }
 @keyframes nmm-out{ to{ opacity:0; transform:scale(.6); } }
 @keyframes nmm-fade{ from{ opacity:0; } }
 @keyframes nmm-fadeout{ to{ opacity:0; } }
@@ -367,7 +367,7 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .over > .row:last-child,.over > .acts:last-child{ position:sticky; bottom:0; z-index:1; margin-bottom:0; padding:8px 0 20px; margin-top:-8px;
   background:var(--bg); border-radius:0; box-shadow:0 -10px 10px -6px var(--bg); }
 @media (max-width:400px){ .over > .row:last-child,.over > .acts:last-child{ padding-bottom:14px; } }
-.over.more > .row:last-child,.over.more > .acts:last-child{ border-top:1px solid var(--line-2); box-shadow:0 -10px 14px -6px rgba(0,0,0,.35); }
+.over.over-more > .row:last-child,.over.over-more > .acts:last-child{ border-top:1px solid var(--line-2); box-shadow:0 -10px 14px -6px rgba(0,0,0,.35); }
 /* D3: the Trophies sheet lists goals too: a not-yet-earned trophy is dimmed with its description */
 .tro-count{ margin:0 0 4px; color:var(--mute); font-size:var(--fs-sm); font-weight:650; }
 .tr.locked{ background:none; border-style:dashed; }

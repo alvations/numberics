@@ -28,13 +28,14 @@
   var kbd = false; // the last power-up was armed from the keyboard
 
   // ---- saved data: one run per mode, best score per mode ----
-  // Every field the client or engine reads is checked, and prev (the Undo snapshot) is checked the same way.
+  // Every field the client or engine reads is checked, and prev (the Undo snapshot) is checked the same way. A run that
+  // has ended or sits on the brink has 0 drops left, and must load as it is (else the finished Daily came back fresh).
   function nat(v, min) { return Number.isInteger(v) && v >= (min || 0); }
   function validState(s, inner) {
     return !!s && typeof s === "object" && N.MODES.indexOf(s.mode) >= 0 && Array.isArray(s.grid) && s.grid.length === W * H &&
       s.grid.every(function (v) { return Number.isInteger(v) && v >= 0 && v <= 9; }) &&
       Number.isInteger(s.next) && s.next >= 1 && s.next <= N.EGG && Number.isInteger(s.held) && s.held >= 0 && s.held <= N.EGG &&
-      typeof s.score === "number" && s.score >= 0 && nat(s.seed) && nat(s.drops) && nat(s.level, 1) && nat(s.left, 1) &&
+      typeof s.score === "number" && s.score >= 0 && nat(s.seed) && nat(s.drops) && nat(s.level, 1) && nat(s.left, s.over || s.overflow ? 0 : 1) &&
       nat(s.bestChain) && nat(s.luckies) && nat(s.used) && typeof s.over === "boolean" &&
       (s.free === undefined || typeof s.free === "boolean") &&
       (s.out === undefined || (Array.isArray(s.out) && s.out.every(function (c) { return nat(c) && c < W; }))) &&
@@ -53,6 +54,8 @@
     var b = saved.best && saved.best[m]; if (typeof b === "number" && b >= 0 && (m !== "daily" || sameDay)) best[m] = b;
     var a = saved.start && saved.start[m]; start[m] = typeof a === "number" && a >= 0 && a <= best[m] ? a : best[m];
   });
+  // how many eggs this player has dropped (up to 3): until then, an egg in Next is explained in the hint line (cold #29)
+  var eggs = nat(saved.eggs) ? Math.min(saved.eggs, 3) : 0;
   var mode = N.MODES.indexOf(saved.mode) >= 0 ? saved.mode : "classic";
   // the Today card's chip links here with ?mode=daily (REDESIGN.md 3.4): open the Daily (every mode keeps its own run)
   try { if (/(^|[?&])mode=daily(&|$)/.test(window.location.search)) mode = "daily"; } catch (e) { /* no location */ }
@@ -69,8 +72,12 @@
     today = d; delete runs.daily; best.daily = 0; start.daily = 0;
   }
   function newRun(m) { if (m === "daily") checkDay(); start[m] = best[m]; runTro[m] = []; return fresh(m); }
+  // TRIAGE4 D9: today's Daily is one run. Once it has ended it stays on screen, finished, until the day changes; a run
+  // started before midnight is yesterday's (today is the day the run began) and never counts for the new day.
+  function current() { return today === K.daySeed(); }
+  function dailyLocked() { return mode === "daily" && current(); }
   var state = runs[mode] || newRun(mode);
-  var cursor = 3, targeting = null, aim = -1, viewing = false, note = "", revealing = false, revealT = null, carded = false;
+  var cursor = 3, targeting = null, aim = -1, viewing = false, note = "", revealing = false, revealT = null, carded = false, ended = false;
   var seq = M.seq(), gen = 0, fxAnims = [], shownScore = state.score, shownBest = Math.max(best[mode], state.score), shownNext = null, ducked = false;
   function busy() { return seq.busy(); }
 
@@ -81,7 +88,7 @@
   function persist() {
     runs[mode] = state;
     if (!state.overflow) best[mode] = Math.max(best[mode], state.score); // a run on the brink is not a result yet
-    store.save({ mode: mode, runs: runs, best: best, start: start, day: today, tro: runTro });
+    store.save({ mode: mode, runs: runs, best: best, start: start, day: today, tro: runTro, eggs: eggs });
     // the card summary (REDESIGN.md 3.5): the best of Classic and Blitz (the Daily best is only today's), and this run
     var b = Math.max(best.classic, best.blitz), live = state.drops > 0 && !state.over;
     try { if (PG && PG.put) PG.put("seven", { best: b ? "Best " + K.fmt(b) : "", live: live, liveText: live ? "Score " + K.fmt(state.score) : "" }); }
@@ -217,6 +224,7 @@
     }
     if (!N.hasRoom(state.grid)) return "The well is full. Use a power-up to make room.";
     var warn = warnText(); if (warn) return warn;
+    if (state.next === N.EGG && eggs < 3) return "Next is an egg: drop it like any disc.";
     return "Level " + state.level + " · " + (state.left === 1 ? "eggs rise after this drop." : state.left + " drops until the eggs rise.");
   }
   function renderChrome() {
@@ -231,7 +239,8 @@
     }
     var pips = $("pips"), total = N.dropsFor(state.mode, state.level); pips.textContent = "";
     for (var k = 0; k < total; k++) { var p = document.createElement("i"); if (k >= state.left) p.className = "used"; pips.appendChild(p); }
-    pips.title = state.left + " drops until the eggs rise";
+    if (!state.over && !state.overflow) { var cnt = document.createElement("b"); cnt.textContent = state.left + (state.left === 1 ? " drop" : " drops"); pips.appendChild(cnt); }
+    pips.title = state.left + (state.left === 1 ? " drop" : " drops") + " until the eggs rise";
     pips.setAttribute("aria-label", pips.title);
     Array.prototype.forEach.call($("modes").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-mode") === mode)); });
     renderTray();
@@ -243,6 +252,8 @@
     var brink = !!state.overflow, over = $("over");
     over.hidden = !(brink || (state.over && !viewing)) || revealing || busy(); // the well settles before any card
     $("new").style.visibility = over.hidden ? "" : "hidden";
+    // in today's Daily there is no second run: the page's button and the card's button go to Classic (D9)
+    $("new").textContent = $("again").textContent = dailyLocked() ? "Play Classic" : "New game";
     $("over-undo").hidden = $("over-end").hidden = !brink;
     $("over-view").hidden = $("again").hidden = brink;
     if (brink) {
@@ -254,19 +265,20 @@
       var u = state.used;
       $("over-text").textContent = "Level " + state.level + (u ? " · " + u + (u === 1 ? " power-up" : " power-ups") : "") +
         " · score " + K.fmt(state.score);
-      $("over-best").hidden = !(state.score > start[mode]);
+      $("over-best").hidden = !(state.score > start[mode]) && !dailyLocked();
+      $("over-best").textContent = dailyLocked() ? "Today's Daily is done." : "New best.";
     }
     // one pill per trophy earned in this run (8.1), on the end card only
     if (TR && TR.pills) TR.pills($("over-pills"), state.over ? runTro[mode] : []); else $("over-pills").hidden = true;
     if (!over.hidden && !carded) {
       try { $(brink ? "over-undo" : "again").focus({ preventScroll: true }); } catch (e) { /* a nicety */ }
-      if (state.over) { // the end card's moment: a new best, a Daily finished, or the run over (7.3)
+      if (state.over && ended) { // the end card's moment, once, when the run has just ended (7.3), never on a revisit
         if (state.score > start[mode]) { sfx("best"); buzz("win"); }
         else if (mode === "daily") { sfx("win"); buzz("win"); }
         else { sfx("lose"); buzz("lose"); }
       }
     }
-    carded = !over.hidden;
+    carded = !over.hidden; if (carded) ended = false;
     var duckNow = carded && !!state.over; // the music steps back while the end card shows
     if (duckNow !== ducked) { ducked = duckNow; duck(duckNow); }
   }
@@ -431,8 +443,10 @@
       left: res.state.grid.filter(Boolean).length };
   }
   function finishRun() { // the run just ended: the end event, and today's Daily for the Today card
-    trophy("end", { mode: mode, score: state.score, daily: mode === "daily" });
-    if (mode === "daily") { try { if (PG && PG.daily) PG.daily("seven", K.fmt(state.score)); } catch (e) { /* a nicety */ } }
+    var daily = mode === "daily" && current(); // a Daily begun before midnight is not the new day's Daily
+    ended = true;
+    trophy("end", { mode: mode, score: state.score, daily: daily });
+    if (daily) { try { if (PG && PG.daily) PG.daily("seven", K.fmt(state.score), { score: state.score }); } catch (e) { /* a nicety */ } }
   }
   function settled(res, wasOver) {
     return function () {
@@ -452,6 +466,7 @@
     var res = N.drop(state, col);
     if (!res.ok) { K.toast("That column is full", "bad"); sfx("bad"); return renderChrome(); }
     var was = state.over;
+    if (state.next === N.EGG && eggs < 3) eggs++;
     commit(res.state);
     announce(res);
     play(res.trace, settled(res, was));
@@ -540,11 +555,12 @@
   });
 
   function startNew() {
-    flush(); endReveal(); targeting = null; viewing = false; note = "";
+    if (dailyLocked()) return switchMode("classic");
+    ended = false; flush(); endReveal(); targeting = null; viewing = false; note = "";
     state = newRun(mode); persist(); render(true);
   }
-  K.twoStep($("new"), function () { return state.drops > 0 && !state.over; }, startNew);
-  $("again").addEventListener("click", function () { sfx("tick"); startNew(); });
+  K.twoStep($("new"), function () { return state.drops > 0 && !state.over && !dailyLocked(); }, startNew);
+  $("again").addEventListener("click", function () { if (!dailyLocked()) sfx("tick"); startNew(); });
   $("over-undo").addEventListener("click", function () {
     activate("undo"); try { boardEl.focus({ preventScroll: true }); } catch (e) { /* a nicety */ } // its button is gone
   });
@@ -553,18 +569,40 @@
     flush(); endReveal(); note = ""; state = r.state; finishRun(); persist(); carded = false; render();
   });
   $("over-view").addEventListener("click", function () { viewing = true; note = ""; renderChrome(); boardEl.focus(); });
+  function switchMode(m) {
+    if (m === mode) return;
+    sfx("tick");
+    flush(); endReveal(); targeting = null; viewing = false; note = ""; ended = false; persist();
+    if (m === "daily") checkDay();
+    mode = m; state = runs[m] || newRun(m); persist(); carded = false; render(true);
+    K.toast(m === "daily" ? (state.over ? "Today's Daily is done. A new one comes tomorrow." : "Daily: one run, the same well for everyone today")
+      : m === "blitz" ? "Blitz: eggs rise every 5 drops" : "Classic");
+  }
   Array.prototype.forEach.call($("modes").children, function (b) {
-    b.addEventListener("click", function () {
-      var m = b.getAttribute("data-mode"); if (m === mode) return;
-      sfx("tick");
-      flush(); endReveal(); targeting = null; viewing = false; note = ""; persist();
-      if (m === "daily") checkDay();
-      mode = m; state = runs[m] || newRun(m); persist(); render(true);
-      K.toast(m === "daily" ? "Daily: the same well for everyone today" : m === "blitz" ? "Blitz: eggs rise every 5 drops" : "Classic");
-    });
+    b.addEventListener("click", function () { switchMode(b.getAttribute("data-mode")); });
   });
 
   render();
+
+  // ---- the toast never covers the level line (cold #30). The shared toast centres on the hint line, and in Seven that
+  // line is the level and drops count, read on every drop; so here a toast (a chain, a power-up, a trophy) sits over
+  // the title instead, which nobody taps. When the title is scrolled out of view the shared place stays. ----
+  // On a wide screen the stats share the title's row: the toast then starts at the title's left edge and must end
+  // before the stats (the score counts up during a chain), or it stays in the shared place.
+  function liftToast() {
+    var el = $("toast"), br = document.querySelector("header .brand"), sts = document.querySelector("header .stats");
+    if (!el || !br || !el.classList.contains("on")) return;
+    var r = br.getBoundingClientRect(), h = el.offsetHeight || 34, tw = el.offsetWidth, left = "";
+    var set = function (k, v) { if (el.style[k] !== v) el.style[k] = v; };
+    if (!r.height || r.top < 0 || r.bottom > window.innerHeight) return set("left", "");
+    var s = sts && sts.getBoundingClientRect();
+    if (s && s.height && s.top < r.bottom && s.bottom > r.top) { // one row: title left, stats right
+      if (r.left + tw > s.left - 8) return set("left", "");
+      left = Math.round(r.left + tw / 2) + "px";
+    }
+    set("left", left); set("top", Math.max(4, Math.round(r.top + r.height / 2 - h / 2)) + "px");
+  }
+  try { new MutationObserver(liftToast).observe($("toast"), { attributes: true, attributeFilter: ["class", "style"] }); } catch (e) { /* the shared place */ }
 
   // ---- how to play (REDESIGN.md 1.3, 9.7): three steps, each a small drawn well and one sentence, in the shared sheet.
   // It opens by itself once, on a first visit with nothing saved; the How to play row under the board always has it. ----
@@ -576,9 +614,9 @@
   var STEPS = [
     { text: "Tap a column to drop the Next disc.", picture: well(5, [md(0), md(0), md(4, "ring"), md(0), md(0), md(0), md(0), md(0, "col"), md(0), md(0),
       md(2), md(0), md(0, "col"), md(6), md(5)]) },
-    { text: "A disc pops when its number equals how many discs are in its line.", picture: well(5, [md(0), md(0), md(0), md(0), md(0),
+    { text: "A disc pops when its number equals how many discs are in its line, across or down.", picture: well(5, [md(0), md(0), md(0), md(0), md(0),
       md(0), md(0), md(0), md(0), md(0), md(0), md(2), md(3, "ring"), md(5), md(0)]) },
-    { text: "Grey eggs crack when a disc pops beside them.", picture: '<div class="mg" style="grid-template-columns:repeat(5,20px);align-items:center">' +
+    { text: "Next is sometimes a grey egg: drop it like a disc. A pop beside it cracks it open.", picture: '<div class="mg" style="grid-template-columns:repeat(5,20px);align-items:center">' +
       md(0, "egg") + md(2, "ring") + md(0) + '<span class="to">&#8594;</span>' + md(0, "cracked") + "</div>" },
   ];
   // the family's one sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, never with a saved game

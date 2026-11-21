@@ -40,8 +40,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
     return a.fontSize === v && b.fontSize === v && a.fontWeight === "600" && b.fontWeight === "600";
   }));
   ck("R11/R16: an empty Record is a dimmed 'none'", (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
-  ck("R6: H1 is the game name, subtitle is the Numberics link and a tagline", (await p.textContent("h1")) === "Four" &&
-     /^Numberics · .+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a[href='../']").count() === 1);
+  ck("R6: H1 is the game name, the subtitle a plain tagline (TRIAGE4: no Numberics link)", (await p.textContent("h1")) === "Four" &&
+     /^Four in a row.+\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 0);
   ck("the rule stays in the hint line", /with two of yours/.test(await p.textContent("#hint")));
   await p.locator("#tray button").nth(1).click({ force: true });
   ck("R5: tapping an empty power-up explains it and how to earn it", /^Pop: Remove any disc.*Earn charges/.test(await p.textContent("#hint")),
@@ -325,6 +325,55 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "320-sure");
   await ctx.close();
 
+  // round 4 (TRIAGE4 Family, craft #8/#11/#14/#15/#31, all-ages #5): the subtitle has no "Numberics" link, the cards
+  // sit under "More number games", the pills share one row at 320 and 375 with Larger text and every label is >= 12 px,
+  // the end card fades in with the game glyph and every trophy pill can be seen, the aim ghost is a hollow ring
+  for (const [w, hgt, text] of [[320, 568, "normal"], [320, 568, "large"], [375, 667, "large"], [390, 844, "normal"]]) {
+    ctx = await newCtx({ viewport: { width: w, height: hgt }, deviceScaleFactor: 2 });
+    await ctx.addInitScript(t => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ text: t, sound: false, music: false })); } catch (e) {} }, text);
+    p = await ctx.newPage(); const e9 = []; p.on("pageerror", e => e9.push(e.message));
+    await p.goto(page); await myTurn(p);
+    const tag = w + "x" + hgt + " " + text + ": ";
+    const lay = await p.evaluate(() => ({
+      rows: new Set([...document.querySelectorAll(".stat")].map(e => Math.round(e.getBoundingClientRect().top))).size,
+      lab: Math.min(...[...document.querySelectorAll(".stat > span")].map(e => parseFloat(getComputedStyle(e).fontSize))),
+      sw: document.documentElement.scrollWidth, link: !!document.querySelector(".sub a"), sub: document.querySelector(".sub").textContent,
+      head: (document.querySelector("section.more > h2#more") || {}).textContent,
+      cards: !!document.querySelector("section.more > #games.cards") }));
+    ck(tag + "the four pills share one row (Record never drops to its own row)", lay.rows === 1, JSON.stringify(lay));
+    ck(tag + "every pill label is at least 12 px", lay.lab >= 12, String(lay.lab));
+    ck(tag + "no sideways scroll", lay.sw <= w, String(lay.sw));
+    ck(tag + "the subtitle is plain (the top bar mark links home)", !lay.link && lay.sub === "Four in a row, or four that make ten.", lay.sub);
+    ck(tag + "the cards sit under the one heading, More number games", lay.head === "More number games" && lay.cards, String(lay.head));
+    if (text === "normal" && w === 390) {
+      const gh = await p.evaluate(() => { const g = document.querySelector(".disc.ghost"); if (!g) return null; const cs = getComputedStyle(g); return { bg: cs.backgroundImage, sh: cs.boxShadow }; });
+      ck(tag + "the aim ghost is a hollow ring, never a filled disc (craft #31)", gh && gh.bg === "none" && /inset/.test(gh.sh), JSON.stringify(gh));
+      await p.evaluate(() => document.documentElement.setAttribute("data-contrast", "high"));
+      const edge = await p.evaluate(() => getComputedStyle(document.querySelector(".slot")).boxShadow);
+      ck(tag + "High contrast: every hole has an edge (craft #14)", (edge.match(/inset/g) || []).length === 2, edge);
+      await p.evaluate(() => document.documentElement.removeAttribute("data-contrast"));
+    }
+    if (w === 375) await shot(p, "375-large");
+    // a first win with four trophies: the card fades in with the glyph, and every pill can be scrolled clear of the buttons
+    await forge(p, [[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1], [1, 0, 2, 2], [1, 1, 2, 2]], { level: "easy", next: [1, 1] });
+    await p.evaluate(() => document.getElementById("board").scrollIntoView({ block: "center" }));
+    let [cx, cy] = await colX(p, 3, 0); await p.mouse.click(cx, cy);
+    await p.waitForSelector("#over:not([hidden])", { timeout: 4000 });
+    await p.evaluate(() => NumbericsTrophies.pills(document.getElementById("tro"), ["four_win", "four_colour", "four_ten", "fam_first"]));
+    const card = await p.evaluate(() => { const o = document.getElementById("over"), cs = getComputedStyle(o);
+      return { anim: cs.animationName, glyph: !!o.querySelector(":scope > svg.glyph"), last: o.lastElementChild.classList.contains("row") }; });
+    ck(tag + "the end card fades in, carries the game glyph, buttons last", card.anim === "nm-fadein" && card.glyph && card.last, JSON.stringify(card));
+    const seen = await p.evaluate(() => { // some scroll position shows each pill whole, between the card's top and its buttons
+      const o = document.getElementById("over"), btns = o.lastElementChild, pills = [...document.querySelectorAll("#tro .trophy")], ok = pills.map(() => false);
+      for (let y = 0; y <= o.scrollHeight; y += 4) { o.scrollTop = y; const ob = o.getBoundingClientRect(), b = btns.getBoundingClientRect();
+        pills.forEach((t, i) => { const r = t.getBoundingClientRect(); if (r.height > 0 && r.top >= ob.top - 1 && r.bottom <= b.top + 1) ok[i] = true; }); }
+      o.scrollTop = 0; return ok; });
+    ck(tag + "every trophy pill can be seen in full (craft #15, cold #16)", seen.length === 4 && seen.every(Boolean), JSON.stringify(seen));
+    if (w === 320 && text === "large") { await p.evaluate(() => { document.getElementById("over").scrollTop = 0; }); await shot(p, "320-large-card"); }
+    ck(tag + "no page errors", e9.length === 0, e9.join("|"));
+    await ctx.close();
+  }
+
   // 5. storage blocked
   ctx = await newCtx({ viewport: { width: 375, height: 812 } });
   p = await ctx.newPage(); const e2 = []; p.on("pageerror", e => e2.push(e.message));
@@ -555,7 +604,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
     ", drop handler p95 " + bud.hand[Math.floor(bud.hand.length * .95)].toFixed(2) + " ms, computer move median " + bud.cpu[bud.cpu.length >> 1].toFixed(1) + " ms (separate budget; its frames are left out)");
   ck("30 drops: the drop handler writes the frame in under 20 ms (p95)", bud.hand[Math.floor(bud.hand.length * .95)] <= 20);
   console.log("  four budgets: idle p95 " + idle95.toFixed(2) + " ms");
-  ck("30 drops: frame p95 <= 16.7 ms (0.8 ms headless vsync jitter allowed; idle p95 x 1.3 on a loaded machine)", p95f <= Math.max(17.5, idle95 * 1.3), p95f.toFixed(2) + " vs idle " + idle95.toFixed(2));
+  // round 4 (critic S6): a fixed bar that a regression cannot slip under. It needs a quiet machine: when the idle page
+  // itself misses frames (idle p95 over 18 ms, e.g. agents running in parallel) the check says it was skipped, never passes
+  if (idle95 <= 18) ck("30 drops: frame p95 <= 20 ms (a quiet machine)", p95f <= 20, p95f.toFixed(2) + " vs idle " + idle95.toFixed(2));
+  else console.log("  SKIP four: 30 drops frame p95 check needs a quiet machine (idle p95 " + idle95.toFixed(2) + " ms > 18)");
   ck("30 drops: disc nodes <= discs on board + 8 at every frame, and equal once settled", Math.max(...bud.extra) <= 8 && bud.count === bud.board, JSON.stringify([Math.max(...bud.extra), bud.count, bud.board]));
   ck("no page errors (budgets)", e8.length === 0, e8.join("|"));
   await ctx.close();

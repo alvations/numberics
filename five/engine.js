@@ -15,7 +15,8 @@
  * a burst); it can only ever trigger in power-up play.
  * Family rule R4: the computer never earns or uses a power-up, so perfect play by the player wins every match on
  * every level; the levels differ only in how often the computer punishes a mistake. Undo never crosses a decided
- * round (R1).
+ * round (R1). R2 and Undo (TRIAGE4, mechanics #6): once you use Undo in a round, no burst in the rest of that round pays a
+ * power-up (state.undone), so Undo can never be turned into rewards.
  *
  * All randomness comes from state.seed (mulberry32), so a match is a pure function of its seed and inputs.
  */
@@ -127,6 +128,7 @@
       tiles: [1, 1, 1, 1], turn: "c", starter: "c", round: 1, wins: { p: 0, c: 0 }, draws: 0,
       power: { p: freshPower("p"), c: freshPower("c") }, shield: null, quiet: 0, seen: {},
       roundOver: null, matchOver: null, prev: null, midTurn: false, moves: 0, last: null, touched: false, earned: [],
+      undone: false,
     };
     s.seen[key(s)] = 1;
     return s;
@@ -138,7 +140,7 @@
     if (!state.roundOver || state.matchOver) return state;
     var s = clone(state);
     s.tiles = [1, 1, 1, 1]; s.turn = s.starter; s.round++; s.shield = null; s.quiet = 0; s.seen = {};
-    s.roundOver = null; s.prev = null; s.midTurn = false; s.last = null; s.moves++; s.earned = [];
+    s.roundOver = null; s.prev = null; s.midTurn = false; s.last = null; s.moves++; s.earned = []; s.undone = false;
     s.seen[key(s)] = 1;
     return s;
   }
@@ -176,7 +178,8 @@
   // only the player earns (R4), and never on the burst that ends the match (the stock would be thrown away)
   function earns(s, who) { return who === "p" && !s.matchOver; }
   // R2: a power-up never earns one, including the move after it. Shield is the one power-up that leaves you a move
-  // in the same turn (midTurn), so a burst on that move pays nothing. Split and Nudge are the whole turn.
+  // in the same turn (midTurn), so a burst on that move pays nothing. Split and Nudge are the whole turn. After an Undo in
+  // this round (state.undone) no burst pays until the next round: a round won after an Undo earns nothing from then on.
   function award(s) {
     var r = rand(s.seed); s.seed = r[1];
     var got = Power.award(s.power.p, POWERS, r[0]);
@@ -197,7 +200,9 @@
     s.tiles[to] = burst ? 0 : v;
     s.last = { kind: "add", side: who, from: from, to: to, burst: burst, value: v, prevTo: state.tiles[to], add: state.tiles[from] };
     endTurn(s, who, burst);
-    if (burst && side(to) !== who && earns(s, who)) { if (powered) unpaid = true; else awarded = award(s); }
+    if (burst && side(to) !== who && earns(s, who)) {
+      if (powered) unpaid = "shield"; else if (s.undone) unpaid = "undo"; else awarded = award(s);
+    }
     return { ok: true, state: s, burst: burst, awarded: awarded, unpaid: unpaid };
   }
   // no legal move (every target is shielded): the turn passes
@@ -243,6 +248,7 @@
       var u = clone(state.prev);
       u.power.p.undo = Math.max(0, u.power.p.undo - 1); u.prev = null; u.moves = state.moves + 1;
       u.last = { kind: "undo", side: "p" }; u.touched = true; // the match was played in, Undo or not (R12)
+      u.undone = true; // R2: the rest of this round pays no power-up (mechanics #6)
       return { ok: true, state: u };
     }
     var s = clone(state);

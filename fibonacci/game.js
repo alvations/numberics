@@ -222,9 +222,11 @@
       onInfo: function (id, text) { settle(); targeting = null; note = text; sfx("bad"); render(); },
     });
   }
+  var START = "Swipe or use the arrow keys.";
   function renderHint() {
     $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : note)
-      : note ? note : (!N.canMove(state) ? "Stuck. Use a power-up to keep going." : "");
+      : note ? note : !N.canMove(state) ? "Stuck. Use a power-up to keep going."
+      : !state.moves ? START : ""; // craft #12: a new game says how to start, so the row is never blank on open
   }
   function toast(msg, kind) { K.toast(msg, kind); }
 
@@ -417,8 +419,12 @@
   function mt(lv) {
     return '<span class="mt' + (lv === 1 ? " lo" : "") + '" style="--h:' + hue(lv) + '">' + N.label(lv) + "</span>";
   }
+  function cell(t) { return '<span class="mt cell" aria-hidden="true">' + t + "</span>"; }
   var STEPS = [
-    { picture: '<div class="mg" style="grid-template-columns:repeat(3,26px)">' + mt(1) + '<span class="op">&rarr;</span>' + mt(2) + "</div>",
+    // TRIAGE4 (cold): "1 arrow 2" read as "1 becomes 2". The picture is a slide: the same 3 before and after, in a row
+    // of cells, and the cells it crossed show the way it went. No two different numbers, so it never reads as a join.
+    { picture: '<div class="mg slide">' + mt(3) + cell("") + cell("") + cell("") +
+        cell("&rsaquo;") + cell("&rsaquo;") + cell("&rsaquo;") + mt(3) + "</div>",
       text: "Swipe to slide every tile." },
     { picture: '<div class="eq">' + mt(2) + '<span class="op">+</span>' + mt(3) + '<span class="op">=</span>' + mt(4) + "</div>",
       text: "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5." },

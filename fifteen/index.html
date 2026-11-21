@@ -18,12 +18,12 @@
   <header>
     <div class="brand">
       <h1>Fifteen</h1>
-      <p class="sub"><a href="../">Numberics</a> &middot; Three numbers, fifteen exactly.</p>
+      <p class="sub">Three numbers, fifteen exactly.</p>
     </div>
     <div class="stats" aria-live="off">
       <div class="stat"><span>You</span><b id="you">0</b></div>
       <div class="stat"><span>Computer</span><b id="cpu">0</b></div>
-      <div class="stat" title="Matches won-lost on this device"><span>Record</span><b id="rec" class="none">none</b></div>
+      <div class="stat" title="Matches won-lost-drawn on this device"><span>Record</span><b id="rec" class="none">none</b></div>
     </div>
   </header>
 
@@ -58,12 +58,17 @@
     <button id="new" class="btn" type="button">New game</button>
   </div>
   <details id="how" class="how"><summary>How to play</summary>
-    <p>Three numbers that make 15 win a round. A win without Erase, Double or Peek earns a power-up.
-     On Hard a draw gives you an Erase, so perfect play wins; the computer can Erase and Double.
-     Keys: arrows, Enter, V, 1-4.</p>
+    <p>Three numbers that make 15 win a round. A win without Erase, Double or Peek earns a power-up, and power-ups last
+     one match: each new match starts with one Undo. Grid shows the same nine numbers as a magic square: every line adds
+     up to 15, so it is tic-tac-toe.</p>
+    <p>On Hard the computer plays perfectly, so perfect play draws. A drawn round gives you an Erase, so perfect play wins:
+     use the Erase well and you win the next round. The computer can Erase and Double. Keys: arrows, Enter, V, 1-4.</p>
     <p class="how-more"><button id="how-steps" class="btn" type="button" data-howto>Show the three steps</button></p>
   </details>
-  <div id="games" class="cards" data-root="../" data-current="fifteen" aria-label="Numberics games"></div>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="fifteen" aria-label="Numberics games"></div>
+  </section>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

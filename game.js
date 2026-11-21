@@ -51,6 +51,8 @@
   var targeting = null;           // {name, picks:[]} while a power-up waits for a target
   var cur = -1, kbd = false;      // keyboard aiming cursor (cell), shown once a key aims
   var note = "";                  // a tray explanation in the hint line, until the next action
+  // TRIAGE4 (craft #12): the hint row is never blank on open; it says how to play until the first move on this page
+  var OPEN_HINT = "Swipe or use the arrow keys.", opening = true;
   var newArmed = null, endIds = [];
   // Round 3 end-card pattern: the locked board shows undimmed for HOLD ms, then the card; "See the board" hides
   // the card again (a tap on the board, Esc or Enter brings it back). A run that loads already over shows the card.
@@ -195,7 +197,7 @@
     var key = JSON.stringify([state.power, targeting && targeting.name, N.POWERS.map(trayWhy)]);
     if (key !== trayKey) { trayKey = key; drawTray(); }
     $("hint").textContent = targeting ? targetHint() : state.over ? (viewing ? "Tap the board for the summary." : note)
-      : note || (!N.canMove(state) ? "Stuck. Use a power-up to keep going." : "");
+      : note || (!N.canMove(state) ? "Stuck. Use a power-up to keep going." : opening ? OPEN_HINT : "");
   }
   function drawTray() {
     P.tray($("tray"), DEFS, state.power, {
@@ -223,7 +225,7 @@
     if (targeting) return;
     var top0 = state.top, r = N.move(state, dir);
     if (!r.moved) return;
-    note = "";
+    note = ""; opening = false;
     state = r.state;
     var fx = M.track(ids, r.trace, r.spawned, nextId); ids = fx.ids; nextId = fx.next;
     layer.sync(tilesOf(), { merges: fx.merges, spawns: fx.spawns });

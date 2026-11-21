@@ -189,3 +189,24 @@ Reviews and decisions: `docs/reviews/REVIEW*2.md`, `TRIAGE2.md` (R2 everywhere w
   player 28% on Hard vs 46% on Medium; random 0%.
 - **Nine:** Pass once per round per side; deals never repeat; Hard: perfect play with power-ups wins 88.5%, with 15%
   mistakes about 14%.
+
+## QA round 4 (21 Nov 2026): what changed
+
+Reviews and decisions: `docs/reviews/REVIEW*4.md`, `REVIEW_AGES4.md`, `TRIAGE4.md`.
+
+- **Family:** Memory Load and Erase freeze the store before they write (B1); saves are batched into one idle write and
+  flushed on pagehide (D6); narrow screens keep 44 px top-bar buttons with no sideways scroll (B3); one-tap mute in the
+  top bar (D2); Trophies show earned and still-to-find goals, secrets hidden (D3); the Today card always shows the streak
+  and each Daily's best (D4, D9); theme follows the device (D5). Night owl fires only on an end between 0:00 and 4:00.
+  Every text label is at least 12 px. The merged tile stays hidden until the slide ends (no blip).
+- **Five:** after an Undo, no burst pays for the rest of that round (closes the R2 hole; earlier awards in the snapshot
+  stay). The "+N" copy fades before it covers 45% of its target; the number changes on visual arrival. Shards are 12% of
+  the tile and fly out 45 to 70% (REDESIGN 5.6 spec was 6% and 30 to 45%); the landing pop goes 1 to 1.14 to 1.
+- **Nine:** `MEDIUM_SLIP = 0.25`: with two tiles left Medium misses the winning reply a quarter of the time. Beginner bot,
+  3 tiles: Easy 98%, Medium 66% (was 43%), Hard 1.5% of matches; perfect play still wins every Easy and Medium match.
+  Hard runs never end by design. Learn opens with one plain sentence; the binary is behind "Show the binary".
+- **Fifteen:** the record counts draws (W-L-D). Hard is winnable: a perfect player who uses the after-draw Erase won
+  400 of 400 Hard matches; one who never uses it draws all 400. Power-ups last one match. A one-time Grid tip.
+- **Seven:** the Daily locks after one run; the Today chip keeps the day's best.
+- **Open for round 5:** Undo on Nine's no-pay list (as Five); a family-wide tap-highlight fix; Fifteen's vertical
+  labels in Numbers view; Nine's nim-sum colour in Light.

@@ -60,7 +60,7 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 @media (max-width:359px){ .brand{ flex-basis:100%; } } /* 320: the pills drop under the title so the tagline keeps one line (craft #3) */
 .stats{ display:flex; gap:8px; }
 .stat{ background:var(--panel); border-radius:10px; padding:6px 12px; min-width:64px; text-align:center; }
-.stat span{ display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
+.stat span{ display:block; font-size:.75rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
 .stat b{ font-size:1.1rem; font-variant-numeric:tabular-nums; }
 .levels{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px; } /* Easy, Medium, Hard and the Daily (REDESIGN.md 9.10) */
 .levels button{ min-height:var(--tap); background:var(--panel); color:var(--mute); border:1px solid var(--line); border-radius:10px; padding:4px; font:inherit; font-size:.85rem; cursor:pointer; }
@@ -100,7 +100,7 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 .pad{ display:grid; grid-template-columns:repeat(9,1fr); gap:6px; }
 .pad button{ position:relative; min-height:var(--tap); background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 0 12px;
   font:inherit; font-size:1.15rem; font-weight:700; cursor:pointer; }
-.pad button small{ position:absolute; right:3px; bottom:1px; font-size:.7rem; color:var(--mute); font-weight:400; }
+.pad button small{ position:absolute; right:3px; bottom:1px; font-size:.75rem; color:var(--mute); font-weight:400; }
 .pad button:disabled{ opacity:.3; cursor:default; }
 .btn{ min-height:var(--tap); background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:9px 6px; font:inherit; font-size:.85rem; cursor:pointer; }
 .btn[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent-text); }
@@ -310,7 +310,7 @@ details.how .how-more{ display:flex; justify-content:center; margin:0 14px 12px;
 .over > .row:last-child,.over > .acts:last-child{ position:sticky; bottom:0; z-index:1; margin-bottom:0; padding:8px 0 20px; margin-top:-8px;
   background:var(--bg); border-radius:0; box-shadow:0 -10px 10px -6px var(--bg); }
 @media (max-width:400px){ .over > .row:last-child,.over > .acts:last-child{ padding-bottom:14px; } }
-.over.more > .row:last-child,.over.more > .acts:last-child{ border-top:1px solid var(--line-2); box-shadow:0 -10px 14px -6px rgba(0,0,0,.35); }
+.over.over-more > .row:last-child,.over.over-more > .acts:last-child{ border-top:1px solid var(--line-2); box-shadow:0 -10px 14px -6px rgba(0,0,0,.35); }
 /* D3: the Trophies sheet lists goals too: a not-yet-earned trophy is dimmed with its description */
 .tro-count{ margin:0 0 4px; color:var(--mute); font-size:var(--fs-sm); font-weight:650; }
 .tr.locked{ background:none; border-style:dashed; }
@@ -329,3 +329,18 @@ details.how .how-more{ display:flex; justify-content:center; margin:0 14px 12px;
 
 /* B3 (Sudoku's own): with Larger text below 400 px the four power-up labels cannot share one row, so the tray is 2 x 2 */
 @media (max-width:400px){ :root[data-text="large"] .tray{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+/* TRIAGE4 Sudoku: every pad key is at least 44 px wide. Nine in a row need 444 px, so a narrower page puts them in two
+   centred rows (1 to 5, then 6 to 9) */
+@media (max-width:475px){ .pad{ display:flex; flex-wrap:wrap; justify-content:center; }
+  .pad button{ flex:0 0 calc((100% - 24px) / 5); min-width:44px; } }
+/* TRIAGE4 D9: the Daily segment names its level under the word */
+.levels button[data-l="daily"]{ display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.15; padding:3px 4px; }
+.levels button small.lv{ font-size:.75rem; font-weight:650; color:var(--accent-text); }
+/* the band under the title holds the toasts (game.js placeToast), so it is one toast tall (below 360 px the stats drop
+   under the title and the band is taller already) */
+@media (min-width:360px){ header{ margin-bottom:calc(1.25rem + 6px); } }
+/* the family's games heading ("More number games") */
+section.more{ margin:22px 0 8px; } 
+section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
+/* cold #41: Undo's infinity badge read as "oo" at the badge's text size; the sign is drawn larger in the same badge */
+#pw-undo i{ font-size:1.1em; line-height:1.27; }

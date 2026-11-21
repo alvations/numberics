@@ -31,7 +31,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("tray tooltips in the family voice", (await p.getAttribute("#pw-reveal", "title")) === "H: Reveal. Show the right digit for one cell.");
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= 375));
   ck("tray labels fit their buttons", await p.evaluate(() => [...document.querySelectorAll("#tray .pw")].every(b => b.scrollWidth <= b.clientWidth + 1)));
-  ck("subtitle: Numberics link and a tagline, no live status (R6)", /^Numberics · [A-Z][^.]*\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a[href='../']").count() === 1);
+  ck("subtitle: a plain tagline, no live status (R6) and no \"Numberics ·\" link (TRIAGE4 Family: the top bar mark links home)", /^[A-Z][^.]*\.$/.test((await p.textContent(".sub")).trim()) && await p.locator(".sub a").count() === 0);
+  ck("the games list has the family's one heading, \"More number games\" (TRIAGE4 Family)", (await p.textContent("section.more > h2")).trim() === "More number games" && await p.locator("section.more #games").count() === 1);
   ck("empty Best reads 'none', not a hyphen (R11)", (await p.textContent("#best")) === "none");
   ck("empty Best uses the family's one empty style: dimmed, weight 600, same size as values (TRIAGE3)", await p.evaluate(() => {
     const b = getComputedStyle(document.getElementById("best")), t = getComputedStyle(document.getElementById("time"));
@@ -43,7 +44,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click("#pw-check", { force: true });
   ck("tapping an empty Check explains it in the neutral info toast (R5, R7: not the red-edged warning)", await toastIs(p, /^Check: Mark wrong digits, briefly\. Earn one per 9 cells with no clash\.$/, "info"), await p.textContent("#toast"));
   ck("the info toast is neutral: no red edge", await p.evaluate(() => { const c = getComputedStyle(document.getElementById("toast")); return c.borderTopColor !== "rgb(255, 107, 107)" && c.backgroundColor !== "rgb(242, 184, 75)"; }));
-  ck("toast is clear of the title and the games row (F2)", await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), h = document.querySelector("h1").getBoundingClientRect(), g = document.getElementById("games").getBoundingClientRect(); return t.top >= h.bottom && t.bottom <= g.top; }));
+  // F2 + TRIAGE4 craft #16: a toast clears the title when the band under it can hold it; a taller one (this two-line note)
+  // grows up over the title instead, since the title is never tapped; it never lies on the difficulty row or the games row
+  ck("toast is clear of the title (when it fits the band), the difficulty row and the games row (F2, craft #16)", await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), h = document.querySelector("h1").getBoundingClientRect(), l = document.getElementById("levels").getBoundingClientRect(), g = document.getElementById("games").getBoundingClientRect();
+    return (t.top >= h.bottom || t.height > l.top - h.bottom) && t.bottom <= l.top && t.bottom <= g.top; }));
   await p.click("#pw-undo", { force: true });
   ck("tapping Undo with nothing to undo says so", await toastIs(p, /Nothing to undo yet/, "info"));
 
@@ -68,6 +72,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let s = await st(p);
   ck("the 9th filled cell with no clash (wrong digits too) earns one charge", tot(s) === pre + 1 && s.high === 9, JSON.stringify(s.stock));
   ck("the earn toast says what the player did, in gold, in the family form", await toastIs(p, /^9 cells filled: \+(Reveal|Check|Candidates)$/, false), await p.textContent("#toast"));
+  ck("the earn toast never covers the difficulty row (TRIAGE4, cold #40)", await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), l = document.getElementById("levels").getBoundingClientRect(); return t.bottom <= l.top || t.top >= l.bottom; }),
+    JSON.stringify(await p.evaluate(() => [document.getElementById("toast").getBoundingClientRect().bottom, document.getElementById("levels").getBoundingClientRect().top])));
   ck("Undo now shows its infinity badge", (await p.textContent("#pw-undo i")) === "∞" && await p.locator("#pw-undo i").isVisible());
   await p.keyboard.press("u");
   s = await st(p);
@@ -248,6 +254,33 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.evaluate(() => window.__demo());
   ck("320px: no horizontal scroll, tray fits", await p.evaluate(() => document.documentElement.scrollWidth <= 320 && [...document.querySelectorAll("#tray .pw")].every(b => b.scrollWidth <= b.clientWidth + 1)));
   await ctx.close();
+
+  // 12a. TRIAGE4 Sudoku: pad keys at least 44 px wide, labels at least 12 px, no sideways scroll with Larger text, and a
+  // toast (a trophy, an earned power-up, a long note) never covers the difficulty row
+  for (const [w, h, large] of [[390, 844, false], [375, 667, false], [320, 568, false], [375, 667, true], [320, 568, true], [1280, 860, false]]) {
+    ({ ctx, p, errs } = await page({ viewport: { width: w, height: h } }, large ? () => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, text: "large" })); } catch (e) { /* blocked */ } } : null));
+    const tag = w + "x" + h + (large ? " Larger text" : "");
+    const m = await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, large: document.documentElement.dataset.text === "large",
+      pad: Math.min(...[...document.querySelectorAll("#pad button")].map(b => b.getBoundingClientRect().width)),
+      padH: Math.min(...[...document.querySelectorAll("#pad button")].map(b => b.getBoundingClientRect().height)),
+      labels: Math.min(...[...document.querySelectorAll(".stat span, #pad small, #levels small")].map(x => parseFloat(getComputedStyle(x).fontSize))) }));
+    ck(tag + ": the setting took", m.large === large);
+    ck(tag + ": every number pad key is at least 44 x 44 px (craft #9)", m.pad >= 44 && m.padH >= 44, JSON.stringify(m));
+    ck(tag + ": the stat labels, pad counts and the Daily level are at least 12 px (craft #8)", m.labels >= 12, JSON.stringify(m));
+    ck(tag + ": no sideways scroll", m.sw <= w, JSON.stringify(m));
+    for (const [msg, kind] of [["Trophy: Night owl", "trophy"], ["9 cells filled: +Reveal", ""], ["Check: Mark wrong digits, briefly. Earn one per 9 cells with no clash.", "info"]]) {
+      const r = await p.evaluate(([msg, kind]) => {
+        NumbericsKit.toast(msg, kind === "info" ? "info" : null);
+        const el = document.getElementById("toast");
+        if (kind === "trophy") { el.classList.add("trophy"); el.insertAdjacentHTML("afterbegin", NumbericsTrophies.glyph("moon") || ""); } // as shared/trophies.js shows it
+        return new Promise(res => requestAnimationFrame(() => { const t = el.getBoundingClientRect(), l = document.getElementById("levels").getBoundingClientRect(), b = document.getElementById("board").getBoundingClientRect();
+          res({ on: el.classList.contains("on"), t: [t.top, t.bottom], l: [l.top, l.bottom], clear: t.bottom <= l.top + 0.5 || t.top >= l.bottom - 0.5, board: t.bottom <= b.top + 0.5 }); }));
+      }, [msg, kind]);
+      ck(tag + ": the " + (kind || "earn") + " toast never covers the difficulty row or the board (craft #16)", r.on && r.clear && r.board, JSON.stringify(r));
+    }
+    ck(tag + ": no page errors", errs.length === 0, errs.join("|"));
+    await ctx.close();
+  }
 
   // 12b. junk fill (TRIAGE2 Sudoku, mechanics #2): type 1 into every empty cell of a Hard puzzle, then erase it all
   ({ ctx, p, errs } = await page());
@@ -520,6 +553,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("?mode=daily opens today's Daily: the day's seed, the weekday's difficulty, and a clean URL", dl.mode === "daily" && dl.seed === dl.day && dl.diff === dl.want && dl.url === "", JSON.stringify(dl));
   ck("the weekday ramp: Easy Mon to Thu, Medium Fri and Sat, Hard Sun", await p.evaluate(() => [0, 1, 2, 3, 4, 5, 6].map(w => window.__sudoku.dailyLevel(new Date(2026, 10, 15 + w))).join()) === "hard,easy,easy,easy,easy,medium,medium");
   ck("the Daily segment is pressed", (await p.getAttribute("#levels button[data-l=daily]", "aria-pressed")) === "true" && await p.locator("#levels button[aria-pressed=true]").count() === 1);
+  ck("the Daily's level is the family's one rule (NumbericsProgress.dailyLevel) and the page shows it on the Daily segment (TRIAGE4 D9)", await p.evaluate(() => {
+    const lv = NumbericsProgress.dailyLevel(), b = document.querySelector("#levels button[data-l=daily]"), cap = lv[0].toUpperCase() + lv.slice(1);
+    return window.__sudoku.dailyLevel() === lv && window.__sudoku.state.difficulty === lv && b.querySelector("small").textContent === cap && b.getAttribute("aria-label") === "Daily, " + cap && b.getBoundingClientRect().height <= 46; }),
+    await p.textContent("#levels button[data-l=daily]"));
   await p.click("#levels button[data-l=" + reg.difficulty + "]");
   ck("back to the regular puzzle in one tap, its progress kept", (await p.evaluate(() => window.__sudoku.mode)) === "play" && (await st(p)).puzzle.join() === reg.puzzle.join() && (await st(p)).moves === reg.moves);
   await p.click("#levels button[data-l=daily]");
@@ -535,9 +572,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.setViewportSize({ width: 375, height: 812 });
   ck("375 px with many pills: the card stays on the board and its buttons stay in view (the pills scroll)", await p.evaluate(() => {
     const b = document.getElementById("board").getBoundingClientRect(), w = document.getElementById("win").getBoundingClientRect(), a = document.getElementById("again").getBoundingClientRect();
-    return Math.abs(w.bottom - b.bottom) < 2 && a.bottom <= b.bottom && a.top >= b.top && document.querySelectorAll("#win-pills [data-trophy]").length >= 3; }));
+    return Math.abs(w.bottom - b.bottom) < 2 && a.bottom <= b.bottom && a.top >= b.top && document.querySelectorAll("#win-pills [data-trophy]").length >= 3; }),
+    await p.evaluate(() => JSON.stringify([document.getElementById("board").getBoundingClientRect(), document.getElementById("win").getBoundingClientRect(), document.getElementById("again").getBoundingClientRect(), document.querySelectorAll("#win-pills [data-trophy]").length])));
   await p.setViewportSize({ width: 1280, height: 860 });
   ck("the Daily's time is written to today's progress (the Today chip)", await p.evaluate(() => /^\d+:\d\d$/.test(NumbericsProgress.today().sudoku || "")));
+  ck("the Daily is reported with its time as a low-wins score (TRIAGE4 D9: the chip keeps the day's best)", await p.evaluate(() => {
+    NumbericsKit.flush(); const d = JSON.parse(localStorage.getItem("numberics_progress_v1")).daily, e = d[Object.keys(d)[0]].sudoku;
+    return e && typeof e === "object" && e.low === true && Number.isInteger(e.s) && e.t === NumbericsKit.clock(e.s); }),
+    await p.evaluate(() => { NumbericsKit.flush(); return localStorage.getItem("numberics_progress_v1"); }));
   ck("Best on the Daily is today's time", (await p.textContent("#best")) === (await p.textContent("#time")));
   await shot(p, "daily-solved");
   await p.click("#again");
@@ -547,5 +589,19 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.click("#levels button[data-l=daily]");
   ck("the solved Daily stays locked for the day", (await st(p)).solved && await p.isVisible("#win"));
   ck("no page errors on the Daily", errs.length === 0, errs.join("|"));
+  await ctx.close();
+
+  // 23. a Daily left open across midnight is yesterday's puzzle: solving it does not count as today's Daily
+  ({ ctx, p, errs } = await page({ viewport: { width: 1280, height: 860 } }));
+  await p.goto(url + "sudoku/?mode=daily");
+  await p.evaluate(() => { const s = window.__sudoku.state; s.seed = (NumbericsKit.daySeed() - 1) >>> 0; window.__sudoku.state = s; });
+  rep = [];
+  await p.exposeFunction("__rep3", x => rep.push(x));
+  await p.evaluate(() => { const r = NumbericsTrophies.report; NumbericsTrophies.report = function (g, ev, data, o) { window.__rep3(JSON.stringify([g, ev, data])); return r.apply(this, arguments); }; });
+  await solveNow(p);
+  const ys = rep.map(x => JSON.parse(x)).find(x => x[1] === "solve");
+  ck("yesterday's Daily solved after midnight: solved and shown, but not today's chip and not a Daily for the trophies", (await st(p)).solved &&
+    await p.evaluate(() => !NumbericsProgress.today().sudoku) && ys && ys[2].daily === false, JSON.stringify(ys) + " " + await p.evaluate(() => JSON.stringify(NumbericsProgress.today())));
+  ck("no page errors on yesterday's Daily", errs.length === 0, errs.join("|"));
   await ctx.close();
 };

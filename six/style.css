@@ -15,12 +15,12 @@
 .line{ display:grid; align-items:center; width:100%; margin:0 auto; }
 /* too narrow for 40px tiles and 40px gaps in one row: the gaps sit in a row of their own, under the seams (round 3) */
 .line.stack{ row-gap:2px; } .six.stacked{ gap:6px; } /* the extra row costs no page height at 390x844 */
-.line.stack .gp{ width:40px; height:40px; min-height:40px; justify-self:center; }
+.line.stack .gp{ width:44px; height:44px; min-height:44px; justify-self:center; } /* gap buttons at least 44 px (craft #9) */
 .six .over .row{ margin:4px 0 0; }
 .num{ position:relative; aspect-ratio:1; width:100%; cursor:pointer; touch-action:none; font-size:1.5rem; }
 .line.n4 .num{ font-size:1.3rem; } .line.n5 .num{ font-size:1.15rem; }
 .line.long .num{ font-size:1rem; }
-.num .sg{ position:absolute; top:-11px; left:50%; translate:-50% 0; background:var(--ink); color:#15151d; border-radius:99px;
+.num .sg{ position:absolute; top:-11px; left:50%; translate:-50% 0; background:var(--ink); color:var(--panel); border-radius:99px;
   padding:1px 7px; font-size:.82rem; line-height:1.3; box-shadow:0 0 0 2px var(--panel); font-weight:800; white-space:nowrap; pointer-events:none; }
 .num.cur{ outline:2px solid var(--accent); outline-offset:5px; }
 /* gaps and bracket chips: the gold focus ring (F9) sits on the chip itself, never a box over the neighbouring tiles */
@@ -47,20 +47,22 @@
   padding:0; cursor:pointer; margin:0 4%; }
 .bar.ghost{ border-style:dashed; border-color:var(--accent); pointer-events:none; }
 .bar i{ position:absolute; left:50%; bottom:-9px; translate:-50% 0; background:var(--cool); color:#15151d; border-radius:99px;
-  padding:0 6px; font-style:normal; font-size:.72rem; font-weight:800; line-height:1.35; }
+  padding:0 6px; font-style:normal; font-size:.78rem; font-weight:800; line-height:1.35; }
 .expr{ margin:0; text-align:center; font-size:1rem; color:var(--ink); min-height:1.4em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 .val{ margin:0; text-align:center; font-size:1.25rem; font-weight:800; color:var(--mute); min-height:1.4em; font-variant-numeric:tabular-nums; }
 .val small{ font-size:.75rem; font-weight:400; }
 .six.gold .num{ background:var(--accent); }
 .six.gold .expr,.six.gold .val{ color:var(--accent); }
-.six .tools{ display:flex; justify-content:center; gap:8px; }
+.six .tools{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; } /* wraps only when it must (320 px, Larger text: B3) */
 .six .tools .btn{ padding:7px 14px; font-size:.85rem; white-space:nowrap; }
 @media (max-width:400px){ .six .tools{ gap:6px; } .six .tools .btn{ padding:7px 10px; } }
 .six .tools .btn[hidden]{ display:none; }
 @media (max-width:380px){ .tile.goldt{ height:46px; font-size:1.5rem; } .six{ padding:10px; } }
 .six .over .answer{ color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums; }
-/* Show answer ends a Climb run: it looks like the run-ender it is, not a harmless helper (round 2) */
-.six .tools .btn.ender{ border-color:var(--bad); color:var(--bad); }
+/* Show answer is neutral (TRIAGE4 D10: the loud red read as "you did something wrong" and pulled children to it);
+   its two-tap confirm and the hint line's warning say what it costs. Armed, its text turns full ink. */
+.six .tools .btn.quiet{ color:var(--mute); font-weight:600; }
+.six .tools .btn.quiet.armed{ color:var(--ink); }
 /* ===== the redesign (REDESIGN.md 5.9, 9.6) ===== */
 /* a gap's tap area is at least 44 x 44 px: a transparent hit box around the visible chip */
 .gp{ position:relative; }
@@ -82,3 +84,10 @@ details.how p .btn{ padding:0 14px; }
 .sheen{ z-index:2; }
 /* the four-number picture fits the 120 px (96 px narrow) picture box */
 .howto .pv .eq.sm{ gap:2px; } .howto .pv .eq.sm .mt{ width:19px; height:22px; font-size:12px; border-radius:5px; }
+/* a five-number line on a phone stays one row (round 4, cold #25): tiles narrower than square, never under 44 px tall */
+.line.narrow .num{ aspect-ratio:auto; min-height:var(--tap-lg); }
+/* the expression line under the tiles only shows what the tiles cannot (brackets, signs, joins), else it is clutter
+   (craft #39); it stays in the page for screen readers and keeps its height, so nothing moves */
+.expr.same{ opacity:0; }
+/* one heading over the cards (TRIAGE4 Family); section.more, never the end card's .over.more */
+section.more{ margin:22px 0 8px; } section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
