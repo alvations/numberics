@@ -1,0 +1,84 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Three: only what shared/theme.css does not cover. The rainbow scale is the identity:
+ * each rung of the value ladder has its own colour (3 red .. 384 white); past that each lap adds a ring. */
+.cells{ position:absolute; inset:var(--gap); }
+.cells{ display:grid; grid-template-columns:repeat(4,1fr); gap:var(--gap); }
+.cells div{ background:var(--cell); border-radius:var(--tile-radius); }
+.cells div.sel{ outline:3px solid var(--accent); outline-offset:-3px; }
+/* targeting: picked tiles and the keyboard cursor sit on the tile layer, so they show on occupied cells too */
+.tiles > .tile.sel{ outline:3px solid var(--accent); outline-offset:2px; z-index:3; }
+.cells div.cur,.tiles > .tile.cur{ outline:2px dashed var(--accent); outline-offset:2px; z-index:3; }
+.tiles > .tile.sel.cur{ outline-style:solid; outline-width:3px; }
+/* the keyed tile layer (shared/motion.js, theme.css "B2 motion") places and slides the tiles; the face carries the look */
+.tiles > .tile{ font-size:10cqw; border-radius:var(--tile-radius); }
+.face[data-len="3"]{ font-size:8cqw; } .face[data-len="4"]{ font-size:6.6cqw; }
+.face[data-len="5"]{ font-size:5.4cqw; } .face[data-len="6"]{ font-size:4.6cqw; }
+
+/* colour ladder (engine.js colour()): 3 6 9 12 18 24 36 48 72 96 144 192 288 384, one colour per rung so no two
+   values on a board look alike; hue and lightness tuned so dark ink stays readable on every rung */
+[data-band="0"]{ --h:4;   --l:62%; } [data-band="1"]{ --h:28;  --l:60%; }
+[data-band="2"]{ --h:50;  --l:58%; } [data-band="3"]{ --h:140; --l:50%; --s:48%; }
+[data-band="4"]{ --h:205; --l:62%; } [data-band="5"]{ --h:238; --l:72%; }
+[data-band="6"]{ --h:282; --l:70%; } [data-band="7"]{ --h:328; --l:72%; --s:70%; }
+[data-band="8"]{ --h:174; --l:46%; --s:52%; } [data-band="9"]{ --h:84; --l:55%; --s:55%; }
+[data-band="10"]{ --h:222; --l:80%; --s:16%; } [data-band="11"]{ --h:36; --l:76%; --s:48%; }
+[data-band="12"]{ --h:186; --l:76%; --s:80%; } [data-band="13"]{ --h:40; --l:94%; --s:30%; }
+.three{ background:hsl(var(--h) var(--s,62%) var(--l)); box-shadow:0 2px 0 hsl(var(--h) 50% 34%); }
+/* lap rings: past 384 the ladder colours repeat, each lap one more bright ring */
+.three[data-oct="1"]{ box-shadow:inset 0 0 0 3px rgba(255,255,255,.85), 0 2px 0 hsl(var(--h) 50% 34%); }
+.three[data-oct="2"]{ box-shadow:inset 0 0 0 3px #fff, inset 0 0 0 6px hsl(var(--h) var(--s,62%) var(--l)), inset 0 0 0 8px rgba(255,255,255,.85), 0 2px 0 hsl(var(--h) 50% 34%); }
+.three[data-oct="3"]{ box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 0 6px #fff, 0 0 10px var(--accent), 0 2px 0 hsl(var(--h) 50% 34%); }
+/* 1 and 2: neutral grey halves of a 3, quieter and a little smaller so the threes lead */
+.face.one,.face.two{ position:relative; isolation:isolate; font-weight:700; color:#2a2c38; background:none; box-shadow:none; } /* no tile lip around the grey half-tile (A1) */
+.face.one::before,.face.two::before{ content:""; position:absolute; inset:2.2cqw; border-radius:6px; z-index:-1; }
+.face.one::before{ background:hsl(230 10% 78%); } .face.two::before{ background:hsl(230 8% 64%); }
+
+/* the next-tile preview in the stat pill */
+.stat.next{ min-width:56px; }
+.mini{ display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:24px; padding:0 6px;
+  border-radius:6px; font-size:.95rem; font-weight:800; color:#15151d; }
+.mini.one{ background:hsl(230 10% 78%); } .mini.two{ background:hsl(230 8% 64%); }
+.mini.three{ background:hsl(var(--h) var(--s,62%) var(--l)); }
+
+/* Flush (REDESIGN.md 5.4; TRIAGE4 mechanics #2/#3, craft #27, #29): the moment the slide lands, the run leaves the board
+   (game.js beat(): the layer keeps its tiles only as leaving ghosts, .gone under the others) and the dealt tile enters.
+   Each ghost swells and shrinks away while a bright rainbow sweeps it, 20 ms apart (--d), 260 ms each: the whole flush,
+   slide included, is under 400 ms with no still frame. Under reduced motion (html[data-motion], the in-app setting
+   first, then the device) the ghosts keep a still rainbow outline while they fade (colour and opacity, not motion). */
+.nmm-layer:not(.nmm-reduced) > .tile.run.nmm-out > .face{ animation:thr-flush 260ms var(--e-out) var(--d,0ms) both; }
+@keyframes thr-flush{ 0%{ transform:scale(1); opacity:1; } 30%{ transform:scale(1.1); opacity:1; } 100%{ transform:scale(0); opacity:0; } }
+.tile.run::after{ content:""; position:absolute; inset:0; border-radius:var(--tile-radius); pointer-events:none;
+  background:linear-gradient(90deg,#ff5a52,#ff9f40,#ffe14a,#5fd37a,#4fb0ff,#7c7cff,#c77dff,#ff5a52) 0 0/300% 100%;
+  opacity:0; animation:sweep 260ms ease-out var(--d,0ms) both; }
+@keyframes sweep{ 0%{ opacity:0; background-position:100% 0; transform:scale(1); } 25%{ opacity:.9; transform:scale(1.08); }
+  100%{ opacity:0; background-position:0 0; transform:scale(.2); } }
+.tile.run.still::after{ animation:none; opacity:1; background:none; transform:none;
+  border:3px solid; border-image:linear-gradient(90deg,#ff5a52,#ffe14a,#5fd37a,#4fb0ff,#c77dff) 1; border-radius:0; }
+:root[data-motion="reduced"] .tile.run::after{ animation:none; }
+/* the Best stat's gold ring on a new best (REDESIGN.md 8.5): opacity only */
+.stat.gold::after{ content:""; position:absolute; inset:-1px; border-radius:inherit; box-shadow:0 0 0 2px var(--accent);
+  opacity:0; pointer-events:none; animation:thr-ring 420ms var(--e-out); }
+@keyframes thr-ring{ 0%{ opacity:1; } 100%{ opacity:0; } }
+
+/* How to play: the collapsed row under the board holds the full rules and the keys; the sheet shows three steps */
+details.how ul.rules{ margin:0 14px 10px; padding-left:18px; color:var(--mute); font-size:var(--fs-sm); line-height:1.4; }
+details.how ul.rules li{ margin:0 0 4px; }
+details.how .btn{ min-height:var(--tap); }
+.pv .mt.one,.pv .mt.two{ color:#2a2c38; } .pv .mt.one{ background:hsl(230 10% 78%); } .pv .mt.two{ background:hsl(230 8% 64%); }
+.pv .mt.three{ color:#15151d; background:hsl(var(--h) var(--s,62%) var(--l)); }
+.pv .mt.hole{ background:var(--cell); }
+.pv .op{ color:var(--mute); font-weight:800; }
+.sh-body > .row{ margin-top:14px; }
+/* the games list at the page foot (shared/nav.js cards), two columns in the game's column */
+.more{ margin:22px 0 8px; }
+.more h2{ font-size:var(--fs-lg); margin:0 0 10px; }
+.more .cards{ grid-template-columns:repeat(2,minmax(0,1fr)); }
+/* the end card: See the board (or, stuck with only Undo left, Undo) + New game side by side */
+.over .row{ margin:4px 0 0; }
+.over .btn[hidden]{ display:none; }
+/* the board's focus and aiming rings sit inside the panel, never out toward the page edge */
+.board:focus-visible{ outline-offset:-2px; }
+.board.targeting{ box-shadow:inset 0 0 0 2px var(--accent); }
+/* A1 (REDESIGN.md 1.1: status copy is 14px): the hint band keeps room for two lines, as Four and Nine do, so a longer
+   keyboard targeting line never moves the board */
+.hint{ min-height:2.9em; line-height:1.45; display:flex; align-items:center; justify-content:center; text-wrap:balance; }

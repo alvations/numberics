@@ -1,0 +1,85 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Four</title>
+<meta name="description" content="Connect Four with numbered discs: win with four of your colour in a row, or any four in a row that sum to exactly ten.">
+<meta name="theme-color" content="#12131a">
+<script src="../shared/boot.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E4%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="topbar" class="topbar" data-root="../"></div>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Four</h1>
+      <p class="sub">Four in a row, or four that make ten.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat"><span>Your next</span><b id="next" class="mini you" aria-label="your next disc"></b></div>
+      <div class="stat"><span>Held</span><b id="held" class="mini you" aria-label="your held disc"></b></div>
+      <div class="stat"><span>Its next</span><b id="cnext" class="mini cpu" aria-label="the computer's next disc"></b></div>
+      <div class="stat"><span>Record</span><b id="rec">0-0</b></div>
+    </div>
+  </header>
+
+  <div id="levels" class="seg" role="group" aria-label="Difficulty">
+    <button type="button" data-level="easy">Easy</button>
+    <button type="button" data-level="medium">Medium</button>
+    <button type="button" data-level="hard">Hard</button>
+  </div>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status"></p>
+
+  <div id="board" class="board four" tabindex="0" aria-label="Game board, 7 columns. Left and right arrows pick a column, Enter or Down drops your disc.">
+    <div id="grid" class="grid"></div>
+    <div id="discs" class="discs"></div>
+    <svg id="winline" class="winline" aria-hidden="true" preserveAspectRatio="none" hidden></svg>
+    <div id="over" class="over" hidden>
+      <h2 id="over-title">You win</h2>
+      <p id="over-text"></p>
+      <div id="tro" class="tro-pills" hidden></div>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">New game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row"><button id="new" class="btn" type="button">New game</button></div>
+  <details class="how">
+    <summary>How to play</summary>
+    <p>Tap a column (or arrows and Enter) to drop your next disc. Win with four of yours in a row, or four
+     of any colours that make ten, two of them yours. Half the discs are 1s. On Easy and Medium a blue ring is where
+     the computer can win next, a red dashed ring a drop that lets it. Block a three or set up a ten to earn
+     power-ups; on Hard the computer uses them too. A ten with two discs of each colour counts for whoever drops its
+     fourth disc.</p>
+    <p>Keys: Left and Right pick a column, Enter or Down drops. 1 to 4 use a power-up (U is Undo), Esc cancels.</p>
+    <p><button id="howto-open" class="btn" type="button" data-howto>Show the three steps</button></p>
+  </details>
+  <section class="more foot-cards" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="four"></div>
+  </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
+<script src="../shared/power.js"></script>
+<script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
+</body>
+</html>

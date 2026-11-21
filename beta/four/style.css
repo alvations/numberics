@@ -1,0 +1,81 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Four: only what shared/theme.css does not cover. The board is the shared .board panel, made 7x6. */
+.board.four{ aspect-ratio:7/6; cursor:pointer; --bgap:var(--gap); --sg:calc(var(--gap) * .7); }
+.board.four.targeting{ cursor:crosshair; }
+.grid{ position:absolute; inset:var(--gap); display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr);
+  gap:var(--sg); }
+.slot{ position:relative; background:var(--well); border-radius:50%; box-shadow:inset 0 .45cqw .9cqw rgba(0,0,0,.45); }
+.slot.aim{ background:var(--cell); }
+/* High contrast gives every hole a visible edge (round 4, craft #14) */
+:root[data-contrast="high"] .slot{ box-shadow:inset 0 .45cqw .9cqw rgba(0,0,0,.45), inset 0 0 0 1.5px var(--line-2); }
+/* the keyed disc layer (shared/motion.js) sits over the holes on the same grid; clicks go through to the board.
+   A falling disc is clipped at the top edge of the grid (REDESIGN.md 5.5). */
+.board.four > .discs{ inset:var(--bgap); --gap:var(--sg); z-index:1; pointer-events:none; clip-path:inset(0 -16px -16px -16px); }
+.board.four > .discs > .tile{ background:none; box-shadow:none; border-radius:50%; }
+.board.four > .discs > .tile > .face{ position:absolute; inset:7%; width:auto; height:auto; border-radius:50%;
+  transition:opacity 200ms linear; }
+/* the winning line: one SVG line through the four disc centres, drawn over the discs */
+.winline{ position:absolute; inset:var(--bgap); width:calc(100% - 2 * var(--bgap)); height:calc(100% - 2 * var(--bgap));
+  z-index:2; pointer-events:none; overflow:visible; }
+.winline[hidden]{ display:none; }
+.winline line{ stroke:var(--ink); stroke-linecap:round; fill:none; }
+/* a disc: filled by owner (gold yours, cool the computer's) so ownership reads at a glance (round 1: craft R1,
+   cold 23); the number is printed dark on it */
+.disc{ position:absolute; inset:7%; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-weight:850; font-size:7.4cqw; line-height:1; color:var(--tile-ink); font-variant-numeric:tabular-nums; letter-spacing:0;
+  background:radial-gradient(circle at 35% 30%, var(--hi), var(--own) 62%);
+  box-shadow:inset 0 -.8cqw 0 rgba(0,0,0,.2), 0 .5cqw 1cqw rgba(0,0,0,.3); }
+.disc.p1{ --own:var(--accent); --hi:var(--accent-2); } .disc.p2{ --own:var(--cool); --hi:var(--cool-2); }
+/* the aim ghost is a hollow ring in your colour, so it never reads as a played disc (round 4, craft #31) */
+.disc.ghost{ opacity:.7; background:none; box-shadow:inset 0 0 0 .6cqw var(--own); color:var(--own); }
+.disc.dim{ opacity:.3; }
+/* the winning line: a white ring on its four discs, every other disc dimmed; nothing grows or moves */
+.disc.win{ outline:3px solid var(--ink); outline-offset:2px; }
+.disc.pick{ outline:3px dashed var(--ink); outline-offset:2px; }
+.slot.cur{ box-shadow:0 0 0 3px var(--accent); }
+/* round 2 (cold #5): Easy and Medium ring a hole where the computer's shown next disc would win */
+.slot.threat{ box-shadow:inset 0 0 0 3px var(--cool); }
+/* round 3 (cold blocker, critic #1): a red dashed ring on the landing cell of a column whose drop would let the
+   computer win; while that column is aimed, the cell it would win at gets a blue dashed ring */
+.slot.risky::after,.slot.opens::before{ content:""; position:absolute; border-radius:50%; pointer-events:none; }
+.slot.risky::after{ inset:12%; border:2px dashed var(--bad); z-index:1; }
+.slot.opens::before{ inset:3%; border:3px dashed var(--cool); }
+.slot.threat.cur{ box-shadow:inset 0 0 0 3px var(--cool), 0 0 0 3px var(--accent); }
+/* the next / held / computer discs in the stat pills */
+.mini{ display:inline-flex; align-items:center; justify-content:center; width:1.5em; height:1.5em; border-radius:50%;
+  color:#15151d; font-size:.95rem; vertical-align:middle; }
+.mini.you{ background:var(--accent); } .mini.cpu{ background:var(--cool); }
+/* an empty value is the shared .stat .none (round 3, craft #3); here it only drops the disc */
+.mini.none{ width:auto; background:transparent; }
+.stat{ min-width:58px; }
+/* round 2 (craft #5): at 320px the four pills wrap instead of pushing the page sideways */
+.stats{ flex-wrap:wrap; }
+.over .row{ margin:4px 0 0; }
+/* Tune: the number choice sits in the hint line */
+.hint .pick{ display:inline-flex; gap:8px; margin-left:8px; vertical-align:middle; }
+.hint .pick button{ width:var(--tap); height:var(--tap); border-radius:50%; border:0; font:inherit; font-weight:800; color:#15151d; cursor:pointer;
+  background:var(--accent); }
+.hint .pick button:disabled{ opacity:.35; cursor:default; }
+.hint .pick button:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; }
+/* round 3 (craft #2): the band holds two lines, so status copy never pushes the board down */
+.hint{ min-height:max(2.8em, calc(var(--tap) + 4px)); line-height:1.4; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; }
+/* the games cards at the page foot under the family's one heading (REDESIGN.md 3.1, TRIAGE4 Family);
+   section.more, never the end card's .over.more */
+section.more{ margin:22px 0 8px; } section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
+/* round 3 (craft #3): at 320px the four pills stay on one row (RECORD no longer sits alone) */
+@media (max-width:360px){
+  /* Tune's 44 px choices wrap under their label here: the band keeps room for both, so the board never moves */
+  .hint{ min-height:calc(var(--tap) + 1.4em + 6px); }
+}
+/* round 4 (craft Larger text, all-ages #5): on a phone the four pills share one row at every text size, so the board
+   starts higher; a label that does not fit wraps to two lines and never drops below 12 px (REDESIGN 1.1) */
+@media (max-width:360px){
+  .stats{ flex-wrap:nowrap; gap:6px; }
+  .stat{ min-width:0; padding:6px 7px; }
+  .stat > span{ letter-spacing:.03em; font-size:12px; line-height:1.1; }
+}
+@media (max-width:400px){
+  :root[data-text="large"] .stats{ flex-wrap:nowrap; gap:6px; }
+  :root[data-text="large"] .stat{ min-width:0; flex:1 1 auto; padding:6px 6px; }
+  :root[data-text="large"] .stat > span{ letter-spacing:.03em; line-height:1.1; }
+}

@@ -1,0 +1,79 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Fifteen: only what shared/theme.css does not cover. One set of nine tiles; the two views only move them. */
+.stat{ min-width:58px; padding:6px 10px; }
+.tiles,.hash{ position:absolute; inset:var(--gap); }
+/* a number tile: a cell with its number while free, the Endless tile once claimed */
+/* --k columns by --rows rows: Grid is the 3 x 3 magic square; Numbers is 1-5 over 6-9 (cold round 3 #28) */
+.board{ --k:5; --rows:2; } .board.grid{ --k:3; --rows:3; }
+.ft{ position:absolute; left:0; top:0; width:calc((100% - (var(--k) - 1)*var(--gap))/var(--k)); height:calc((100% - (var(--rows) - 1)*var(--gap))/var(--rows));
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0;
+  border:0; border-radius:var(--tile-radius); background:var(--cell); color:var(--ink); font:inherit; padding:0; cursor:pointer;
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap)))); transform-origin:0 0;
+  /* the view switch is a FLIP of translate + scale in game.js (REDESIGN.md 5.8, 5.13): no width, height or transform
+     transition here, so nothing lays out per frame */
+  transition:opacity 200ms; will-change:transform; }
+.ft b,.ft small{ position:relative; z-index:1; }
+.ft b{ font-size:15cqw; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
+/* the owner label is never under the 12 px floor (craft round 4 #8, #45; cold #37) */
+.ft small{ font-size:max(12px, 3.2cqw); font-weight:700; letter-spacing:.06em; text-transform:uppercase; min-height:1.2em; margin-top:.4cqw; line-height:1.2; }
+/* Numbers: the label reads across, pinned under the number, so every number sits at the same height whoever owns the
+   tile (owner O-11: no sideways words, numbers aligned). Where "computer" does not fit the pillar, game.js shows "cpu". */
+.board:not(.grid) .ft small{ position:absolute; left:0; right:0; bottom:9%; text-align:center; white-space:nowrap;
+  font-size:max(12px, 2.6cqw); letter-spacing:.04em; min-height:0; margin:0; overflow:hidden; }
+/* one focus ring, the family's gold (F9) */
+.ft:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; z-index:1; }
+/* ownership is the fill (craft N1): yours gold, the computer's cool, free tiles neutral; dark ink on both */
+.ft.mine{ background:var(--accent); color:#1b1b22; cursor:default; }
+.ft.theirs{ background:var(--cool); color:#111a28; cursor:default; }
+/* a claim fills the tile from its centre in the owner's colour; the number turns dark at half time (REDESIGN.md 5.8) */
+.ft.claiming{ background:var(--cell); animation:ft-ink 120ms step-end; }
+.ft.claiming::after{ content:""; position:absolute; inset:0; border-radius:inherit; background:var(--accent);
+  clip-path:circle(75% at 50% 50%); animation:ft-claim 240ms cubic-bezier(.2,.8,.2,1); }
+.ft.claiming.theirs::after{ background:var(--cool); }
+@keyframes ft-claim{ from{ clip-path:circle(0% at 50% 50%); } }
+@keyframes ft-ink{ from{ color:var(--ink); } }
+.ft.fresh{ animation:ft-in 260ms ease-out; }
+@keyframes ft-in{ from{ opacity:.25; } }
+.ft.dim{ opacity:.32; }
+.ft.win{ z-index:1; animation:ft-win 900ms ease-in-out 240ms 2; }
+.ft.win.mine{ box-shadow:0 0 14px 2px var(--accent); }
+.ft.win.theirs{ box-shadow:0 0 14px 2px var(--cool); }
+@keyframes ft-win{ 50%{ filter:brightness(1.15); } }
+/* under the round-end scrim the board rests evenly (craft N3); the chips carry the winning three */
+.board.ended .ft{ opacity:.35; box-shadow:none; animation:none; }
+.ft.peek{ box-shadow:inset 0 0 0 3px var(--accent); }
+.ft.blocked{ opacity:.45; cursor:not-allowed; }
+.ft.target{ cursor:crosshair; box-shadow:inset 0 0 0 4px var(--accent), inset 0 0 0 6px #111a28; }
+/* Grid view: the # lines of tic-tac-toe fade in behind the tiles */
+.hash i{ position:absolute; background:var(--line); border-radius:2px; opacity:0; transition:opacity 380ms; }
+.hash i:nth-child(1),.hash i:nth-child(2){ top:0; bottom:0; width:3px; margin-left:-1.5px; }
+.hash i:nth-child(1){ left:calc((100% - 2*var(--gap))/3 + var(--gap)/2); }
+.hash i:nth-child(2){ left:calc((100% - 2*var(--gap))*2/3 + var(--gap)*1.5); }
+.hash i:nth-child(3),.hash i:nth-child(4){ left:0; right:0; height:3px; margin-top:-1.5px; }
+.hash i:nth-child(3){ top:calc((100% - 2*var(--gap))/3 + var(--gap)/2); }
+.hash i:nth-child(4){ top:calc((100% - 2*var(--gap))*2/3 + var(--gap)*1.5); }
+.board.grid .hash i{ opacity:1; }
+.board.targeting{ cursor:default; }
+/* the view choice is a quiet segment like the difficulty row, so it never reads as an action beside New game
+   (craft round 3 #2) */
+details.how .how-more{ text-align:center; }
+.views{ margin:0; }
+.views button{ padding:9px 14px; }
+/* the one-time tip after the first round points at Grid with the family's gold ring (cold #10) */
+.views button.nudge{ box-shadow:0 0 0 2px var(--accent); color:var(--accent-text); }
+section.more{ margin:22px 0 8px; } section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
+/* round and match end (R8): the winning three as chips in their owner's fill */
+.trio{ display:flex; align-items:center; gap:6px; color:var(--mute); font-weight:700; }
+.trio[hidden]{ display:none; }
+.trio b{ display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px; border-radius:var(--tile-radius);
+  font-size:1.25rem; font-weight:800; font-variant-numeric:tabular-nums; }
+.trio b.mine{ background:var(--accent); color:#1b1b22; } .trio b.theirs{ background:var(--cool); color:#111a28; }
+.over .note{ font-size:.85rem; } .over [hidden]{ display:none; }
+/* the summary breaks only between its parts, never inside "You 2 : 1 Computer" (craft round 2 #9) */
+.over p span{ white-space:nowrap; }
+.over .acts{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+/* an empty record uses the shared .stat .none style (TRIAGE3) */
+@media (max-width:380px){ .stat{ min-width:52px; padding:6px 8px; } .views button{ padding:9px 10px; } }
+/* reduced motion (Settings "Less", or the device): html[data-motion] drives it, so the in-app setting wins (5.12) */
+:root[data-motion="reduced"] .ft.win{ animation:none; }
+:root[data-motion="reduced"] .ft.claiming::after{ clip-path:none; animation:ft-in 160ms linear; } /* opacity is not motion */

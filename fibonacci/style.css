@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Fibonacci: only the sliding board, which the shared theme leaves to each game. Copied from Endless. */
+.cells,.tiles{ position:absolute; inset:var(--gap); }
+.cells{ display:grid; grid-template-columns:repeat(4,1fr); gap:var(--gap); }
+.cells div{ background:var(--cell); border-radius:var(--tile-radius); }
+.tiles .tile{ position:absolute; left:0; top:0;
+  width:calc((100% - 3*var(--gap))/4); height:calc((100% - 3*var(--gap))/4);
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))));
+  transition:transform var(--anim) ease-out; font-size:9cqw; }
+.tiles .tile[data-len="3"]{ font-size:7.6cqw; } .tiles .tile[data-len="4"]{ font-size:6.4cqw; }
+.tiles .tile[data-len="5"]{ font-size:5.2cqw; } .tiles .tile[data-len="6"]{ font-size:4.4cqw; }
+.tile sub{ font-size:.55em; margin-left:1px; position:relative; top:.35em; line-height:1; } /* a flex item: vertical-align does not apply */
+/* Round 1: targeting marks sit ABOVE the tiles (a cell outline under a tile was hidden), the keyboard cursor
+ * is dashed so it never reads as a pick; an empty stat value is a dimmed "none" (R11). */
+.marks{ pointer-events:none; z-index:2; }
+.marks .mark{ background:transparent; transition:none; }
+.marks .mark.sel{ box-shadow:0 0 0 3px var(--accent) inset, 0 0 0 1px #15151d inset; }
+.marks .mark.cur{ outline:3px dashed var(--ink); outline-offset:-3px; }
+.marks .mark.sel.cur{ outline-color:#15151d; }
+/* Round 2 (craft #6): the pills sit on their own row under the title, where Endless's are at every width. */
+header .brand{ flex-basis:100%; }
+/* Round 3 end card: See the board beside New game; empty stat values use the shared .stat .none */
+.over .row{ margin:4px 0 0; }

@@ -1,0 +1,74 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Six</title>
+<meta name="description" content="The 6s challenge, expanded: put operators, square roots, factorials and brackets between the numbers so every line makes 6, then 66, 6.6, 666 and 66.6.">
+<meta name="theme-color" content="#14151c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E6%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Six</h1>
+      <p class="sub"><a href="../">Numberics</a> &middot; Every line makes six, then 66, 6.6, 666.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat"><span id="round-label">Round</span><b id="round">1</b></div>
+      <div class="stat"><span>Line</span><b id="lineno">1/6</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
+    </div>
+  </header>
+
+  <div class="seg" id="modes" role="group" aria-label="Mode">
+    <button type="button" data-mode="climb" aria-pressed="true">Climb</button>
+    <button type="button" data-mode="daily" aria-pressed="false">Daily Six</button>
+  </div>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status"></p>
+
+  <div id="board" class="board six" tabindex="0" aria-label="The line. Arrow keys move, Space cycles, + - x / set an operator, r and ! add a sign, ( and ) place brackets, b gives a bracket a sign.">
+    <div class="top"><span id="tier"></span><span id="pips" class="pips" aria-hidden="true"></span></div>
+    <div class="goal"><span class="eq">make</span><span id="target" class="tile goldt"></span></div>
+    <div id="line" class="line"></div>
+    <div id="bars" class="bars"></div>
+    <p id="expr" class="expr" aria-live="polite"></p>
+    <p id="val" class="val"></p>
+    <div class="tools">
+      <button id="brk" class="btn" type="button" aria-pressed="false">( ) Brackets</button>
+      <button id="clear" class="btn" type="button">Clear</button>
+      <button id="reveal" class="btn" type="button" title="Shows the answer. In Climb this ends the run.">Show answer</button>
+      <button id="next" class="btn primary" type="button" hidden>Next line</button>
+    </div>
+    <div id="over" class="over" hidden>
+      <h2 id="over-title">Round cleared</h2>
+      <p id="over-text"></p>
+      <p id="over-answer" class="answer" hidden></p>
+      <p id="over-best" class="best" hidden>New best.</p>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">Next round</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row"><button id="new" class="btn" type="button">New game</button></div>
+  <p class="how">Tap a gap for + &minus; &times; &divide;, a number for &radic; or !. Drag across numbers (or use ( ) Brackets) to group
+     them, then tap the bar under a group to give it a sign. Every step must be a whole number or a fraction. Three lines in a row without help earn a power-up.</p>
+  <nav id="games" class="games" data-root="../" data-current="six" aria-label="Numberics games"></nav>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/power.js"></script>
+<script src="bank.js"></script>
+<script src="engine.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+</body>
+</html>

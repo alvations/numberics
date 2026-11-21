@@ -1,0 +1,95 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Six: only what shared/theme.css does not cover. */
+/* the panel is as tall as its content (round 2: the square board left ~100px of dead space and the page scrolled at 390x844) */
+.six{ display:flex; flex-direction:column; justify-content:center; gap:10px; padding:14px; aspect-ratio:auto; container-type:inline-size; }
+.six .top{ display:flex; justify-content:space-between; align-items:center; color:var(--mute); font-size:.78rem;
+  text-transform:uppercase; letter-spacing:.08em; }
+.pips{ display:flex; gap:6px; }
+.pips i{ width:10px; height:10px; border-radius:99px; background:var(--cell); border:1px solid var(--line); }
+.pips i.on{ background:var(--accent); border-color:var(--accent); }
+.pips i.cur{ border-color:var(--accent); }
+.goal{ display:flex; justify-content:center; align-items:center; gap:10px; }
+.goal .eq{ color:var(--mute); font-size:.85rem; }
+.tile.goldt{ background:var(--accent); color:#1b1b22; padding:4px 16px; min-width:64px; height:52px; font-size:1.7rem; }
+/* the line: numbers (Endless tiles) with tappable gaps between them; columns are set by game.js */
+.line{ display:grid; align-items:center; width:100%; margin:0 auto; }
+/* too narrow for 40px tiles and 40px gaps in one row: the gaps sit in a row of their own, under the seams (round 3) */
+.line.stack{ row-gap:2px; } .six.stacked{ gap:6px; } /* the extra row costs no page height at 390x844 */
+.line.stack .gp{ width:44px; height:44px; min-height:44px; justify-self:center; } /* gap buttons at least 44 px (craft #9) */
+.six .over .row{ margin:4px 0 0; }
+.num{ position:relative; aspect-ratio:1; width:100%; cursor:pointer; touch-action:none; font-size:1.5rem; }
+.line.n4 .num{ font-size:1.3rem; } .line.n5 .num{ font-size:1.15rem; }
+.line.long .num{ font-size:1rem; }
+.num .sg{ position:absolute; top:-11px; left:50%; translate:-50% 0; background:var(--ink); color:var(--panel); border-radius:99px;
+  padding:1px 7px; font-size:.82rem; line-height:1.3; box-shadow:0 0 0 2px var(--panel); font-weight:800; white-space:nowrap; pointer-events:none; }
+.num.cur{ outline:2px solid var(--accent); outline-offset:5px; }
+/* gaps and bracket chips: the gold focus ring (F9) sits on the chip itself, never a box over the neighbouring tiles */
+.gp:focus-visible{ outline:none; }
+.gp.cur b,.gp:focus-visible b{ outline:2px solid var(--accent); outline-offset:2px; }
+.bar:focus-visible{ outline:none; border-color:var(--accent); }
+.bar:focus-visible i{ outline:2px solid var(--accent); outline-offset:2px; }
+.num.pk{ box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--cool); }
+.num.anchor{ outline:2px dashed var(--accent); outline-offset:3px; }
+.num.jl{ border-top-left-radius:2px; border-bottom-left-radius:2px; }
+.num.jr{ border-top-right-radius:2px; border-bottom-right-radius:2px; }
+.gp{ height:100%; min-height:44px; display:flex; align-items:center; justify-content:center; background:none; border:0; padding:0;
+  color:var(--ink); font:inherit; font-size:1.2rem; font-weight:700; cursor:pointer; }
+.gp b{ display:flex; align-items:center; justify-content:center; width:min(32px,100%); aspect-ratio:1; border-radius:99px;
+  background:var(--cell); border:1px solid var(--line); }
+/* an empty gap is the main thing to tap: gold dashed ring and a bold "?" so it reads as live, not disabled (round 2) */
+.gp.empty b{ border:2px dashed var(--accent); color:var(--accent); font-weight:800; }
+.gp:hover b{ border-color:var(--accent); }
+.gp.j b{ background:none; border:0; color:var(--mute); }
+.gp.dot b{ background:none; border:0; font-size:1.6rem; line-height:0; padding-bottom:.4em; }
+/* brackets: a bar under the numbers it groups, stacked by depth; its sign sits in a chip */
+.bars{ display:grid; width:100%; margin:-2px auto 0; row-gap:4px; min-height:14px; }
+.bar{ position:relative; height:14px; border:2px solid var(--cool); border-top:0; border-radius:0 0 10px 10px; background:none;
+  padding:0; cursor:pointer; margin:0 4%; }
+.bar.ghost{ border-style:dashed; border-color:var(--accent); pointer-events:none; }
+.bar i{ position:absolute; left:50%; bottom:-9px; translate:-50% 0; background:var(--cool); color:#15151d; border-radius:99px;
+  padding:0 6px; font-style:normal; font-size:.78rem; font-weight:800; line-height:1.35; }
+.expr{ margin:0; text-align:center; font-size:1rem; color:var(--ink); min-height:1.4em; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+.val{ margin:0; text-align:center; font-size:1.25rem; font-weight:800; color:var(--mute); min-height:1.4em; font-variant-numeric:tabular-nums; }
+.val small{ font-size:.75rem; font-weight:400; }
+.six.gold .num{ background:var(--accent); }
+.six.gold .expr,.six.gold .val{ color:var(--accent); }
+/* S16 (craft #15, cold #9): gold on the tan Light board was about 1:1; a deep amber reads 4.97:1 there */
+:root[data-theme="light"] .six.gold .expr,:root[data-theme="light"] .six.gold .val{ color:#654200; }
+.six .tools{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; } /* wraps only when it must (320 px, Larger text: B3) */
+.six .tools .btn{ padding:7px 14px; font-size:.85rem; white-space:nowrap; }
+@media (max-width:400px){ .six .tools{ gap:6px; } .six .tools .btn{ padding:7px 10px; } }
+.six .tools .btn[hidden]{ display:none; }
+@media (max-width:380px){ .tile.goldt{ height:46px; font-size:1.5rem; } .six{ padding:10px; } }
+.six .over .answer{ color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums; }
+/* Show answer is neutral (TRIAGE4 D10: the loud red read as "you did something wrong" and pulled children to it);
+   its two-tap confirm and the hint line's warning say what it costs. Armed, its text turns full ink. */
+.six .tools .btn.quiet{ color:var(--mute); font-weight:600; }
+.six .tools .btn.quiet.armed{ color:var(--ink); }
+/* ===== the redesign (REDESIGN.md 5.9, 9.6) ===== */
+/* a gap's tap area is at least 44 x 44 px: a transparent hit box around the visible chip */
+.gp{ position:relative; }
+.gp::before{ content:""; position:absolute; left:50%; top:50%; width:max(100%,var(--tap)); height:max(100%,var(--tap)); translate:-50% -50%; }
+/* the old sign flips out on top of the new one, then removes itself */
+.gp b.old{ position:absolute; pointer-events:none; }
+.num .sg.old{ z-index:1; }
+/* a bracket bar grows from its left end */
+.bar{ transform-origin:left center; }
+/* the gold sheen that sweeps a made line (positioned over the line by game.js) */
+.sheen{ position:absolute; left:0; top:0; width:0; height:0; overflow:hidden; pointer-events:none; opacity:0; border-radius:var(--r-sm); z-index:1; }
+.sheen i{ position:absolute; inset:0; background:linear-gradient(100deg, transparent 25%, rgba(255,246,214,.6) 50%, transparent 75%); }
+/* how to play: the pictures */
+.howto .pv .hg{ width:26px; height:26px; border-radius:99px; display:grid; place-items:center; border:2px dashed var(--accent); color:var(--accent); font-weight:850; }
+.howto .pv .mt.gold{ background:var(--accent); color:var(--accent-ink); }
+details.how p .btn{ padding:0 14px; }
+/* the tiles sit above the gaps' hit boxes, so a tap on a tile's edge is the tile's */
+.num{ z-index:1; }
+.sheen{ z-index:2; }
+/* the four-number picture fits the 120 px (96 px narrow) picture box */
+.howto .pv .eq.sm{ gap:2px; } .howto .pv .eq.sm .mt{ width:19px; height:22px; font-size:12px; border-radius:5px; }
+/* a five-number line on a phone stays one row (round 4, cold #25): tiles narrower than square, never under 44 px tall */
+.line.narrow .num{ aspect-ratio:auto; min-height:var(--tap-lg); }
+/* the expression line under the tiles only shows what the tiles cannot (brackets, signs, joins), else it is clutter
+   (craft #39); it stays in the page for screen readers and keeps its height, so nothing moves */
+.expr.same{ opacity:0; }
+/* one heading over the cards (TRIAGE4 Family); section.more, never the end card's .over.more */
+section.more{ margin:22px 0 8px; } section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }

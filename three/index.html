@@ -1,0 +1,79 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Three</title>
+<meta name="description" content="Count in threes. Every swipe moves tiles one step; 1 and 2 make 3, equal tiles from 3 up merge, 3 and 6 make 9, and a rainbow run of 3-6-9 flushes away for big points and a power-up.">
+<meta name="theme-color" content="#14151c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E3%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Three</h1>
+      <p class="sub"><a href="../">Numberics</a> &middot; Count in threes.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat"><span>Score</span><b id="score">0</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
+      <div class="stat next"><span>Next</span><b id="next" class="mini" aria-label="next tile"></b></div>
+    </div>
+  </header>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status"></p>
+
+  <div id="board" class="board" tabindex="0" aria-label="Game board. Arrow keys or swipe to move every tile one step.">
+    <div id="cells" class="cells"></div>
+    <div id="tiles" class="tiles"></div>
+    <div id="over" class="over" hidden>
+      <h2>No moves left</h2>
+      <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">New game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="new" class="btn" type="button">New game</button>
+  </div>
+  <p class="how">Swipe or use the arrow keys: every tile moves one step. 1 and 2 make 3; from 3 up equal tiles merge,
+     and so do 3 and 6 (they make 9). Line up 3, 6, 9 in a row or column to flush it away for points and a power-up.
+     <a href="#help" id="help-open">How it works</a></p>
+  <nav id="games" class="games" data-root="../" data-current="three" aria-label="Numberics games"></nav>
+  <div id="help" class="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
+    <div class="card" id="help-card" tabindex="-1">
+      <h2 id="help-title">How Three works</h2>
+      <p class="lead">Swipe or use the arrow keys: every tile moves one step.</p>
+      <ul>
+        <li><span class="ex"><b data-v="1"></b>+<b data-v="2"></b>=<b data-v="3"></b></span>
+          <span>1 and 2 (the small grey halves) make 3. Two 1s or two 2s never merge.</span></li>
+        <li><span class="ex"><b data-v="3"></b>+<b data-v="3"></b>=<b data-v="6"></b></span>
+          <span>From 3 up, equal tiles merge.</span></li>
+        <li><span class="ex"><b data-v="3"></b>+<b data-v="6"></b>=<b data-v="9"></b></span>
+          <span>3 and 6 make 9 too. 1&nbsp;+&nbsp;2 and 3&nbsp;+&nbsp;6 are the only unequal pairs.</span></li>
+        <li><span class="ex"><b data-v="3"></b><b data-v="6"></b><b data-v="9"></b>&rarr;<b class="gone"></b></span>
+          <span><strong>Flush:</strong> line up 3, 6, 9 (or 6, 9, 12) in a row or column for big points and a power-up. A flush uses only 3, 6, 9 and 12.</span></li>
+        <li><span class="ex"><b data-v="24"></b><b data-v="48"></b><b data-v="96"></b></span>
+          <span>Big tiles grow by doubling (12, 24, 48 and 9, 18, 36). Every value has its own colour; past 384 they repeat with a ring.</span></li>
+      </ul>
+      <button id="help-play" class="btn primary" type="button">Play</button>
+    </div>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/power.js"></script>
+<script src="engine.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+</body>
+</html>

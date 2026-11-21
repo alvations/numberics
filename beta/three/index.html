@@ -1,0 +1,94 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Three</title>
+<meta name="description" content="Count in threes. Every swipe moves tiles one step; 1 and 2 make 3, equal tiles from 3 up merge, 3 and 6 make 9, and a rainbow run of 3-6-9 flushes away for big points and a power-up.">
+<meta name="theme-color" content="#12131a">
+<script src="../shared/boot.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E3%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="topbar" class="topbar" data-root="../"></div>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Three</h1>
+      <p class="sub">Count in threes.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat"><span>Score</span><b id="score">0</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
+      <div class="stat next"><span>Next</span><b id="next" class="mini" aria-label="next tile"></b></div>
+    </div>
+  </header>
+
+  <div id="diff" class="seg" role="group" aria-label="Difficulty">
+    <button type="button" data-diff="easy">Easy</button>
+    <button type="button" data-diff="medium">Medium</button>
+    <button type="button" data-diff="hard">Hard</button>
+  </div>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status"></p>
+
+  <div id="board" class="board" tabindex="0" aria-label="Game board. Arrow keys or swipe to move every tile one step.">
+    <div id="cells" class="cells"></div>
+    <div id="tiles" class="tiles"></div>
+    <div id="over" class="over" hidden>
+      <h2>No moves left</h2>
+      <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-pills" class="tro-pills" hidden></div>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="over-undo" class="btn" type="button" hidden>Undo</button>
+        <button id="again" class="btn primary" type="button">New game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="new" class="btn" type="button">New game</button>
+  </div>
+  <details class="how" id="how"><summary>How to play</summary>
+    <p>Swipe or use the arrow keys: every tile moves one step. 1 and 2 make 3; from 3 up equal tiles merge,
+       and so do 3 and 6 (they make 9). Line up 3, 6, 9 in a row or column (either way round) for a rainbow flush: it clears for points and a power-up.
+       On Medium, a join that makes a tile as big as your top tile, from 18 up, earns one too; on Easy, a join that
+       makes at least half your top tile, from 9 up. Hard pays flushes only.</p>
+    <ul class="rules">
+      <li>1 and 2 (the small grey halves) make 3. Two 1s or two 2s never merge.</li>
+      <li>From 3 up, equal tiles merge.</li>
+      <li>3 and 6 make 9 too. 1&nbsp;+&nbsp;2 and 3&nbsp;+&nbsp;6 are the only unequal pairs.</li>
+      <li><strong>Rainbow flush:</strong> line up 3, 6, 9 (or 6, 9, 12) in a row or column, either way round, for big points and a power-up. A flush uses only 3, 6, 9 and 12.</li>
+      <li>Big tiles grow by doubling (12, 24, 48 and 9, 18, 36). Every value has its own colour; past 384 they repeat with a ring.</li>
+      <li>Power-ups: Undo takes back a move, Smash removes a tile, Swap trades two neighbours, Third turns a 1 or a 2 into a 3.</li>
+      <li>A flush that a power-up lines up scores but earns no power-up, and neither does the swipe right after Smash, Swap or Third.</li>
+    </ul>
+    <p class="keys">Keys: arrows move. 1 to 4 (or U for Undo) use the power-ups. Arrows and Enter aim them; Esc cancels.</p>
+    <p><button id="howto-open" class="btn" type="button" data-howto>Show the three steps</button></p>
+  </details>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="three" aria-label="Numberics games"></div>
+  </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
+<script src="../shared/power.js"></script>
+<script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
+</body>
+</html>

@@ -1,0 +1,97 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Nine</title>
+<meta name="description" content="Nim with number tiles up to nine. Lower one tile each turn; whoever takes the last wins. Best of five against the computer, with power-ups.">
+<meta name="theme-color" content="#12131a">
+<script src="../shared/boot.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E9%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="topbar" class="topbar" data-root="../"></div>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Nine</h1>
+      <p class="sub">Take dots in turns. The last dot wins.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat" title="Rounds you have won in this match (first to three)"><span>You</span><b id="you">0</b></div>
+      <div class="stat" title="Rounds the computer has won in this match"><span>Computer</span><b id="cpu">0</b></div>
+      <div class="stat" title="Matches won-lost"><span>Matches</span><b id="rec" class="none">none</b></div>
+      <div class="stat" title="Most tiles in a match you won"><span>Most tiles</span><b id="best" class="none">none</b></div>
+    </div>
+  </header>
+
+  <div id="diff" class="seg" role="group" aria-label="Difficulty">
+    <button type="button" data-diff="easy">Easy</button>
+    <button type="button" data-diff="medium">Medium</button>
+    <button type="button" data-diff="hard">Hard</button>
+  </div>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status"></p>
+
+  <div id="board" class="board" tabindex="0" aria-label="Tiles. Arrow keys pick a tile and how much to take, Enter takes.">
+    <div id="heaps" class="heaps"></div>
+    <div id="learn" class="learn" hidden>
+      <p id="learn-plain" class="plain"></p>
+      <button id="bin-btn" class="btn bin-btn" type="button" aria-expanded="false" aria-controls="learn-deep">Show the binary</button>
+      <div id="learn-deep" class="deep" hidden><span id="learn-goal" class="goal"></span><span id="learn-sum" class="sum"></span></div>
+    </div>
+    <div class="bar">
+      <button id="less" class="btn step" type="button" aria-label="Take one less">&minus;</button>
+      <span id="amount" class="amount">Pick a tile</span>
+      <button id="more" class="btn step" type="button" aria-label="Take one more">+</button>
+      <button id="take" class="btn primary" type="button">Take</button>
+    </div>
+    <div id="over" class="over" hidden>
+      <h2 id="over-title">Round won</h2>
+      <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-pills" class="tro-pills" hidden></div>
+      <p id="over-note" class="note"></p>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">Next round</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="new" class="btn" type="button">New game</button>
+    <button id="learn-btn" class="btn" type="button" aria-pressed="false" title="A plain tip first, then the binary trick behind it (L). The live nim-sum is on Easy and Medium only.">Learn</button>
+    <button id="misere" class="btn" type="button" aria-pressed="false" title="Mis&egrave;re: the last take loses" hidden>Mis&egrave;re</button>
+  </div>
+  <details class="how" data-perf-skip><summary>How to play</summary>
+    <p>Tap a tile, then a pip or + and - to set the take (keys: arrows, Enter, 1-4, L). Win a best of five
+       to add a tile; lose a match and the run starts again. A won round earns a power-up, unless you used Add, Pass, Peek
+       or Undo in it. Easy and Medium deal you a winning start. Hard deals at random, so even perfect play can lose. On Hard the computer can also Pass and Add. A match
+       win unlocks Mis&egrave;re (last take loses).</p>
+    <p><button id="howto" class="btn" type="button" data-howto>Show the three steps</button></p>
+  </details>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <nav id="games" class="cards" data-root="../" data-current="nine" aria-label="Numberics games"></nav>
+  </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
+<script src="../shared/power.js"></script>
+<script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
+</body>
+</html>

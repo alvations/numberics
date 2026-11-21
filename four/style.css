@@ -1,0 +1,57 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Four: only what shared/theme.css does not cover. The board is the shared .board panel, made 7x6. */
+.board.four{ aspect-ratio:7/6; cursor:pointer; }
+.board.four.targeting{ cursor:crosshair; }
+.grid{ position:absolute; inset:var(--gap); display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr);
+  gap:calc(var(--gap) * .7); }
+.slot{ position:relative; background:var(--cell); border-radius:50%; }
+.slot.aim{ background:#2e3244; }
+/* a disc: filled by owner (gold yours, cool the computer's) so ownership reads at a glance (round 1: craft R1,
+   cold 23); the number is printed dark on it */
+.disc{ position:absolute; inset:7%; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-weight:800; font-size:7.4cqw; line-height:1; color:#15151d; font-variant-numeric:tabular-nums;
+  background:var(--own); box-shadow:inset 0 -.6cqw 0 rgba(0,0,0,.18); }
+.disc.p1{ --own:var(--accent); } .disc.p2{ --own:var(--cool); }
+.disc.ghost{ opacity:.38; }
+.disc.dim{ opacity:.3; }
+.disc.fall{ animation:four-fall 230ms cubic-bezier(.5,0,.9,.6); }
+@keyframes four-fall{ from{ transform:translateY(calc(var(--drop) * -118%)); } }
+/* the winning line: a white ring on its four discs, every other disc dimmed; nothing grows or moves */
+.disc.win{ outline:3px solid var(--ink); outline-offset:2px; }
+.slot.pick .disc{ outline:3px dashed var(--ink); outline-offset:2px; }
+.slot.cur{ box-shadow:0 0 0 3px var(--accent); }
+/* round 2 (cold #5): Easy and Medium ring a hole where the computer's shown next disc would win */
+.slot.threat{ box-shadow:inset 0 0 0 3px var(--cool); }
+/* round 3 (cold blocker, critic #1): a red dashed ring on the landing cell of a column whose drop would let the
+   computer win; while that column is aimed, the cell it would win at gets a blue dashed ring */
+.slot.risky::after,.slot.opens::before{ content:""; position:absolute; border-radius:50%; pointer-events:none; }
+.slot.risky::after{ inset:12%; border:2px dashed var(--bad); z-index:1; }
+.slot.opens::before{ inset:3%; border:3px dashed var(--cool); }
+.slot.threat.cur{ box-shadow:inset 0 0 0 3px var(--cool), 0 0 0 3px var(--accent); }
+/* the next / held / computer discs in the stat pills */
+.mini{ display:inline-flex; align-items:center; justify-content:center; width:1.5em; height:1.5em; border-radius:50%;
+  color:#15151d; font-size:.95rem; vertical-align:middle; }
+.mini.you{ background:var(--accent); } .mini.cpu{ background:var(--cool); }
+/* an empty value is the shared .stat .none (round 3, craft #3); here it only drops the disc */
+.mini.none{ width:auto; background:transparent; }
+.stat{ min-width:58px; }
+/* round 2 (craft #5): at 320px the four pills wrap instead of pushing the page sideways */
+.stats{ flex-wrap:wrap; }
+.over .row{ margin:4px 0 0; }
+/* Tune: the number choice sits in the hint line */
+.hint .pick{ display:inline-flex; gap:8px; margin-left:8px; vertical-align:middle; }
+.hint .pick button{ width:2em; height:2em; border-radius:50%; border:0; font:inherit; font-weight:800; color:#15151d; cursor:pointer;
+  background:var(--accent); }
+.hint .pick button:disabled{ opacity:.35; cursor:default; }
+.hint .pick button:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; }
+/* round 3 (craft #2): the band holds two lines, so status copy never pushes the board down */
+.hint{ min-height:2.8em; line-height:1.4; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; }
+@media (prefers-reduced-motion:reduce){
+  .disc.fall{ animation:none; }
+}
+/* round 3 (craft #3): at 320px the four pills stay on one row (RECORD no longer sits alone) */
+@media (max-width:360px){
+  .stats{ flex-wrap:nowrap; gap:6px; }
+  .stat{ min-width:0; padding:6px 7px; }
+  .stat > span{ letter-spacing:.03em; font-size:.62rem; }
+}

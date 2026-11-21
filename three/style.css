@@ -1,0 +1,94 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Three: only what shared/theme.css does not cover. The rainbow scale is the identity:
+ * each rung of the value ladder has its own colour (3 red .. 384 white); past that each lap adds a ring. */
+.cells,.tiles{ position:absolute; inset:var(--gap); }
+.cells{ display:grid; grid-template-columns:repeat(4,1fr); gap:var(--gap); }
+.cells div{ background:var(--cell); border-radius:var(--tile-radius); }
+.cells div.sel{ outline:3px solid var(--accent); outline-offset:-3px; }
+/* targeting: picked tiles and the keyboard cursor sit on the tile layer, so they show on occupied cells too */
+.tiles .tile.sel{ outline:3px solid var(--accent); outline-offset:2px; z-index:1; }
+.cells div.cur,.tiles .tile.cur{ outline:2px dashed var(--accent); outline-offset:2px; z-index:1; }
+.tiles .tile.sel.cur{ outline-style:solid; outline-width:3px; }
+.tiles .tile{ position:absolute; left:0; top:0;
+  width:calc((100% - 3*var(--gap))/4); height:calc((100% - 3*var(--gap))/4);
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))));
+  transition:transform var(--anim) ease-out; font-size:10cqw; }
+.tile[data-len="3"]{ font-size:8cqw; } .tile[data-len="4"]{ font-size:6.6cqw; }
+.tile[data-len="5"]{ font-size:5.4cqw; } .tile[data-len="6"]{ font-size:4.6cqw; }
+
+/* colour ladder (engine.js colour()): 3 6 9 12 18 24 36 48 72 96 144 192 288 384, one colour per rung so no two
+   values on a board look alike; hue and lightness tuned so dark ink stays readable on every rung */
+[data-band="0"]{ --h:4;   --l:62%; } [data-band="1"]{ --h:28;  --l:60%; }
+[data-band="2"]{ --h:50;  --l:58%; } [data-band="3"]{ --h:140; --l:50%; --s:48%; }
+[data-band="4"]{ --h:205; --l:62%; } [data-band="5"]{ --h:238; --l:72%; }
+[data-band="6"]{ --h:282; --l:70%; } [data-band="7"]{ --h:328; --l:72%; --s:70%; }
+[data-band="8"]{ --h:174; --l:46%; --s:52%; } [data-band="9"]{ --h:84; --l:55%; --s:55%; }
+[data-band="10"]{ --h:222; --l:80%; --s:16%; } [data-band="11"]{ --h:36; --l:76%; --s:48%; }
+[data-band="12"]{ --h:186; --l:76%; --s:80%; } [data-band="13"]{ --h:40; --l:94%; --s:30%; }
+.tile.three{ background:hsl(var(--h) var(--s,62%) var(--l)); box-shadow:0 2px 0 hsl(var(--h) 50% 34%); }
+/* lap rings: past 384 the ladder colours repeat, each lap one more bright ring */
+.tile.three[data-oct="1"]{ box-shadow:inset 0 0 0 3px rgba(255,255,255,.85), 0 2px 0 hsl(var(--h) 50% 34%); }
+.tile.three[data-oct="2"]{ box-shadow:inset 0 0 0 3px #fff, inset 0 0 0 6px hsl(var(--h) var(--s,62%) var(--l)), inset 0 0 0 8px rgba(255,255,255,.85), 0 2px 0 hsl(var(--h) 50% 34%); }
+.tile.three[data-oct="3"]{ box-shadow:inset 0 0 0 3px var(--accent), inset 0 0 0 6px #fff, 0 0 10px var(--accent), 0 2px 0 hsl(var(--h) 50% 34%); }
+/* 1 and 2: neutral grey halves of a 3, quieter and a little smaller so the threes lead */
+.tile.one,.tile.two{ font-weight:700; color:#2a2c38; background:none; }
+.tile.one::before,.tile.two::before{ content:""; position:absolute; inset:2.2cqw; border-radius:6px; z-index:-1; }
+.tile.one::before{ background:hsl(230 10% 78%); } .tile.two::before{ background:hsl(230 8% 64%); }
+
+/* the next-tile preview in the stat pill */
+.stat.next{ min-width:56px; }
+.mini{ display:inline-flex; align-items:center; justify-content:center; min-width:30px; height:24px; padding:0 6px;
+  border-radius:6px; font-size:.95rem; font-weight:800; color:#15151d; }
+.mini.one{ background:hsl(230 10% 78%); } .mini.two{ background:hsl(230 8% 64%); }
+.mini.three{ background:hsl(var(--h) var(--s,62%) var(--l)); }
+
+/* Flush: a rainbow sweeps along the run, then the run collapses */
+.tile.run{ z-index:2; }
+.tile.run::after{ content:""; position:absolute; inset:-3px; border-radius:calc(var(--tile-radius) + 3px); pointer-events:none;
+  background:linear-gradient(90deg,#ff5a52,#ff9f40,#ffe14a,#5fd37a,#4fb0ff,#7c7cff,#c77dff,#ff5a52) 0 0/300% 100%;
+  opacity:0; mix-blend-mode:screen; animation:sweep 420ms ease-out var(--d,0ms) both; }
+@keyframes sweep{ 0%{ opacity:0; background-position:100% 0; } 30%{ opacity:.85; } 100%{ opacity:0; background-position:0 0; } }
+.tile.run.still::after{ animation:none; opacity:1; mix-blend-mode:normal; background:none;
+  border:3px solid; border-image:linear-gradient(90deg,#ff5a52,#ffe14a,#5fd37a,#4fb0ff,#c77dff) 1; border-radius:0; }
+.tile.flushed{ animation:nm-pop 180ms ease-out; }
+/* a dealt tile appears in its cell; it never slides in across the board frame (craft #3) */
+.tiles .tile.new{ transition:none; }
+
+@media (prefers-reduced-motion:reduce){
+  .tiles .tile{ transition:none; }
+  .tile.run::after{ animation:none; }
+  .tile.flushed{ animation:none; }
+}
+
+/* first-run explainer (shown once, re-opened from "How it works") */
+/* the card centres with margin:auto, so a card taller than the screen (320x568) starts at the top and scrolls */
+.help{ position:fixed; inset:0; z-index:6; display:flex; padding:16px;
+  background:rgba(20,21,28,.92); overflow:auto; overscroll-behavior:contain; }
+.help[hidden]{ display:none; }
+.help .card{ isolation:isolate; margin:auto; width:100%; max-width:420px; background:var(--panel); border:1px solid var(--line);
+  border-radius:var(--radius); padding:18px 16px 16px; text-align:center; }
+.help h2{ margin:0 0 4px; font-size:1.3rem; }
+.help .lead{ margin:0 0 12px; color:var(--mute); font-size:.88rem; }
+.help ul{ list-style:none; margin:0 0 14px; padding:0; display:grid; gap:10px; text-align:left; }
+.help li{ display:grid; grid-template-columns:140px 1fr; gap:10px; align-items:center; font-size:.86rem; }
+.help .ex{ display:flex; align-items:center; gap:3px; color:var(--mute); font-weight:700; }
+.help .tile{ position:relative; width:28px; height:28px; font-size:.9rem; flex:none; }
+.help .tile[data-len="2"]{ font-size:.82rem; }
+.help .tile.one::before,.help .tile.two::before{ inset:3px; border-radius:5px; }
+.help .tile.three[data-oct="1"]{ box-shadow:inset 0 0 0 2px rgba(255,255,255,.85); }
+.help .tile.three[data-oct="2"]{ box-shadow:inset 0 0 0 2px #fff, inset 0 0 0 4px hsl(var(--h) var(--s,62%) var(--l)), inset 0 0 0 5px rgba(255,255,255,.85); }
+.help .btn{ min-width:120px; }
+.help .card:focus{ outline:none; }
+.help .gone{ width:28px; height:28px; border-radius:var(--tile-radius); border:2px dashed var(--line); flex:none; }
+/* the end card: See the board + New game side by side */
+.over .row{ margin:4px 0 0; }
+/* the board's focus and aiming rings sit inside the panel, never out toward the page edge */
+.board:focus-visible{ outline-offset:-2px; }
+.board.targeting{ box-shadow:inset 0 0 0 2px var(--accent); }
+/* craft #2: on a narrow phone the example column shrinks so the words get the room (320 x 568) */
+@media (max-width:360px){
+  .help{ padding:10px; } .help .card{ padding:14px 12px 12px; }
+  .help li{ grid-template-columns:104px 1fr; gap:8px; font-size:.82rem; }
+  .help .ex{ gap:2px; } .help .tile,.help .gone{ width:22px; height:22px; font-size:.78rem; }
+  .help .tile[data-len="2"]{ font-size:.7rem; }
+}

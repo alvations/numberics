@@ -1,0 +1,84 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) */
+:root{ --bg:#14151c; --panel:#1d1f2a; --cell:#262938; --ink:#ecebf1; --mute:#9a9bb0; --accent:#f2b84b;
+  --peer:#2f3348; --same:#3d4a72; --bad:#ff6b6b; --line:#4b4f6a; }
+*{ box-sizing:border-box; }
+html,body{ margin:0; background:var(--bg); color:var(--ink); font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+body{ min-height:100dvh; display:flex; justify-content:center;
+  padding:max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom)); }
+#app{ width:100%; max-width:480px; position:relative; }
+header{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:8px; flex-wrap:wrap; }
+h1{ margin:0; font-size:2rem; color:var(--accent); letter-spacing:.02em; }
+.sub{ margin:0; color:var(--mute); font-size:.85rem; text-wrap:balance; } .sub a{ color:var(--mute); }
+.brand{ flex:1 1 0; min-width:0; } /* the pills stay beside the title; a long line wraps inside the brand */
+@media (max-width:359px){ .brand{ flex-basis:100%; } } /* 320: the pills drop under the title so the tagline keeps one line (craft #3) */
+.stats{ display:flex; gap:8px; }
+.stat{ background:var(--panel); border-radius:10px; padding:6px 12px; min-width:64px; text-align:center; }
+.stat span{ display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
+.stat b{ font-size:1.1rem; font-variant-numeric:tabular-nums; }
+.levels{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px; }
+.levels button{ background:var(--panel); color:var(--mute); border:1px solid #33364a; border-radius:10px; padding:7px; font:inherit; font-size:.85rem; cursor:pointer; }
+.levels button[aria-pressed="true"]{ color:var(--ink); border-color:var(--accent); }
+.board{ display:grid; grid-template-columns:repeat(9,1fr); width:100%; aspect-ratio:1; background:var(--line); gap:1px;
+  border:2px solid var(--line); border-radius:14px; overflow:hidden; container-type:inline-size; touch-action:manipulation; }
+.c{ position:relative; background:var(--cell); display:flex; align-items:center; justify-content:center; font-size:6cqw;
+  font-variant-numeric:tabular-nums; cursor:pointer; user-select:none; -webkit-user-select:none; color:#9fc2ff; }
+.c.given{ color:var(--ink); font-weight:700; }
+.c.peer{ background:var(--peer); } .c.same{ background:var(--same); }
+.c.sel{ background:var(--cell); outline:2px solid var(--accent); outline-offset:-2px; z-index:1; } /* gold outline on the normal fill (S1) */
+.c.bad{ color:var(--bad); } .c.bad.given{ color:var(--bad); }
+.c.bad.same{ color:#ffadad; } /* a clash on the blue same-digit fill keeps 4.5:1 (craft nit 4) */
+.c:nth-child(9n+4),.c:nth-child(9n+7){ box-shadow:-2px 0 0 var(--line); }
+.r{ display:contents; } /* role="row" wrappers for valid grid ARIA; the cells stay items of the board grid */
+.r:nth-child(3) .c,.r:nth-child(6) .c{ border-bottom:2px solid var(--line); }
+.notes{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,1fr); font-size:3.6cqw; color:var(--mute); line-height:1; } /* readable on a phone (S3, craft #4) */
+.notes i{ font-style:normal; display:flex; align-items:center; justify-content:center; }
+/* power-up tray: the Endless tray (shared/theme.css), sitting where the old tools row was */
+.tray{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:10px 0 8px; }
+.pw{ position:relative; background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:10px;
+  padding:9px 4px; font:inherit; font-size:.85rem; cursor:pointer; white-space:nowrap; }
+.pw.empty{ opacity:.45; } .pw.empty:hover{ opacity:.6; } /* unusable now: a tap explains it (R5) */
+.pw.armed{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
+.pw i{ font-style:normal; margin-left:6px; background:var(--accent); color:#1b1b22; border-radius:99px;
+  padding:0 7px; font-weight:700; font-size:.78rem; }
+@media (max-width:440px){ .pw{ font-size:.78rem; } .pw i{ margin-left:3px; padding:0 5px; } }
+@media (max-width:360px){ .tray{ gap:6px; } .pw{ font-size:.72rem; padding:9px 2px; } .pw i{ margin-left:2px; padding:0 4px; } } /* fits at 320 */
+.board.targeting{ box-shadow:0 0 0 2px var(--accent); cursor:crosshair; }
+.c.wrong{ background:#6a2632; }
+.tools{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:0 0 8px; }
+.pad{ display:grid; grid-template-columns:repeat(9,1fr); gap:6px; }
+.pad button{ position:relative; background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:8px; padding:10px 0 12px;
+  font:inherit; font-size:1.15rem; font-weight:700; cursor:pointer; }
+.pad button small{ position:absolute; right:3px; bottom:1px; font-size:.7rem; color:var(--mute); font-weight:400; }
+.pad button:disabled{ opacity:.3; cursor:default; }
+.btn{ background:var(--panel); color:var(--ink); border:1px solid #33364a; border-radius:10px; padding:9px 6px; font:inherit; font-size:.85rem; cursor:pointer; }
+.btn[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent); }
+.btn.primary{ background:var(--accent); color:#1b1b22; border-color:var(--accent); font-weight:700; padding:9px 18px; }
+.btn:focus-visible,.pw:focus-visible,.pad button:focus-visible,.levels button:focus-visible,.c:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.row{ display:flex; justify-content:center; margin:10px 0 4px; } .row .btn{ padding:9px 18px; font-size:1rem; } /* same size as the family (F17) */
+.how{ color:var(--mute); font-size:.82rem; text-align:center; margin:8px 0; }
+/* end card: the family overlay (shared .over, R8), a full scrim over the board */
+.wrap{ position:relative; }
+.over{ position:absolute; inset:0; border-radius:14px; background:rgba(20,21,28,.985); display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:10px; text-align:center; padding:20px; z-index:3; }
+.over[hidden]{ display:none; } .over h2{ margin:0; font-size:1.6rem; line-height:1.2; text-wrap:balance; }
+.over p{ margin:0; color:var(--mute); text-wrap:balance; } .over .best{ color:var(--accent); font-weight:700; }
+.over p[hidden]{ display:none; }
+.over .row{ gap:8px; margin:4px 0 0; flex-wrap:wrap; } /* "See the board" beside the primary, the family card set */
+.stat b.none,.stat .none{ color:var(--mute); font-weight:600; font-size:1.1rem; } /* the family's one empty-value style (shared .stat .none, TRIAGE3) */
+/* toast at the top, never over the games row (F2); warnings use the neutral variant (F3) */
+.toast{ position:fixed; left:50%; top:max(12px,env(safe-area-inset-top)); transform:translateX(-50%); background:var(--accent);
+  color:#1b1b22; padding:8px 16px; border-radius:99px; font-weight:700; opacity:0; pointer-events:none; transition:opacity 200ms;
+  width:max-content; max-width:calc(100vw - 32px); text-align:center; z-index:5; box-shadow:0 4px 18px rgba(0,0,0,.45); }
+.toast.on{ opacity:1; }
+.toast.bad{ background:var(--panel); color:var(--ink); border:1px solid var(--bad); font-weight:600; }
+.toast.info{ background:var(--panel); color:var(--ink); border:1px solid var(--line); font-weight:600; } /* a plain explanation (R7) */
+/* hover and press feedback (desktop), no movement (F5) */
+.btn:hover:not(:disabled),.pw:hover,.levels button:hover,.pad button:hover:not(:disabled){ background:#262a3a; border-color:#4b4f6a; }
+.btn:active:not(:disabled),.pw:active,.levels button:active,.pad button:active:not(:disabled){ background:#2f3349; }
+.btn.primary:hover:not(:disabled){ background:#f5c46a; border-color:#f5c46a; } .btn.primary:active:not(:disabled){ background:#e0a93f; }
+.levels button[aria-pressed="true"]:hover,.btn[aria-pressed="true"]:hover,.pw.armed:hover{ border-color:var(--accent); }
+a:hover{ color:var(--ink); }
+a:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; } /* gold ring on links too (F9) */
+.board:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+.games{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px 12px; margin:10px 0 4px; font-size:.82rem; }
+.games a{ color:var(--mute); } .games a[aria-current="page"]{ color:var(--accent); text-decoration:none; }

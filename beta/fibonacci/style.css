@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Fibonacci: only the sliding board, which the shared theme leaves to each game.
+ * The tiles live in the shared keyed layer (shared/motion.js, theme.css "B2 motion"): it places and slides them; this
+ * sheet only sizes the numbers and draws the targeting marks, the score float and the gold ring (REDESIGN.md 5.3). */
+.cells,.marks{ position:absolute; inset:var(--gap); }
+.cells{ display:grid; grid-template-columns:repeat(4,1fr); gap:var(--gap); }
+.cells div{ background:var(--cell); border-radius:var(--tile-radius); }
+.nmm-layer > .tile > .face{ font-size:9cqw; }
+.nmm-layer > .tile[data-len="3"] > .face{ font-size:7.6cqw; } .nmm-layer > .tile[data-len="4"] > .face{ font-size:6.4cqw; }
+.nmm-layer > .tile[data-len="5"] > .face{ font-size:5.2cqw; } .nmm-layer > .tile[data-len="6"] > .face{ font-size:4.4cqw; }
+.tile sub{ font-size:.55em; margin-left:1px; position:relative; top:.35em; line-height:1; } /* a flex item: vertical-align does not apply */
+/* Round 1: targeting marks sit ABOVE the tiles (a cell outline under a tile was hidden), the keyboard cursor
+ * is dashed so it never reads as a pick; an empty stat value is a dimmed "none" (R11). */
+.marks .tile{ position:absolute; left:0; top:0;
+  width:calc((100% - 3*var(--gap))/4); height:calc((100% - 3*var(--gap))/4);
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap)))); }
+.marks{ pointer-events:none; z-index:2; }
+.marks .mark{ background:transparent; box-shadow:none; transition:none; }
+.marks .mark.sel{ box-shadow:0 0 0 3px var(--accent) inset, 0 0 0 1px #15151d inset; }
+.marks .mark.cur{ outline:3px dashed var(--ink); outline-offset:-3px; }
+.marks .mark.sel.cur{ outline-color:#15151d; }
+/* Round 2 (craft #6): the pills sit on their own row under the title, where Two's are at every width. */
+header .brand{ flex-basis:100%; }
+/* Round 3 end card: See the board beside New game; empty stat values use the shared .stat .none */
+.over .row{ margin:4px 0 0; }
+/* 5.3: the score's "+N" rises into place and fades (WAAPI in game.js) INSIDE the Score box, never on the subtitle
+ * (TRIAGE5 S20, as Two): it takes the label row on a strip of the box's own colour, so it never overprints "SCORE";
+ * the gold ring on a new paying top tile; 8.5 the one-shot ring on the Best stat. Opacity only under reduced motion. */
+.plus{ position:absolute; left:1px; right:1px; top:1px; padding:4px 0 2px; text-align:center; font-weight:850;
+  font-size:var(--fs-sm); line-height:1.2; color:var(--accent-text); background:var(--panel); border-radius:var(--r-sm) var(--r-sm) 0 0;
+  pointer-events:none; z-index:3; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.nmm-layer > .tile > .ring{ position:absolute; inset:0; border-radius:var(--tile-radius); pointer-events:none; z-index:1; opacity:0;
+  animation:fib-ring 420ms var(--e-out) calc(var(--nmm-slide) + var(--nmm-pop)) both; }
+.nmm-layer.nmm-reduced > .tile > .ring{ box-shadow:0 0 0 .6cqw var(--accent); animation:fib-ring-fade 420ms linear both; }
+@keyframes fib-ring{ 0%{ box-shadow:0 0 0 0 var(--accent); opacity:1; } 100%{ box-shadow:0 0 0 .8cqw var(--accent); opacity:0; } }
+@keyframes fib-ring-fade{ 0%{ opacity:1; } 100%{ opacity:0; } }
+.stat.glow::after{ content:""; position:absolute; inset:-1px; border-radius:inherit; box-shadow:0 0 0 2px var(--accent);
+  pointer-events:none; animation:fib-ring-fade 420ms var(--e-out) both; }
+/* the how-to row's button, the how-to sheet's pictures, the games list under the board */
+details.how .btn{ min-height:var(--tap); }
+.howto .pv .op{ color:var(--mute); font-weight:850; font-size:13px; }
+.howto .pv .op.no{ color:var(--bad); font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.06em; margin-left:2px; }
+.howto .pv .mg{ align-items:center; justify-items:center; }
+.more{ margin:22px 0 8px; }
+.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
+/* TRIAGE4 (cold): how-to step 1 is a slide, not a join: a row of four cells before and after, the same 3 at each end,
+ * the crossed cells marked with the way it went. 22 px cells keep the numeral at 12 px and fit the 96 px box at 320. */
+.howto .pv .mg.slide{ grid-template-columns:repeat(4,22px); gap:4px 2px; }
+.howto .pv .mg.slide .mt{ width:22px; height:22px; font-size:12px; border-radius:6px; }
+.howto .pv .mg.slide .mt.cell{ background:var(--cell); box-shadow:inset 0 0 0 1px var(--line); color:var(--mute); font-size:14px; }

@@ -1,0 +1,81 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Sudoku</title>
+<meta name="description" content="Classic Sudoku with pencil notes, free undo, earned power-ups, three difficulties and a Daily. Every puzzle has exactly one solution.">
+<meta name="theme-color" content="#12131a">
+<script src="../shared/boot.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E9%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="topbar" class="topbar" data-root="../"></div>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Sudoku</h1>
+      <p class="sub">One answer only.</p>
+    </div>
+    <div class="stats">
+      <div class="stat"><span>Time</span><b id="time">0:00</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
+    </div>
+  </header>
+
+  <div class="levels" id="levels" role="group" aria-label="Difficulty"></div>
+
+  <div class="wrap">
+    <div id="board" class="board" role="grid" tabindex="0" aria-label="Sudoku board"></div>
+    <div id="win" class="over" hidden role="dialog" aria-label="Solved">
+      <h2>Solved</h2>
+      <p id="win-text"></p>
+      <p id="win-best" class="best" hidden></p>
+      <div id="win-pills" class="tro-pills" hidden></div>
+      <div class="row">
+        <button id="win-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">New puzzle</button>
+      </div>
+    </div>
+  </div>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <div class="tools">
+    <button id="notes" class="btn" type="button" aria-pressed="false">Notes: off</button>
+    <button id="erase" class="btn" type="button">Erase</button>
+  </div>
+  <div id="pad" class="pad" role="group" aria-label="Number pad"></div>
+
+  <div class="row"><button id="new" class="btn" type="button">New puzzle</button></div>
+  <details class="how" id="how">
+    <summary>How to play</summary>
+    <p>Fill every row, column and 3x3 box with 1 to 9. Keys: 1-9, arrows, Backspace, N notes, U undo,
+       H reveal, C check, F candidates. Every 9 cells with no clash earns a power-up.
+       A key's small digit is how many of that number are left to place.</p>
+    <p>Daily is one puzzle a day, the same for everyone. It is Easy Monday to Thursday,
+       Medium on Friday and Saturday, and Hard on Sunday.</p>
+    <p class="how-more"><button id="how-steps" class="btn" type="button" data-howto>Show the three steps</button></p>
+  </details>
+
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="sudoku"></div>
+  </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
+<script src="../shared/power.js"></script>
+<script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
+</body>
+</html>

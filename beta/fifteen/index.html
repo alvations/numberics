@@ -1,0 +1,86 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Fifteen</title>
+<meta name="description" content="Take turns claiming the numbers 1 to 9. The first to hold three that add up to 15 wins. Best of five against the computer.">
+<meta name="theme-color" content="#12131a">
+<script src="../shared/boot.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='45' font-size='34' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E15%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="topbar" class="topbar" data-root="../"></div>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Fifteen</h1>
+      <p class="sub">Three numbers, fifteen exactly.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat"><span>You</span><b id="you">0</b></div>
+      <div class="stat"><span>Computer</span><b id="cpu">0</b></div>
+      <div class="stat" title="Matches won-lost-drawn on this device"><span>Record</span><b id="rec" class="none">none</b></div>
+    </div>
+  </header>
+
+  <div id="diff" class="seg" role="group" aria-label="Difficulty"></div>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status"></p>
+
+  <div id="board" class="board" tabindex="0" aria-label="The numbers 1 to 9. Arrow keys move, Enter claims.">
+    <div id="hash" class="hash" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div id="tiles" class="tiles"></div>
+    <div id="over" class="over" hidden>
+      <h2 id="over-title">Round over</h2>
+      <div id="trio" class="trio" role="img"></div>
+      <p id="over-text"></p>
+      <p id="over-best" class="best" hidden></p>
+      <div id="pills" class="tro-pills" hidden></div>
+      <div class="acts">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="next" class="btn primary" type="button">Next round</button>
+        <button id="again" class="btn primary" type="button" hidden>New game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="seg views" role="group" aria-label="View">
+      <button id="v-numbers" type="button" aria-pressed="true">Numbers</button>
+      <button id="v-grid" type="button" aria-pressed="false">Grid</button>
+    </div>
+    <button id="new" class="btn" type="button">New game</button>
+  </div>
+  <details id="how" class="how"><summary>How to play</summary>
+    <p>Three numbers that make 15 win a round. A win without Erase, Double or Peek earns a power-up, and power-ups last
+     one match: each new match starts with one Undo. Grid shows the same nine numbers as a magic square: every line adds
+     up to 15, so it is tic-tac-toe.</p>
+    <p>On Hard the computer plays perfectly, so perfect play draws. The first drawn round of a match gives you an Erase,
+     once per match, so perfect play wins: use that Erase well and you win the next round. The computer can Erase and Double. Keys: arrows, Enter, V, 1-4.</p>
+    <p class="how-more"><button id="how-steps" class="btn" type="button" data-howto>Show the three steps</button></p>
+  </details>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="fifteen" aria-label="Numberics games"></div>
+  </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
+<script src="../shared/power.js"></script>
+<script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
+</body>
+</html>

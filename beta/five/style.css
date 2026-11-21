@@ -1,0 +1,72 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * Five: only what shared/theme.css does not cover. */
+.board{ display:flex; flex-direction:column; justify-content:space-between; padding:4% 6%; }
+/* all ages #5 (round 4): on a short screen the whole board, your own tiles included, fits under the controls without
+   scrolling (351 px is the page above the board, 374 px with Larger text); tall screens keep the full width */
+.board{ width:min(100%, max(220px, calc(100svh - 351px))); margin-inline:auto; }
+:root[data-text="large"] .board{ width:min(100%, max(220px, calc(100svh - 374px))); }
+.side{ display:flex; flex-direction:column; align-items:center; gap:2.4cqw; }
+.who{ color:var(--mute); font-size:max(.75rem, 3.4cqw); text-transform:uppercase; letter-spacing:.1em; } /* S16: rem, so Larger text grows it */
+.side.bottom .who{ color:var(--accent); }
+/* S16 (craft #16, cold #9, all ages): gold on the tan Light board was about 1:1; a deep amber reads 4.97:1 there */
+:root[data-theme="light"] .side.bottom .who{ color:#654200; }
+/* the computer's label reads alike in Light: the grey --mute was 3.57:1 on the tan board; a deep slate reads about 5.9:1 (craft #16) */
+:root[data-theme="light"] .side:not(.bottom) .who{ color:#3a3d52; }
+.pair{ display:grid; grid-template-columns:repeat(2,34cqw); gap:8cqw; }
+.slot{ position:relative; width:34cqw; height:34cqw; border-radius:var(--tile-radius); background:var(--cell); cursor:pointer; }
+.slot .tile{ position:absolute; inset:0; font-size:17cqw; transition:translate var(--anim) ease-out; }
+.slot.dead{ cursor:default; }
+.slot.dead::after{ content:""; position:absolute; inset:28%; border-radius:50%; border:2px dashed var(--line); }
+.slot.cur{ outline:2px dashed var(--ink); outline-offset:3px; }
+.slot.sel .tile{ box-shadow:0 0 0 3px var(--accent), 0 0 0 7px rgba(242,184,75,.25); translate:0 -2cqw; }
+.slot.can .tile{ box-shadow:0 0 0 2px rgba(242,184,75,.55); }
+.tile.v4{ box-shadow:0 0 18px hsl(var(--h) 80% 60% / .55); }
+.slot.shield .tile{ outline:3px dashed var(--accent); outline-offset:-9px; }
+.slot.shield::before{ content:"Shield"; position:absolute; left:50%; bottom:-1.2cqw; translate:-50% 50%; z-index:1;
+  background:var(--accent); color:#1b1b22; font-size:max(12px, 3.4cqw); font-weight:700; padding:.3cqw 2cqw; border-radius:99px; }
+.pips{ display:flex; justify-content:center; align-items:center; gap:2cqw; }
+.pips i{ width:3.2cqw; height:3.2cqw; border-radius:50%; background:var(--cell); border:1px solid var(--line); }
+.pips i.p{ background:var(--accent); border-color:var(--accent); }
+.pips i.c{ background:var(--mute); border-color:var(--mute); }
+.pips i.now{ box-shadow:0 0 0 2px var(--ink); }
+.fx{ position:absolute; inset:0; pointer-events:none; overflow:visible; }
+/* 5.6: the copy and the burst animate via NumbericsMotion */
+.fly{ position:absolute; font-size:12cqw; z-index:2; will-change:transform; }
+.ghost{ position:absolute; font-size:17cqw; z-index:2; }
+/* craft #3 (round 4): shards you can see on either theme, bright hue or gold, with a glow; a flash under them */
+.shard{ position:absolute; z-index:3; border-radius:2px; background:hsl(var(--h,40) 92% 64%);
+  box-shadow:0 0 0 1px hsl(var(--h,40) 70% 38% / .45), 0 0 10px hsl(var(--h,40) 95% 62% / .85); }
+.shard.gold{ background:#ffc94d; box-shadow:0 0 0 1px rgba(122,82,0,.4), 0 0 10px rgba(255,190,60,.85); }
+/* Light: the tan board is mid-tone, so the shards go deep and keep their glow */
+:root[data-theme="light"] .shard{ background:hsl(var(--h,40) 85% 36%); }
+:root[data-theme="light"] .shard.gold{ background:#9a5800; }
+.flash{ position:absolute; z-index:1; border-radius:50%; pointer-events:none;
+  background:radial-gradient(circle, rgba(255,250,235,.95) 0, hsl(var(--h,40) 95% 70% / .75) 38%, hsl(var(--h,40) 95% 62% / 0) 70%); }
+/* round 3 (craft #2): the burst that decides the round stays lit for the whole 1.5 s hold, then the card */
+.ghost.final{ animation:five-final 1500ms ease-out forwards; box-shadow:0 0 0 3px var(--accent), 0 0 26px hsl(var(--h) 80% 60% / .6); }
+@keyframes five-final{ 0%{ scale:1; } 18%{ scale:1.12; } 75%{ opacity:1; } 100%{ opacity:.25; scale:1.12; } }
+/* round 3 (cold #23): the tile the computer just added onto, on your turn */
+.slot.last .tile{ box-shadow:0 0 0 2px var(--cool); }
+.slot.dead.last::after{ border-color:var(--cool); }
+.over h2{ color:var(--ink); }
+/* cold #20 (round 4): the rounds of this match and the matches record read as two different things */
+.stat .rd{ display:inline-flex; align-items:baseline; gap:.3em; }
+.stat .rd i{ font-style:normal; }
+.stat .rd .me{ color:var(--accent-text); }
+.stat .rd .sep{ color:var(--mute); font-weight:600; }
+/* reduced motion: html[data-motion] (the setting, then the device) */
+:root[data-motion="reduced"] .slot .tile{ transition:none; }
+:root[data-motion="reduced"] .slot.sel .tile{ translate:none; }
+:root[data-motion="reduced"] .ghost.final{ animation:five-final-fade 1500ms ease-out forwards; }
+@keyframes five-final-fade{ 75%{ opacity:1; } 100%{ opacity:.25; } }
+.slot.dead.hit::after{ border-color:var(--accent); } /* R13: the tile that burst to end the round */
+.over .row{ margin:4px 0 0; }
+/* the how-to steps (9.5) */
+.howto .eq .mt{ width:30px; height:30px; }
+.five-pv3{ display:flex; align-items:center; gap:8px; }
+.five-out{ width:28px; height:28px; border-radius:7px; border:2px dashed var(--line-2); }
+.five-pips{ display:flex; gap:3px; margin-left:4px; }
+.five-pips i{ width:8px; height:8px; border-radius:50%; background:var(--accent); }
+/* the family's games heading (TRIAGE4 family): "More number games" */
+section.more{ margin:22px 0 8px; }
+section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }

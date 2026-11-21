@@ -1,0 +1,76 @@
+[
+  {
+    "id": "endless",
+    "name": "Endless",
+    "path": "",
+    "status": "live",
+    "blurb": "2048 with no top tile."
+  },
+  {
+    "id": "sudoku",
+    "name": "Sudoku",
+    "path": "sudoku/",
+    "status": "live",
+    "blurb": "Classic 9x9, one answer only."
+  },
+  {
+    "id": "fibonacci",
+    "name": "Fibonacci",
+    "path": "fibonacci/",
+    "status": "live",
+    "blurb": "Merge neighbours in the Fibonacci run."
+  },
+  {
+    "id": "seven",
+    "name": "Seven",
+    "path": "seven/",
+    "status": "live",
+    "blurb": "Drop discs; a number pops when it fits its line."
+  },
+  {
+    "id": "three",
+    "name": "Three",
+    "path": "three/",
+    "status": "live",
+    "blurb": "Count in threes, line up rainbow flushes."
+  },
+  {
+    "id": "four",
+    "name": "Four",
+    "path": "four/",
+    "status": "live",
+    "blurb": "Four in a row, or four that make ten.",
+    "vs": true
+  },
+  {
+    "id": "five",
+    "name": "Five",
+    "path": "five/",
+    "status": "live",
+    "blurb": "Add tiles onto tiles; at five they burst.",
+    "vs": true
+  },
+  {
+    "id": "six",
+    "name": "Six",
+    "path": "six/",
+    "status": "live",
+    "blurb": "Signs between numbers until they make six."
+  },
+  {
+    "id": "fifteen",
+    "name": "Fifteen",
+    "path": "fifteen/",
+    "status": "live",
+    "blurb": "Claim three numbers that make fifteen.",
+    "vs": true
+  },
+  {
+    "id": "nine",
+    "name": "Nine",
+    "path": "nine/",
+    "status": "live",
+    "blurb": "Take from the heaps; take the last to win.",
+    "vs": true
+  }
+]

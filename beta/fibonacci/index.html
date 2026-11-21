@@ -1,0 +1,87 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Numberics Fibonacci</title>
+<meta name="description" content="Join neighbours in the Fibonacci run: 1 and 1, 1 and 2, 2 and 3, 3 and 5. There is no top tile, and big joins from 55 earn power-ups, on Easy, Medium or Hard.">
+<meta name="theme-color" content="#12131a">
+<script src="../shared/boot.js"></script>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E%CF%86%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../shared/theme.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="topbar" class="topbar" data-root="../"></div>
+<main id="app">
+  <header>
+    <div class="brand">
+      <h1>Fibonacci</h1>
+      <p class="sub">Join neighbours in the Fibonacci run.</p>
+    </div>
+    <div class="stats" aria-live="off">
+      <div class="stat"><span>Score</span><b id="score">0</b></div>
+      <div class="stat"><span>Best</span><b id="best" class="none">none</b></div>
+      <div class="stat"><span>Top tile</span><b id="top" class="none">none</b></div>
+    </div>
+  </header>
+
+  <div id="diff" class="seg" role="group" aria-label="Difficulty">
+    <button type="button" data-diff="easy">Easy</button>
+    <button type="button" data-diff="medium">Medium</button>
+    <button type="button" data-diff="hard">Hard</button>
+  </div>
+
+  <section id="tray" class="tray" aria-label="Power-ups"></section>
+  <p id="hint" class="hint" role="status">Swipe or use the arrow keys.</p>
+
+  <div id="board" class="board" tabindex="0" aria-label="Game board. Arrow keys or swipe to slide tiles. While a power-up is armed, arrows move the cursor and Enter picks.">
+    <div id="cells" class="cells"></div>
+    <div id="tiles" class="tiles"></div>
+    <div id="marks" class="tiles marks" aria-hidden="true"></div>
+    <div id="over" class="over" hidden>
+      <h2>No moves left</h2>
+      <p id="over-text"></p>
+      <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-tro" class="tro-pills" hidden></div>
+      <div class="row">
+        <button id="over-view" class="btn" type="button">See the board</button>
+        <button id="again" class="btn primary" type="button">New game</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button id="new" class="btn" type="button">New game</button>
+  </div>
+  <details class="how" id="how"><summary>How to play</summary>
+    <p>Slide with arrow keys, WASD or a swipe. Neighbours in the sequence merge: 1+1, 1+2, 2+3, 3+5 and on.
+       Equal tiles do not merge, except 1 + 1. Power-ups come from big joins, from 55 up: on Hard, each new highest
+       tile earns one; on Medium, each join that makes your top tile or the number below it; on Easy, each join that
+       makes your top tile or one of the three numbers below it. Swapped and boosted tiles never earn a reward, and
+       neither does the move right after a Smash, Swap or Boost. Pass 2584 and keep going.</p>
+    <p>Keys: arrows or WASD slide. 1 to 4 pick a power-up, and U is Undo. Arrows and Enter aim it. Esc cancels.</p>
+    <p><button id="how-steps" class="btn" type="button" data-howto>Show the three steps</button></p>
+  </details>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="fibonacci"></div>
+  </section>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</main>
+<script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
+<script src="../shared/power.js"></script>
+<script src="../two/engine.js"></script>
+<script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
+<script src="game.js"></script>
+<script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
+</body>
+</html>
