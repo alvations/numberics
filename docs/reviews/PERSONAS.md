@@ -25,7 +25,7 @@ agent given one brief below; nothing to install.
 - The **three player reviewers wipe memory**: they do not read earlier reviews or the source. First impressions
   only stay honest if they are first.
 
-## The four briefs
+## The five briefs
 
 1. **Harsh-impartial critic** (`REVIEW<N>.md`): recurring, harsh but fair. Reads code, tests and prior reviews.
    Situates this pass against prior verdicts, checks every prior finding was really fixed, hunts correctness
@@ -38,3 +38,10 @@ agent given one brief below; nothing to install.
    feedback, copy, consistency across the family (does every game feel like Endless?), phone and desktop.
 4. **Cold first-timer** (`REVIEW_COLD<N>.md`): handed only the link, no briefing. Plays like a stranger and writes
    down what actually happened, in order: confusion, delight, where they would quit. Verdict out of 10.
+5. **All-ages audience panel** (`REVIEW_AGES<N>.md`): wipes memory like the player reviewers. Plays as four people in
+   turn, each on their own device: Maya, 9, tablet (768x1024, touch, reads slowly, wants bright and fun); Sam, 34,
+   phone (390x844, one hand, sound off, 3-minute sessions); Priya, 52, desktop (1280x860, keyboard, likes puzzles);
+   Walter, 71, small phone (375x667, Larger text and High contrast, unsure with gestures). For each: first impression,
+   finding a game, How to play, readability, tap targets, motion, settings, replay value (trophies, dailies, streaks)
+   and frustrations. Also answers ORDER-BRIEF.md with timings and judges the O-6 defaults. Ends with numbered
+   findings and a score out of 10 per age group.
