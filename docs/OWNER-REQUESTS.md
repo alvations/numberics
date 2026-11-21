@@ -19,3 +19,8 @@ Decisions taken for O-6 under "iterate autonomously" (each goes to the review pa
 sound and vibration on by default (silent until the first tap, volume 50%); first-time players start Sudoku, Four, Five
 and Fifteen on Easy (saved choices kept); the new Daily Sudoku ramps Easy Mon-Thu, Medium Fri-Sat, Hard Sun.
 | O-8 | 20 Nov 2026 | Background music (BGM) and SFX like melon-eight (procedural Web Audio), with selectable BGM styles: chill, epic, EDM, and styles evoking classic falling-block, monster-collecting and adventure games; decided with the panel, a music director and a producer. All music original (no copied melodies or names of other games in the product). | In progress |
+
+Decisions from review round 4 (docs/reviews/TRIAGE4.md), each reversible by the owner: music stays ON at first visit
+(panel vote 4-1) with a one-tap mute in the top bar; the default theme follows the device; trophies show not-yet-earned
+non-secret goals (secrets stay hidden); the daily streak is always visible; the page weight budget stays 250 KB per game
+(lazy music budgeted separately) with less work per move; the games order stays as the owner proposed (evidence split).
