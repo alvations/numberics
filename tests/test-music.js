@@ -192,6 +192,22 @@ t("live: no AudioContext before a gesture; untrusted events do not unlock", () =
   F.w.fire("keydown", { isTrusted: true }); ok(F.AC.n === 1, "only one");
   const s = m.state(); ok(s.playing && s.style === "chill" && s.contexts === 1, JSON.stringify(s));
 });
+t("perf (integration): the live engine builds its reverb in slices and parts, the same impulse as at once", () => {
+  const node = () => ({ ins: [], connect(n) { (n.ins = n.ins || []).push(this); return n; }, disconnect() {} });
+  const ctx = () => { const c = { sampleRate: 48000, convs: [], dels: [], createGain: () => Object.assign(node(), { gain: { value: 1 } }),
+    createConvolver() { const v = node(); c.convs.push(v); return v; }, createDelay() { const d = Object.assign(node(), { delayTime: { value: 0 } }); c.dels.push(d); return d; },
+    createBuffer(ch, n) { const d = []; for (let i = 0; i < ch; i++) d.push(new Float32Array(n)); return { ch: d, length: n, getChannelData: i => d[i] }; } }; return c; };
+  const ca = ctx(), cb = ctx(), a = M.engine(ca, node()), b = M.engine(cb, node(), true);
+  ok(a.noise && ca.convs.length === 4 && !b.noise && cb.convs.length === 0, "at once: ready; sliced: nothing yet");
+  let steps = 1; while (!b.step(40000)) steps++;
+  ok(steps >= 10, "generation slices plus one task per part: " + steps);
+  ok(b.noise && cb.convs.length === 4 && cb.dels.length === 3, "sliced: four parts, three delays");
+  ok(near(a.wet.gain.value, b.wet.gain.value) && a.wet.gain.value > 0, "same normalisation");
+  // the parts laid end to end at their delays are the whole impulse; no part normalises itself
+  const whole = (c, ch) => { const out = []; c.convs.forEach((v, k) => { ok(v.normalize === false, "part normalises"); const at = k ? Math.round(c.dels[k - 1].delayTime.value * 48000) : 0; v.buffer.ch[ch].forEach((x, i) => { out[at + i] = x; }); }); return out; };
+  for (const ch of [0, 1]) { const x = whole(ca, ch), y = whole(cb, ch); ok(x.length === Math.floor(48000 * 2.2) && x.every((v, i) => v === y[i] && v !== undefined), "identical impulse ch" + ch); }
+  ok(a.noise.ch[0].every((v, i) => v === b.noise.ch[0][i]), "identical noise");
+});
 t("live: no context at all when nobody asked for music", () => {
   const F = fakeWorld(), m = M.make(F.w, F.opt); F.w.fire("pointerdown", { isTrusted: true }); ok(F.AC.n === 0 && !m.state().playing);
 });

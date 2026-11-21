@@ -391,19 +391,47 @@
   // ---------------------------------------------------------------------------------------------------------------
   // Synthesis (shared by live play and offline render)
   // ---------------------------------------------------------------------------------------------------------------
-  function engine(c, dest) {
-    var e = { c: c, waves: {}, mix: c.createGain(), duck: c.createGain(), verb: c.createConvolver(), n: 0, live: 0 };
+  // The reverb is one 2.2 s seeded stereo impulse, convolved as SEGS equal parts: part k is its own convolver fed through
+  // a delay of k parts, so the sum is the whole impulse (convolution is linear), and the browser prepares each part's
+  // kernels in its own short task instead of one long one (a single 2.2 s convolver costs about 75 ms on the main thread
+  // at 4x CPU). Normalisation is the Web Audio spec's, computed here for the whole impulse, so the level is the same.
+  // chunked (live play): e.step(n) generates at most n more samples, or sets up one part, per call, and returns true once
+  // the engine is complete (the same seeded samples, in the same order). Offline render builds it at once.
+  var SEGS = 4;
+  function irScale(power, n, chans, sr) { // the spec's ConvolverNode normalisation (GainCalibration -58 dB at 44.1 kHz)
+    var rms = Math.sqrt(power / (chans * n));
+    if (!isFinite(rms) || rms < 0.000125) rms = 0.000125;
+    return 1 / rms * 0.00125 * (sr ? 44100 / sr : 1);
+  }
+  function engine(c, dest, chunked) {
+    var e = { c: c, waves: {}, mix: c.createGain(), duck: c.createGain(), verb: c.createGain(), wet: c.createGain(), n: 0, live: 0 };
     e.mix.connect(e.duck); e.duck.connect(dest);
-    // seeded stereo impulse (2.2 s), so renders repeat exactly
-    var sr = c.sampleRate, len = Math.floor(sr * 2.2), ir = c.createBuffer(2, len, sr), s = 0x2545f491;
-    for (var ch = 0; ch < 2; ch++) {
-      var d = ir.getChannelData(ch);
-      for (var i = 0; i < len; i++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; var u = 1 - i / len; d[i] = ((s >>> 0) / 4294967296 * 2 - 1) * u * u * u; }
+    var sr = c.sampleRate, len = Math.floor(sr * 2.2), seg = Math.ceil(len / SEGS), s = 0x2545f491, power = 0;
+    var ir = [new Float32Array(len), new Float32Array(len)], nb = c.createBuffer(1, sr, sr);
+    var jobs = [[ir[0], len, true], [ir[1], len, true], [nb.getChannelData(0), sr, false]], ji = 0, i = 0, part = 0;
+    function step(budget) {
+      if (ji < jobs.length) {
+        while (ji < jobs.length && budget > 0) {
+          var d = jobs[ji][0], n = jobs[ji][1], end = Math.min(n, i + budget), u;
+          budget -= end - i;
+          if (jobs[ji][2]) for (; i < end; i++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; u = 1 - i / n; d[i] = ((s >>> 0) / 4294967296 * 2 - 1) * u * u * u; power += d[i] * d[i]; }
+          else for (; i < end; i++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; d[i] = (s >>> 0) / 4294967296 * 2 - 1; }
+          if (i >= n) { ji++; i = 0; }
+        }
+        if (ji < jobs.length || chunked) return false; // the parts start in the next call
+      }
+      if (part === 0) { e.noise = nb; e.wet.gain.value = irScale(power, len, 2, sr); e.wet.connect(e.mix); }
+      while (part < SEGS) {
+        var from = part * seg, to = Math.min(len, from + seg), b = c.createBuffer(2, to - from, sr), cv = c.createConvolver();
+        b.getChannelData(0).set(ir[0].subarray(from, to)); b.getChannelData(1).set(ir[1].subarray(from, to));
+        cv.normalize = false; cv.buffer = b; cv.connect(e.wet);
+        if (part) { var dl = c.createDelay(2.5); dl.delayTime.value = from / sr; e.verb.connect(dl); dl.connect(cv); } else e.verb.connect(cv);
+        part++;
+        if (chunked) break;
+      }
+      return part >= SEGS;
     }
-    e.verb.buffer = ir; e.verb.connect(e.mix);
-    var nb = c.createBuffer(1, sr, sr), nd = nb.getChannelData(0);
-    for (var j = 0; j < sr; j++) { s ^= s << 13; s ^= s >>> 17; s ^= s << 5; nd[j] = (s >>> 0) / 4294967296 * 2 - 1; }
-    e.noise = nb;
+    if (chunked) e.step = step; else step(Infinity);
     return e;
   }
   function wave(e, o, w) {
@@ -577,9 +605,15 @@
       } catch (x) { ctx = null; return false; }
       return true;
     }
+    // one slice of the buffers per task (CHUNK samples, about 15 ms at 4x CPU); true once the engine is ready
+    var pend = null, CHUNK = 40000;
     function build() {
       if (eng || !ctx) return !!eng;
-      try { eng = engine(ctx, dest); eng.mix.gain.value = 0; eng.duck.gain.value = ducked ? DUCK : 1; } catch (x) { eng = null; }
+      try {
+        if (!pend) pend = engine(ctx, dest, true);
+        if (!pend.step(CHUNK)) return false;
+        eng = pend; pend = null; eng.mix.gain.value = 0; eng.duck.gain.value = ducked ? DUCK : 1;
+      } catch (x) { eng = null; pend = null; }
       return !!eng;
     }
     function loop() {
@@ -597,7 +631,11 @@
       if (!wanted || !cfg.on || !activated() || hidden()) return false;
       if (!ensure()) return false;
       if (!eng) {
-        if (!building) { building = true; setT(function () { building = false; if (build()) go(); }, 0); }
+        if (!building) {
+          building = true;
+          // the first player books its notes in a task of its own, after the last part
+          setT(function next() { if (build()) setT(function () { building = false; go(); }, 0); else if (pend) setT(next, 0); else building = false; }, 0);
+        }
         return true;
       }
       var id = resolve();
@@ -702,7 +740,7 @@
 
   var API = { STYLES: STYLES, GAMES: GAMES, MODES: MODES, ORDER: ORDER, TPB: TPB, DEF: DEF, SCALE: SCALE, TARGET_LUFS: TARGET_LUFS,
     compile: compile, tickTime: tickTime, cycleSeconds: cycleSeconds, formBars: formBars, degree: degree, chord: chord, bars: bars,
-    mtof: mtof, styleFor: styleFor, sfxKey: sfxKey, make: make, LEVELS: { FADE_IN: FADE_IN, XFADE: XFADE, STOP_FADE: STOP_FADE, DUCK: DUCK, LOOKAHEAD: LOOKAHEAD, TICK_MS: TICK_MS } };
+    mtof: mtof, styleFor: styleFor, sfxKey: sfxKey, make: make, engine: engine, LEVELS: { FADE_IN: FADE_IN, XFADE: XFADE, STOP_FADE: STOP_FADE, DUCK: DUCK, LOOKAHEAD: LOOKAHEAD, TICK_MS: TICK_MS } };
   if (typeof module === "object" && module.exports) module.exports = API;
   if (typeof window !== "undefined" && root === window) window.NumbericsMusic = make(window);
 })(typeof window !== "undefined" ? window : this);

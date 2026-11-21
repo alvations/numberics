@@ -63,3 +63,5 @@ details.how .keys{ color:var(--faint); }
 details.how .row{ margin:0 14px 12px; }
 /* the main phone size (390x844) fits without scrolling (craft F15) */
 .pips{ margin-top:6px; } #app > .row{ margin:8px 0 4px; } .how{ margin:6px 0; }
+/* the games cards at the page foot (REDESIGN.md 3.2: the text row is replaced by the cards), the row's old gap kept */
+#games.cards{ margin:10px 0 4px; }

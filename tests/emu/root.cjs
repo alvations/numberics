@@ -12,6 +12,10 @@ async function newCtx(browser, opts) {
   await c.addInitScript(seen => { try { if (!localStorage.getItem("numberics_progress_v1")) localStorage.setItem("numberics_progress_v1", seen); } catch (e) { /* none */ } }, SEEN);
   return c;
 }
+// a first-visit sheet (a game's how-to opens by itself once) is closed generically, whatever its id: wait two frames for
+// a sheet a page opens after load, then close whichever is open
+const closeSheets = (p) => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => {
+  if (window.NumbericsUI && NumbericsUI.open()) NumbericsUI.close(); r(); }))));
 module.exports = async function ({ browser, url, ck, shot }) {
   const games = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "games.json"), "utf8")).filter(g => g.status === "live");
   const ORDER = games.map(g => g.id);
@@ -117,14 +121,18 @@ module.exports = async function ({ browser, url, ck, shot }) {
   for (const g of games.filter(x => x.path)) {
     p = await ctx.newPage(); const e2 = []; p.on("pageerror", e => e2.push(e.message));
     await p.goto(url + g.path);
-    if (await p.isVisible("#help")) await p.keyboard.press("Escape"); // a first-visit explainer (Three)
+    await closeSheets(p); // a first-visit how-to sheet (any game)
     await p.click('#topbar [data-open="games"]'); await p.waitForTimeout(80);
     const r = await p.evaluate(() => { const s = document.getElementById("sh-games"); if (!s || s.hidden) return null;
       return { ids: [...s.querySelectorAll(".card")].map(a => a.dataset.id), cur: (s.querySelector('.card[aria-current="page"]') || {}).dataset,
         two: s.querySelector('.card[data-id="two"]').getAttribute("href") }; });
     ck(g.id + ": the Games sheet lists every game in order and marks this one", r && JSON.stringify(r.ids) === JSON.stringify(ORDER) && r.cur && r.cur.id === g.id && r.two === "../", JSON.stringify(r));
-    const row = await p.evaluate(() => [...document.querySelectorAll("nav#games a")].map(a => a.textContent));
-    ck(g.id + ": the games row at the foot runs in the same order", JSON.stringify(row) === JSON.stringify(games.map(x => x.name)), row.join());
+    // the foot of every page is the shared cards (REDESIGN.md 3.2: the old text row is removed): same order, this game current
+    const foot = await p.evaluate(() => { const el = document.getElementById("games"); if (!el) return null;
+      return { cards: el.classList.contains("cards"), ids: [...el.querySelectorAll(":scope > a.card")].map(a => a.dataset.id),
+        cur: [...el.querySelectorAll(':scope > a.card[aria-current="page"]')].map(a => a.dataset.id) }; });
+    ck(g.id + ": the games cards at the foot run in the same order and mark this game", foot && foot.cards &&
+      JSON.stringify(foot.ids) === JSON.stringify(ORDER) && JSON.stringify(foot.cur) === JSON.stringify([g.id]), JSON.stringify(foot));
     await p.keyboard.press("Escape");
     ck(g.id + ": no page errors", e2.length === 0, e2.join(" | "));
     await p.close();

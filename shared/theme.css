@@ -310,4 +310,9 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .tro-none{ margin:8px 0 4px; color:var(--mute); font-size:var(--fs-sm); }
 .tro-pills{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
 .tro-pills[hidden]{ display:none; }
+/* several trophies at once (integration, one rule for every end card, as Sudoku's #win): the pill row scrolls inside
+   the card, so the card never spills past the board and its buttons stay in view. A row that fits is unchanged. */
+.over{ overflow:hidden; }
+.over > *{ flex:none; }
+.over > .tro-pills{ flex:0 1 auto; min-height:36px; overflow:auto; overscroll-behavior:contain; align-content:flex-start; }
 /* ===== end B4 ===== */

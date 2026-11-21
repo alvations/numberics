@@ -4,6 +4,10 @@
 "use strict";
 const fs = require("fs"), os = require("os"), path = require("path");
 const KEY = "numberics_settings_v1";
+// a first-visit sheet (a game's how-to opens by itself once) is closed generically, whatever its id: wait two frames for
+// a sheet a page opens after load, then close whichever is open
+const closeSheets = (p) => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => {
+  if (window.NumbericsUI && NumbericsUI.open()) NumbericsUI.close(); r(); }))));
 module.exports = async function ({ browser, url, ck, shot }) {
   const games = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "games.json"), "utf8")).filter(g => g.status === "live");
   const FIB = url + "fibonacci/";
@@ -239,7 +243,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     await p.goto(url + g.path);
     await p.evaluate(() => { try { localStorage.removeItem("numberics_settings_v1"); } catch (e) { /* none */ } });
     await p.reload();
-    if (await p.isVisible("#help")) await p.keyboard.press("Escape"); // a first-visit explainer (Three)
+    await closeSheets(p); // a first-visit how-to sheet (any game)
     await openSettings(p);
     await p.click('#sh-settings [data-seg="theme"][data-v="light"]'); await p.click('#sh-settings [data-sw="contrast"]');
     const dd = await html(p);

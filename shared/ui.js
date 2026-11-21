@@ -84,7 +84,8 @@
     scrim.addEventListener("click", function (e) { if (e.target === scrim) close(); });
     scrim.querySelector(".sh-x").addEventListener("click", function () { close(); });
     // keys typed inside the sheet stay in it (games listen on document or window, in the bubble phase)
-    scrim.addEventListener("keydown", function (e) { e.stopPropagation(); });
+    // (only while this sheet is the open one: a key that reaches a closed sheet's node is the page's)
+    scrim.addEventListener("keydown", function (e) { if (cur && cur.scrim === scrim) e.stopPropagation(); });
     doc.body.appendChild(scrim);
     return scrim;
   }
@@ -120,6 +121,11 @@
     if (swap !== true && c.opener && c.opener.focus && doc.contains(c.opener)) {
       try { c.opener.focus({ preventScroll: true }); } catch (e) { c.opener.focus(); }
     }
+    // focus never stays on a node of the hidden sheet: when the opener could not take it (the body, or a sheet that
+    // opened by itself), let it go now, so the very next key reaches the game (the browser would only drop it at the
+    // next frame)
+    var a = doc.activeElement;
+    if (swap !== true && a && a !== doc.body && c.scrim.contains(a) && a.blur) a.blur();
     fire(c.id, false);
   }
   w.NumbericsUI = { topbar: topbar, sheet: sheet, open: open, current: current, close: close, dot: dot };

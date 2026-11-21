@@ -124,4 +124,47 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "sheet-desktop");
   ck("blocked storage: no page errors", e2.length === 0, e2.join(" | "));
   await ctx.close();
+
+  // 8. integration: a quiet report still marks the cup; a family trophy earned mid-play waits for a pause in play
+  // (it never covers the hint line mid-move), while the game's own trophy from the same event toasts at once
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await ctx.addInitScript(PIN);
+  p = await ctx.newPage(); const e8 = []; p.on("pageerror", e => e8.push(e.message));
+  await p.goto(page);
+  const tState = () => p.evaluate(() => { const t = document.getElementById("toast"); return t.classList.contains("on") ? [...t.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("") : ""; });
+  const q = await p.evaluate(() => NumbericsTrophies.report("two", "end", { top: 3, score: 10 }, { quiet: true }));
+  ck("quiet: earns, no toast, and the cup's unseen dot shows", q.indexOf("fam_first") >= 0 && (await tState()) === "" && await dotOn(p), JSON.stringify(q));
+  await p.evaluate(() => { NumbericsProgress._clock(() => new Date(2026, 10, 20, 3, 10)); window.__fr = NumbericsTrophies.report("two", "move", { top: 7 }); NumbericsProgress._clock(window.__noon); });
+  ck("mid-play: the game's trophy toasts at once, the family one is held back", JSON.stringify(await p.evaluate(() => window.__fr.slice().sort())) === '["fam_night","two_128"]' &&
+    (await tState()) === "Trophy: Warming up", await tState());
+  await p.evaluate(() => NumbericsKit.clearToast());
+  let shown = false;
+  for (let k = 0; k < 10; k++) { await p.keyboard.press("Shift"); await p.waitForTimeout(250); if (/Night owl/.test(await tState())) shown = true; }
+  ck("mid-play: no family toast while the player keeps playing", !shown);
+  await p.waitForFunction(() => /Night owl/.test(document.getElementById("toast").textContent) && document.getElementById("toast").classList.contains("on"), null, { timeout: 4000 }).catch(() => {});
+  ck("mid-play: the family toast shows at the next pause", /Trophy: Night owl/.test(await tState()), await tState());
+  ck("integration checks: no page errors", e8.length === 0, e8.join(" | "));
+  await ctx.close();
+
+  // 9. integration: many trophies on one end card, every game, phone widths: the pill row scrolls inside the card and
+  // nothing on the card (title, text, buttons) spills outside it (one shared rule in theme.css / style.css)
+  const games = require("../../games.json"), list = Array.isArray(games) ? games : games.games;
+  const SEEN = JSON.stringify({ v: 1, games: {}, howto: Object.fromEntries(list.map(g => [g.id, true])), daily: {} });
+  for (const vw of [{ width: 375, height: 667 }, { width: 320, height: 568 }]) {
+    ctx = await browser.newContext({ viewport: vw }); await ctx.addInitScript(PIN);
+    await ctx.addInitScript(sn => { try { localStorage.setItem("numberics_progress_v1", sn); } catch (e) { /* none */ } }, SEEN);
+    for (const g of list.filter(x => x.status !== "planned")) {
+      p = await ctx.newPage(); await p.goto(url + g.path);
+      const r = await p.evaluate(() => {
+        const pl = document.querySelector(".over .tro-pills"); if (!pl) return null;
+        const o = pl.closest(".over"); o.hidden = false;
+        NumbericsTrophies.pills(pl, NumbericsTrophies.REG.filter(t => t.game !== "fam").slice(0, 7).map(t => t.id));
+        const or = o.getBoundingClientRect();
+        const out = [...o.children].filter(k => !k.hidden && k.offsetParent !== null).filter(k => { const b = k.getBoundingClientRect(); return b.top < or.top - 1 || b.bottom > or.bottom + 1; });
+        return { out: out.map(k => k.id || k.className || k.tagName), scrolls: pl.scrollHeight > pl.clientHeight + 1, rowH: pl.clientHeight };
+      });
+      ck(g.id + " " + vw.width + ": seven pills scroll inside the end card, nothing spills out", r && !r.out.length && r.scrolls && r.rowH >= 36, JSON.stringify(r));
+      await p.close();
+    }
+    await ctx.close();
+  }
 };

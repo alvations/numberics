@@ -232,7 +232,6 @@
     var res = state.result; cardIds = [];
     cardIds = cardIds.concat(trophy("round", { won: res.winner === 1, view: view, firstMid: run.first === 5 }, true));
     if (state.match) cardIds = cardIds.concat(trophy("match", { won: state.match.winner === 1, diff: state.diff }, true));
-    if (cardIds.length) try { window.NumbericsUI.dot(true); } catch (e) { /* no top bar */ }
   }
   // the winning line in Grid view: one SVG line through the three centres, drawn by stroke-dashoffset (5.8, as Four)
   var wl = $("wl"), wlLine = wl.firstElementChild;

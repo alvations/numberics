@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * NumbericsTrophies (docs/design/REDESIGN.md 8): the registry of every trophy, the earned store, the unlock moment
  * and the earned-only Trophies sheet. UMD: the registry and report() are pure enough to run in Node tests.
- *   report(gameId, event, data[, opts])  -> the ids newly earned by this event (opts.quiet: no toast, no sound)
+ *   report(gameId, event, data[, opts])  -> the ids newly earned by this event (opts.quiet: no toast, no sound; the
+ *     unseen dot still shows). A family trophy earned mid-play waits for the next idle moment for its toast.
  *   has(id), earned(), unseen(), fam(), find(id), glyph(name), pill(id), pills(el, ids), open(), html()
  * Store: numberics_trophies_v1 = { v:1, got:{ id:"YYYYMMDD" }, unseen:[id], fam:{ played, dailyDays, streak } },
  * always through NumbericsKit.store (try/catch, memory fallback). Nothing is ever sent anywhere.
@@ -250,8 +251,42 @@
       if (hit) { s.got[t.id] = today; s.unseen.push(t.id); fresh.push(t.id); }
     });
     store.save(s);
-    if (fresh.length && !(opts && opts.quiet)) announce(fresh);
+    if (fresh.length) {
+      call(lib("NumbericsUI"), "dot", true);                     // quiet or not, the cup marks them unseen
+      if (!(opts && opts.quiet)) {
+        // a family trophy earned mid-play (Night owl, High five: any event) waits for the next idle moment, so it
+        // never covers the hint line or the game's own toast mid-move; the game's trophies keep their moment
+        var later = END_EV[ev] ? [] : fresh.filter(function (id) { return BY[id].game === "fam"; });
+        var nowIds = fresh.filter(function (id) { return later.indexOf(id) < 0; });
+        if (nowIds.length) announce(nowIds);
+        if (later.length) famLater(later);
+      }
+    }
     return fresh;
+  }
+  // ---- the family queue: shown when the player has paused (no key or tap for IDLE_MS), with no sheet, end card or
+  // other toast up, and the tab visible; re-checked until then (the trophy is already saved and the dot is on) ----
+  var END_EV = { end: 1, round: 1, match: 1, solve: 1, saved: 1 }, IDLE_MS = 1600;
+  var famQ = [], famT = null, lastIn = 0, hooked = false;
+  function ms() { return Date.now(); }
+  function famLater(ids) {
+    var doc = dom(); if (!doc || typeof setTimeout !== "function") return; // Node: nothing to show
+    if (!hooked && typeof window !== "undefined" && window.addEventListener) {
+      hooked = true;
+      ["keydown", "pointerdown", "touchstart"].forEach(function (n) {
+        window.addEventListener(n, function () { lastIn = ms(); }, { capture: true, passive: true });
+      });
+    }
+    ids.forEach(function (id) { if (famQ.indexOf(id) < 0) famQ.push(id); });
+    lastIn = ms(); arm(IDLE_MS);
+  }
+  function arm(t) { clearTimeout(famT); famT = setTimeout(famTry, t); }
+  function famTry() {
+    famT = null; var doc = dom(); if (!famQ.length || !doc) return;
+    var wait = IDLE_MS - (ms() - lastIn); if (wait > 0) return arm(wait);
+    var U = lib("NumbericsUI"), el = doc.getElementById("toast");
+    if ((U && typeof U.open === "function" && U.open()) || (el && el.classList.contains("on")) || cardUp(doc) || doc.hidden) return arm(500);
+    var ids = famQ; famQ = []; announce(ids);
   }
   function has(id) { return !!load().got[id]; }
   function earned() { var g = load().got; return REG.filter(function (t) { return g[t.id]; }).map(function (t) { return t.id; }); }

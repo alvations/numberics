@@ -27,7 +27,12 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "howto");
   await p.keyboard.press("ArrowLeft");
   ck("arrows do not play under the sheet", (await st(p)).moves === 0);
-  await p.click("#howto-play");
+  // regression (integration): the sheet opened by itself, so its opener was the body; focus stayed on the hidden Play
+  // button and the next key went to the closed sheet (which kept it) until the browser's next frame. Checked in the
+  // same task as the click, before any frame can drop the focus.
+  ck("Play: focus leaves the closed sheet at once", await p.evaluate(() => {
+    document.getElementById("howto-play").focus(); document.getElementById("howto-play").click();
+    const a = document.activeElement; return !(a && a.closest && a.closest("#sh-howto")); }));
   ck("Play closes the sheet", !(await p.isVisible("#sh-howto")) && await p.evaluate(() => !NumbericsUI.open()));
   ck("the how-to is remembered in progress", await p.evaluate(() => NumbericsProgress.seenHowto("three")));
   ck("fresh board hint fills the empty band", /Swipe to start/.test(await p.textContent("#hint")));

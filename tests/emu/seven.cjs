@@ -236,7 +236,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 5. modes keep their own runs; Daily is date-seeded
   await p.click('#modes [data-mode="blitz"]');
-  s = await st(p); ck("Blitz: 5 drops per rise", s.mode === "blitz" && s.left === 5 && await p.locator(".pips i").count() === 5);
+  s = await st(p); ck("Blitz: 5 drops per rise", s.mode === "blitz" && s.left === 5 && await p.locator("#pips i").count() === 5);
   await p.click('#modes [data-mode="daily"]');
   const d1 = await st(p);
   ck("Daily mode", d1.mode === "daily");

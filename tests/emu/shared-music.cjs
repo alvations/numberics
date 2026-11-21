@@ -163,4 +163,27 @@ module.exports = async function ({ browser, url, ck }) {
     ck("live /" + path + ": no page errors", L.errs.length === 0, L.errs.join(" | "));
     await L.c.close();
   }
+
+  // the reverb in parts (integration, the first-tap long task): the impulse response through the engine's four delayed,
+  // un-normalised parts and its spec normalisation matches one normalised convolver of the whole 2.2 s impulse
+  { const c = await browser.newContext(); const pg = await c.newPage();
+    await pg.goto(url + "tests/fixtures/music.html");
+    const r = await pg.evaluate(async (src) => {
+      const mod = { exports: {} }; new Function("module", src).call(window, mod); const M = mod.exports;
+      const sr = 44100, n = Math.ceil(sr * 3), imp = (c) => { const b = c.createBuffer(1, 1, sr); b.getChannelData(0)[0] = 1; const s = c.createBufferSource(); s.buffer = b; return s; };
+      // A: one convolver, the whole impulse (the same seeded generator as engine()), normalised by the browser
+      const ca = new OfflineAudioContext(2, n, sr), len = Math.floor(sr * 2.2), ir = ca.createBuffer(2, len, sr); let x = 0x2545f491;
+      for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; const u = 1 - i / len; d[i] = ((x >>> 0) / 4294967296 * 2 - 1) * u * u * u; } }
+      const cv = ca.createConvolver(); cv.buffer = ir; cv.connect(ca.destination); const sa = imp(ca); sa.connect(cv); sa.start(0);
+      // B: the engine's reverb
+      const cb = new OfflineAudioContext(2, n, sr), e = M.engine(cb, cb.destination); e.mix.gain.value = 1;
+      const sb = imp(cb); sb.connect(e.verb); sb.start(0);
+      const [A, B] = await Promise.all([ca.startRendering(), cb.startRendering()]);
+      let peak = 0, diff = 0, ea = 0, eb = 0;
+      for (let ch = 0; ch < 2; ch++) { const a = A.getChannelData(ch), b = B.getChannelData(ch);
+        for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(a[i])); diff = Math.max(diff, Math.abs(a[i] - b[i])); ea += a[i] * a[i]; eb += b[i] * b[i]; } }
+      return { peak, diff, rel: diff / peak, db: 10 * Math.log10(eb / ea) };
+    }, require("fs").readFileSync(require("path").join(__dirname, "..", "..", "shared", "music.js"), "utf8"));
+    ck("the reverb in four parts is the same reverb as one convolver (within 1% of its peak, level within 0.1 dB)", r.peak > 0 && r.rel < 0.01 && Math.abs(r.db) < 0.1, JSON.stringify(r));
+    await c.close(); }
 };
