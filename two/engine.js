@@ -19,7 +19,21 @@
  *   space, not a tile, so it keeps the one-move rule (state.free: the next move pays nothing); Swap and
  *   Boost set it too, since a swap into an empty cell, or a boosted tile that merges away, also opens space.
  * A rule set is { canMerge(a, b), mergeResult(a, b), spawn(r), value(level),
- *   label(level), awardFrom }, all on stored levels; r is a float in [0,1).
+ *   label(level), awardFrom, reach (optional: its own REACH per tier) }, all on stored levels; r is a float in [0,1).
+ *
+ * TIERS (O-12): Easy, Medium and Hard differ in ONE number, the reach (REACH below). An honest join pays when
+ * the tile it makes is at least (top tile - reach) rungs high, and at least the game's own floor (awardFrom):
+ *   Hard   reach -1: only a NEW highest tile pays (the original rule, once per new level per move);
+ *   Medium reach  0: any join that makes a tile as high as the top tile (or higher) pays;
+ *   Easy   reach  1: any join that makes a tile at least one rung below the top tile pays (half of it in Two).
+ * The top tile is state.top, the highest tile ever made in the run, so Smash never lowers the bar. Each rung down
+ * about doubles the joins that qualify (it takes two tiles of a rung to make the next), so the tiers sit about 2x
+ * apart in reward rate at every stage of a run (docs/DESIGN.md, Two tiers; tools/sim-two.js). Every anti-farm
+ * rule is the same on every tier: the move after Smash, Swap or Boost pays nothing (state.free), a join with a
+ * marked tile pays nothing, Undo restores the full snapshot, Boost never awards, the stock caps at 9. A paying join
+ * always uses up the spawned tiles that built it, so no loop can pay without real play.
+ * A Hard game has no `tier` field (old saves, and the pinned replay fixture, are Hard byte for byte); an Easy or
+ * Medium game carries state.tier. The tier never changes inside a game.
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
@@ -31,6 +45,9 @@
   var POWERS = ["undo", "smash", "swap", "boost"];
   var AWARD_FROM_LEVEL = 5; // first milestone that pays out is 32
   var POWER_CAP = 9;
+  var TIERS = ["easy", "medium", "hard"];
+  var REACH = { easy: 1, medium: 0, hard: -1 }; // rungs below the top tile a paying join may make (O-12)
+  function tierOf(s) { return s && (s.tier === "easy" || s.tier === "medium") ? s.tier : "hard"; }
 
   // Two (the rule set keeps its old name, ENDLESS): equal levels merge one level up, a merge scores 2^level.
   var ENDLESS = {
@@ -53,13 +70,17 @@
   }
 
   function make(rules) {
+    // a rule set may carry its own reach per tier (rules.reach; Fibonacci's rungs are 1.618x, not 2x); else Two's
+    var reach = rules.reach || REACH;
     function clone(s) {
-      return {
+      var c = {
         size: s.size, grid: s.grid.slice(), score: s.score, top: s.top,
         moves: s.moves, seed: s.seed, over: s.over,
         power: { undo: s.power.undo, smash: s.power.smash, swap: s.power.swap, boost: s.power.boost },
         prev: s.prev, free: !!s.free, marks: marksOf(s),
       };
+      if (tierOf(s) !== "hard") c.tier = s.tier; // Hard carries no field, so Hard states stay byte-identical
+      return c;
     }
     // An old save has no marks: every tile is unmarked. A malformed list is read as no marks.
     function marksOf(s) {
@@ -85,7 +106,10 @@
       return cell;
     }
 
-    function newGame(seed, size) {
+    // the lowest level a join must make to pay on this state's tier (Hard: a new highest tile)
+    function payFrom(s) { return Math.max(rules.awardFrom, s.top - reach[tierOf(s)]); }
+
+    function newGame(seed, size, tier) {
       size = size || 4;
       var s = {
         size: size, grid: new Array(size * size).fill(0), score: 0, top: 0,
@@ -93,6 +117,7 @@
         power: { undo: 1, smash: 0, swap: 0, boost: 0 }, prev: null, free: false,
         marks: new Array(size * size).fill(0),
       };
+      if (tier === "easy" || tier === "medium") s.tier = tier;
       spawn(s); spawn(s);
       return s;
     }
@@ -166,7 +191,7 @@
       var res = { state: state, moved: false, gained: 0, merges: [], trace: [],
                   spawned: -1, milestones: [], awarded: [] };
       if (DIRS.indexOf(dir) < 0 || state.over) return res;
-      var s = clone(state), trace = [], any = false, honest = {};
+      var s = clone(state), trace = [], any = false, honest = {}, joins = [];
       lines(s.size, dir).forEach(function (idx) {
         var lv = idx.map(function (i) { return s.grid[i]; });
         var r = slideLine(lv, idx, idx.map(function (i) { return s.marks[i]; }));
@@ -175,7 +200,7 @@
         });
         r.trace.forEach(function (t) { if (t.from !== t.to || t.merge) any = true; trace.push(t); });
         res.gained += r.gained; res.merges = res.merges.concat(r.merges);
-        r.merges.forEach(function (l, j) { if (!r.mergeMarks[j]) honest[l] = true; });
+        r.merges.forEach(function (l, j) { if (!r.mergeMarks[j]) honest[l] = true; joins.push([l, r.mergeMarks[j]]); });
       });
       if (!any) return res;
       s.prev = snapshot(state);
@@ -188,11 +213,18 @@
       s.free = false;
       var fresh = res.merges.filter(function (l, i, a) { return l > s.top && a.indexOf(l) === i; })
                             .sort(function (a, b) { return a - b; });
+      var hard = tierOf(state) === "hard", from = payFrom(state);
       fresh.forEach(function (l) {
         res.milestones.push(l);
-        if (l < rules.awardFrom || res.free) return;
+        if (!hard || l < rules.awardFrom || res.free) return;
         if (!honest[l]) { res.marked = true; return; }
         if (!award(s, l, res.awarded)) res.full = true; // R15: the client says "Power-ups full"
+      });
+      // Easy and Medium (O-12): every join that reaches the tier's bar pays one, in board order; same R2 rules
+      if (!hard && !res.free) joins.forEach(function (j) {
+        if (j[0] < from) return;
+        if (j[1]) { res.marked = true; return; }
+        if (!award(s, j[0], res.awarded)) res.full = true;
       });
       if (fresh.length) s.top = fresh[fresh.length - 1];
       res.spawned = spawn(s);
@@ -233,7 +265,8 @@
       return { state: s, ok: true };
     }
 
-    return { DIRS: DIRS, POWERS: POWERS, newGame: newGame, move: move, use: use,
+    return { DIRS: DIRS, POWERS: POWERS, TIERS: TIERS, REACH: reach, tierOf: tierOf, payFrom: payFrom,
+             newGame: newGame, move: move, use: use,
              canMove: canMove, label: rules.label, value: rules.value, slideLine: slideLine, rand: rand,
              AWARD_FROM_LEVEL: rules.awardFrom, POWER_CAP: POWER_CAP, rules: rules };
   }

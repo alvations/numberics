@@ -1,14 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsTrophies (docs/design/REDESIGN.md 8): the registry of every trophy, the earned store, the unlock moment
- * and the Trophies sheet. UMD: the registry and report() are pure enough to run in Node tests.
- *   report(gameId, event, data[, opts])  -> the ids newly earned by this event (opts.quiet: no toast, no sound; the
- *     unseen dot still shows). A family trophy earned mid-play waits for the next idle moment for its toast.
- *   has(id), earned(), unseen(), fam(), find(id), glyph(name), pill(id), pills(el, ids), open(), html()
- * Store: numberics_trophies_v1 = { v:1, got:{ id:"YYYYMMDD" }, unseen:[id], fam:{ played, dailyDays, streak } },
- * always through NumbericsKit.store (try/catch, memory fallback). Nothing is ever sent anywhere.
- * The sheet (TRIAGE4 D3, on panel evidence over melon-eight's earned-only list) shows a count "N of M trophies" (M: every
- * non-secret trophy plus the secrets already earned), then the earned trophies, then every not-yet-earned NON-secret
- * trophy dimmed with its description, as goals. A secret is not in the DOM, nor counted, until earned. */
+ * NumbericsTrophies (REDESIGN.md 8): the trophy registry, the earned store, the unlock moment and the Trophies sheet.
+ * A secret is not in the DOM, nor counted, until earned (TRIAGE4 D3). Notes: docs/CODE-NOTES.md#sharedtrophiesjs */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(root);
   else root.NumbericsTrophies = factory(root);
@@ -104,8 +96,7 @@
   }
   function run(d) { return d && d.run && typeof d.run === "object" ? d.run : {}; }
   function num(v) { return typeof v === "number" && isFinite(v) ? v : NaN; }
-  // A Daily is finished by "end" in every game; "solve" finishes one only where a solve ends the puzzle (Sudoku).
-  // Six sends "solve" per line, so a Six solve never counts as finishing its Daily (D-Six report, 21 Nov).
+  // a Daily is finished by "end"; "solve" only where a solve ends the puzzle (Sudoku), never Six's per-line solve
   function isDaily(event, d, game) {
     if (!d || !(d.daily === true || d.mode === "daily")) return false;
     return event === "end" || (event === "solve" && game !== "six");
@@ -123,8 +114,7 @@
   T("fam_all", "fam", "The whole set", "Play all ten games.", "grid", 0, ANY, function (d, x) { return GAMES.every(function (g) { return !!x.fam.played[g]; }); });
   T("fam_daily", "fam", "Same for everyone", "Finish a Daily.", "cal", 0, ["end", "solve"], function (d, x, e) { return isDaily(e, d, x.game); });
   T("fam_week", "fam", "A week of dailies", "Finish a Daily seven days in a row.", "flame", 0, ["end", "solve"], function (d, x) { return x.fam.streak.n >= 7; });
-  // Night owl needs real play: it is tested only when a game, round, match or puzzle ends between midnight and 4,
-  // never on a page load or a first tap (TRIAGE4 family: it was a free trophy for opening the page late)
+  // Night owl needs real play: tested only when a game, round, match or puzzle ends (TRIAGE4)
   T("fam_night", "fam", "Night owl", "Played well past bedtime.", "moon", 1, ["end", "round", "match", "solve"], function (d, x) { return x.hour < 4; });
   T("fam_keep", "fam", "Keepsake", "Kept a copy of everything.", "key", 1, ["saved"], function () { return true; });
   // Fibonacci: move {value, merges, grid, moves}, end {score, value}; run {used}
@@ -258,8 +248,7 @@
     if (fresh.length) {
       call(lib("NumbericsUI"), "dot", true);                     // quiet or not, the cup marks them unseen
       if (!(opts && opts.quiet)) {
-        // a family trophy earned mid-play (Night owl, High five: any event) waits for the next idle moment, so it
-        // never covers the hint line or the game's own toast mid-move; the game's trophies keep their moment
+        // a family trophy earned mid-play waits for the next idle moment; the game's own trophies keep theirs
         var later = END_EV[ev] ? [] : fresh.filter(function (id) { return BY[id].game === "fam"; });
         var nowIds = fresh.filter(function (id) { return later.indexOf(id) < 0; });
         if (nowIds.length) announce(nowIds);
@@ -268,8 +257,7 @@
     }
     return fresh;
   }
-  // ---- the family queue: shown when the player has paused (no key or tap for IDLE_MS), with no sheet, end card or
-  // other toast up, and the tab visible; re-checked until then (the trophy is already saved and the dot is on) ----
+  // ---- the family queue: shown once the player pauses (IDLE_MS) with nothing else up and the tab visible ----
   var END_EV = { end: 1, round: 1, match: 1, solve: 1, saved: 1 }, IDLE_MS = 1600;
   var famQ = [], famT = null, lastIn = 0, hooked = false;
   function ms() { return Date.now(); }
@@ -308,6 +296,9 @@
   }
   function announce(ids) {
     var doc = dom(); if (!doc) return;
+    // no toast over an open sheet (TRIAGE5 S1): the moment (toast and chime) waits in the family queue until it closes
+    var U = lib("NumbericsUI");
+    if (!cardUp(doc) && U && typeof U.open === "function" && U.open()) { call(U, "dot", true); famLater(ids); return; }
     call(lib("NumbericsAudio"), "trophy"); call(lib("NumbericsAudio"), "buzz", "big"); call(lib("NumbericsUI"), "dot", true);
     if (cardUp(doc)) return;                                    // R7: never over an end card; the card shows pills
     var K = lib("NumbericsKit"), el = doc.getElementById("toast"); if (!K || !K.toast || !el) return;

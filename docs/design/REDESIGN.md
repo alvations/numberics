@@ -11,7 +11,8 @@ have similar settings, achievements, replay value and secret achievements. Every
 Owner instruction O-7 (overrides the first draft of this brief): every games list is ordered **Fibonacci, Two, Three,
 Four, Five, Six, Seven, Nine, Fifteen, Sudoku**, driven by the order of `games.json`; and **the root URL opens Two
 itself, playable at once**, with an attractive way to reach the other nine on the same page. The order is the owner's
-proposal and goes to the review panel (section 4.4).
+proposal and goes to the review panel (section 4.4). (Superseded by O-9: the root URL is the games page, the top bar,
+Today and a card for every game, and Two has its own page at `two/` like every other game.)
 
 Every visible change below traces to that ask (CLAUDE.md: no design change that was not asked for). Game rules do not
 change anywhere in this spec: this is presentation, motion, sound, settings, trophies and onboarding.
@@ -41,7 +42,7 @@ Casual players from about 8 years old to 80. Three groups pull in different dire
 | Group | Needs | What we do |
 |---|---|---|
 | Kids (8 to 12) | big targets, bright colour, instant feedback, short words, no reading wall | 44 px minimum targets, sound and juicy motion on, how-to as three pictures with one sentence each, Easy first |
-| Adults (casual) | start in one tap, come back daily, see progress | Two plays on the root with no menu; Today card; Continue on every card; trophies |
+| Adults (casual) | start in one tap, come back daily, see progress | every game one tap from the games page at the root (O-9); Today card; Continue on every card; trophies |
 | Older players | larger type, strong contrast, calm motion, no time pressure | Larger text and High contrast settings, Motion "Less", 16 px minimum body text, no countdown timers anywhere |
 
 ### 1.1 Type, targets, contrast (binding)
@@ -68,7 +69,7 @@ Casual players from about 8 years old to 80. Three groups pull in different dire
   choice is always respected. (Today Sudoku, Four, Five and Fifteen open on Medium.)
 - **How to play sheet** (section 3.6): opens by itself on the first visit to a game that has no saved state, once; it is
   always reachable from a "How to play" row under the board. Three steps, each a small drawn picture and one sentence.
-  Two's root page never auto-opens it for a player who has `numberics_endless_v1` saved. One helper builds it for every
+  Two's page (`two/`, O-9) never auto-opens it for a player who has `numberics_endless_v1` saved. One helper builds it for every
   game (`NumbericsUI.howto`, shared/howto.js; TRIAGE4 D8): the title "How to play <Game>", a Play button, the
   first-visit rule, and the row's one button "Show the three steps".
 - The long `.how` paragraph under each board becomes the body of a `<details class="how">` "How to play" row (collapsed),
@@ -166,7 +167,7 @@ daylight phones and players who read better on paper tones. Root `<meta name="th
 (boot.js sets it: `#12131a` or `#f5f1e8`).
 
 ### 2.3 Two's and Sudoku's own CSS
-Two (root `style.css`) and Sudoku (`sudoku/style.css`) do not link the shared theme today. Keep that separation (CLAUDE.md:
+Two (`two/style.css`, O-9) and Sudoku (`sudoku/style.css`) do not link the shared theme today. Keep that separation (CLAUDE.md:
 Sudoku keeps its own look) but **both copy the token block of 2.1 verbatim** at the top, and a test asserts the three
 `:root` blocks are identical text (section 10.3), so the family cannot drift.
 
@@ -220,7 +221,7 @@ Glyph paths are in the prototype `two.html` (stroke 1.8, round caps, 22 px).
 | id | name | path | blurb (card) | vs |
 |---|---|---|---|---|
 | fibonacci | Fibonacci | fibonacci/ | Join neighbours in the Fibonacci run. | |
-| two | Two | (root) | 2048 with no top tile. | |
+| two | Two | two/ (O-9; the root is the games page) | 2048 with no top tile. | |
 | three | Three | three/ | Count in threes, make rainbow rows. | |
 | four | Four | four/ | Four in a row, or four that make ten. | yes |
 | five | Five | five/ | Add tile onto tile; at five it bursts. | yes |
@@ -788,7 +789,7 @@ Totals: 7 family + 77 game trophies = 84; every game has 7 to 9, with 2 secret e
   score; Seven best per mode (Classic, Blitz, today's Daily: exists); Sudoku best pure and assisted time per difficulty
   (exists); Six best climb round and today's Daily count; Four, Five, Fifteen, Nine the win-loss record per level
   (cards show the current level's record).
-- **Continue**: every card with a live run shows "Continue"; on the root the Two board is itself the continue.
+- **Continue**: every card with a live run shows "Continue", Two's included (O-9: the root is the games page, no board).
 - **New best moment**: `best()` sound, a gold ring on the Best stat (opacity, 420 ms), "New best." on the end card.
 
 ---
@@ -800,7 +801,7 @@ Every game gets: the top bar (3.2), tokens (2.1), how-to sheet with three steps 
 reduced motion read live (5.12), 44 px targets, the `.how` paragraph moved into the How to play row, and `window.__demo()`
 kept (screenshots). Specific items:
 
-### 9.1 Two (root)
+### 9.1 Two (`two/`, O-9; this list was written when Two was the root)
 1. Keyed tile layer and motion 5.3 (replaces destroy-and-rebuild in `render()`); `.plus` score float; gold ring on a new
    highest tile from 32.
 2. Rename (4.2); h1 "Two"; sub line; favicon "2".
@@ -872,7 +873,7 @@ progress 6, nav cards and previews 4).
 
 | Budget | Limit |
 |---|---|
-| Page weight, every same-origin byte on load, uncompressed | root (Two + list) <= 110 KB; Six <= 140 KB; every other game <= 120 KB |
+| Page weight, every same-origin byte on load, uncompressed | the spec's first numbers were root (Two + list) <= 110 KB, Six <= 140 KB, every other game <= 120 KB; superseded by the owner's 250 KB per page (TRIAGE4 D6, `tools/perf-budgets.json`), and the root is the games page (O-9) |
 | Requests on load | <= 14; zero external requests (unchanged rule) |
 | First contentful paint, desktop headless, local server | <= 300 ms |
 | Board interactive (the first key or tap moves) after `load` | <= 50 ms |

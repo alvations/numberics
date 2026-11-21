@@ -96,7 +96,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.evaluate(() => { const s = window.__fibonacci.state; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; window.__fibonacci.state = s; });
   ck("empty slots are aria-disabled, never disabled", await p.evaluate(() => [...document.querySelectorAll("#tray .pw")].every(b => !b.disabled && b.getAttribute("aria-disabled") === "true")));
   await p.locator("#tray .pw").nth(3).click({ force: true });
-  ck("tapping an empty Boost explains it and how to earn it", /^Boost: Step a tile up one Fibonacci number \(1 becomes 2\)\. Earned by each new top tile from 55\.$/.test(await p.textContent("#hint")));
+  ck("tapping an empty Boost explains it and how to earn it (Medium, a first visit)", /^Boost: Step a tile up one Fibonacci number \(1 becomes 2\)\. Earned by a join that makes your top tile or the one below it \(55 up\)\.$/.test(await p.textContent("#hint")));
   ck("no targeting from an empty slot", await p.locator("#board.targeting").count() === 0);
   await p.keyboard.press("1");
   ck("key 1 on an empty Undo explains it too", /^Undo: Take back the last move\./.test(await p.textContent("#hint")));
@@ -238,7 +238,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // craft #12: the hint row is never blank on open; it says how to start, and clears after the first move
   ck("a new game's hint says how to start", (await p.textContent("#hint")).trim() === "Swipe or use the arrow keys.");
   // craft #6: the pills sit under the title, where Two's are
-  const pills = (q) => q.evaluate(() => { const b = document.querySelector(".brand").getBoundingClientRect(), s = document.querySelector(".stats").getBoundingClientRect(), t = document.getElementById("tray").getBoundingClientRect();
+  const pills = (q) => q.evaluate(() => { const b = document.querySelector(".brand").getBoundingClientRect(), s = document.querySelector(".stats").getBoundingClientRect(), t = (document.getElementById("diff") || document.getElementById("tray")).getBoundingClientRect(); // Two's first row is its tier row (O-12)
     return { under: s.top >= b.bottom, left: Math.round(s.left - b.left), top: Math.round(s.top), tray: Math.round(t.top) }; });
   const fp = await pills(p), ep2 = await ctx.newPage(); await ep2.goto(url + "two/"); const ep = await pills(ep2); await ep2.close();
   ck("pills sit under the title at 1280, as in Two", fp.under && ep.under && fp.left === ep.left && Math.abs(fp.top - ep.top) <= 2 && Math.abs(fp.tray - ep.tray) <= 2, JSON.stringify([fp, ep]));
@@ -457,4 +457,25 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("New game un-ducks the music and clears the pills", await p.evaluate(() => window.__duck.indexOf(false) >= 0) && await p.evaluate(() => window.__fibonacci.endTro.length === 0 && window.__fibonacci.run.used === 0));
   ck("no page errors (trophies)", e7.length === 0, e7.join("|"));
   await ctx.close();
+
+  // the tiers (O-13), O-14 at 375x812 and the S20 score pop, as Two (tests/emu/_tiers.cjs)
+  const boardF = (a, b, tr) => async (p) => {
+    await p.evaluate((x) => { const s = window.__fibonacci.state; if (x.tr === "hard") delete s.tier; else s.tier = x.tr;
+      s.grid = new Array(16).fill(0); s.grid[0] = x.a; s.grid[1] = x.b; s.grid[15] = 12; s.top = 12;
+      s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; s.free = false; s.marks = new Array(16).fill(0); s.over = false;
+      window.__fibonacci.state = s; }, { a, b, tr });
+    await p.keyboard.press("ArrowLeft");
+  };
+  await require("./_tiers.cjs")({ browser, url, ck, shot }, {
+    id: "fibonacci", api: "__fibonacci", key: "numberics_fibonacci_v1",
+    rules: { medium: /makes your top tile or the one below it \(55 up\)/, easy: /makes your top tile or one of the 3 below it \(55 up\)/ },
+    easy: (p, tr) => boardF(7, 8, tr)(p), medium: (p, tr) => boardF(9, 10, tr)(p), // 21 + 34 = 55 and 55 + 89 = 144, top 233
+    made: { easy: /^Made 55 \+1 (Undo|Smash|Swap|Boost)$/, medium: /^Made 144 \+1 (Undo|Smash|Swap|Boost)$/ },
+    oldSave: { bestScore: 5000, bestTop: 13, runBest: 5000,
+      state: { size: 4, grid: [10, 11, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 12], score: 1200, top: 12, moves: 40, seed: 99, over: false,
+        power: { undo: 1, smash: 0, swap: 0, boost: 0 }, prev: null, free: false } },
+    oldSwipe: "ArrowLeft", oldBest: "5,000", pop: true,
+    popBoard: async (p) => { await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[0] = 1; s.grid[1] = 1; s.top = 1;
+      s.prev = null; s.over = false; window.__fibonacci.state = s; }); await p.keyboard.press("ArrowLeft"); }
+  });
 };

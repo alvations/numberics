@@ -23,11 +23,12 @@
 header .brand{ flex-basis:100%; }
 /* Round 3 end card: See the board beside New game; empty stat values use the shared .stat .none */
 .over .row{ margin:4px 0 0; }
-/* 5.3: the score's "+N" floats up and fades (WAAPI in game.js); the gold ring on a new paying top tile; 8.5 the
- * one-shot ring on the Best stat. Opacity only under reduced motion. */
-.plus{ position:absolute; left:-8px; right:-8px; bottom:100%; text-align:center; font-weight:850; font-size:var(--fs-lg);
-  line-height:1.1; color:var(--accent-text); pointer-events:none; z-index:3; white-space:nowrap;
-  text-shadow:0 0 3px var(--bg), 0 0 6px var(--bg), 0 0 10px var(--bg); font-variant-numeric:tabular-nums; }
+/* 5.3: the score's "+N" rises into place and fades (WAAPI in game.js) INSIDE the Score box, never on the subtitle
+ * (TRIAGE5 S20, as Two): it takes the label row on a strip of the box's own colour, so it never overprints "SCORE";
+ * the gold ring on a new paying top tile; 8.5 the one-shot ring on the Best stat. Opacity only under reduced motion. */
+.plus{ position:absolute; left:1px; right:1px; top:1px; padding:4px 0 2px; text-align:center; font-weight:850;
+  font-size:var(--fs-sm); line-height:1.2; color:var(--accent-text); background:var(--panel); border-radius:var(--r-sm) var(--r-sm) 0 0;
+  pointer-events:none; z-index:3; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .nmm-layer > .tile > .ring{ position:absolute; inset:0; border-radius:var(--tile-radius); pointer-events:none; z-index:1; opacity:0;
   animation:fib-ring 420ms var(--e-out) calc(var(--nmm-slide) + var(--nmm-pop)) both; }
 .nmm-layer.nmm-reduced > .tile > .ring{ box-shadow:0 0 0 .6cqw var(--accent); animation:fib-ring-fade 420ms linear both; }

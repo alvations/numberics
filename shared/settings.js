@@ -1,15 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsSettings (docs/design/REDESIGN.md 6): the one settings store, the Settings sheet and Memory (Save, Load,
- * Erase). Settings live in numberics_settings_v1 (try/catch, in-memory fallback when storage is blocked), are checked
- * field by field (a bad field falls back to its default alone), and apply live through NumbericsBoot.apply().
- * Every change fires `numberics:settings` on window (detail: the full settings) and calls the on("change") listeners
- * with (settings, changedKeys). Loaded right after kit.js; it makes NumbericsKit.reducedMotion() follow the in-app
- * Motion setting, which beats the OS (Motion "Full" plays motion even when the device asks for less).
- * Music fields: docs/design/MUSIC.md, Settings fields. Theme defaults to "auto" (the device; TRIAGE4 D5): a saved choice
- * is kept as it was. muted() / toggleMute() are the top bar's one-tap mute (TRIAGE4 D2): it turns Sound and Music off
- * together and remembers which were on (the `unmute` field), so the next tap brings back exactly those.
- * Memory never races a page's own save (TRIAGE4 B1): it flushes the batched writes before Save, and freezes the kit's
- * store (NumbericsKit.freeze) before Load or Erase writes, so no pagehide save during the reload can undo it. */
+ * NumbericsSettings (REDESIGN.md 6): the settings store, the Settings sheet and Memory (Save, Load, Erase). Memory
+ * freezes the kit's store before it writes (TRIAGE4 B1). Notes: docs/CODE-NOTES.md#sharedsettingsjs */
 (function (w) {
   "use strict";
   var KEY = "numberics_settings_v1", PREFIX = "numberics_";
@@ -179,6 +170,7 @@
   function freeze() { try { if (K() && K().freeze) K().freeze(); } catch (e) { /* no kit */ } }
   function thaw() { try { if (K() && K().thaw) K().thaw(); } catch (e) { /* no kit */ } }
   function reload() { try { w.location.reload(); } catch (e) { /* no location */ } }
+  // a Memory message: the sheet's status line says it; the toast is for the API path (TRIAGE5 S1)
   function toast(msg) { if (w.NumbericsKit && w.NumbericsKit.toast) w.NumbericsKit.toast(msg, "info"); }
 
   function saveFile() {
@@ -188,11 +180,12 @@
       var a = doc.createElement("a"); a.href = url; a.download = "numberics-save.json"; a.hidden = true;
       doc.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { try { w.URL.revokeObjectURL(url); } catch (e) { /* gone */ } }, 4000);
-    } catch (e) { toast("This browser cannot save a file here."); return false; }
+    } catch (e) { toast(NO_SAVE); status(NO_SAVE); return false; }
     try { if (w.NumbericsTrophies) w.NumbericsTrophies.report("fam", "saved", {}); } catch (e) { /* trophies are optional */ }
     return true;
   }
   var BAD_FILE = "That file is not a Numberics save.";
+  var NO_SAVE = "This browser cannot save a file here.";
   var BLOCKED = "This browser blocks saving, so the file could not load.";
   function apply(data) {
     if (!restore(data)) { thaw(); toast(BLOCKED); status(BLOCKED); return false; }
@@ -253,6 +246,7 @@
   function range(attr, name) {
     return '<div class="set"><div class="lbl" style="flex:1"><b>' + name + '</b><input class="vol" type="range" min="0" max="100" step="5" aria-label="' + name + '" ' + attr + "></div></div>";
   }
+  var AUTO = ["auto", "Auto (per\u00a0game)", "Each game picks its own."];
   function build(el) {
     el.innerHTML =
       '<div class="sec">Sound and feel</div>' +
@@ -261,9 +255,12 @@
       sw("music", "Music", "Quiet tunes while you play") + range("data-mvol", "Music volume") +
       '<div class="set" data-mstyle style="flex-direction:column;align-items:stretch"><div class="lbl"><b>Music style</b></div>' +
       '<div class="seg3" role="group" aria-label="Music style" style="grid-auto-flow:row;grid-template-columns:repeat(4,1fr)">' +
-      [["auto", "Auto (per\u00a0game)", "Each game picks its own"]].concat(STY).map(function (o) {
+      [AUTO].concat(STY).map(function (o) {
         return '<button type="button" aria-pressed="false" data-seg="musicStyle" data-v="' + o[0] + '" title="' + o[2] + '" style="padding:0 4px">' + o[1] + "</button>";
-      }).join("") + "</div></div>" +
+      }).join("") + "</div>" +
+      // the chosen style's one line, readable on touch (the title above is hover only), and what plays now (TRIAGE5 S4)
+      '<small data-mdesc style="display:block;margin-top:6px;color:var(--mute);font-size:var(--fs-sm)"></small>' +
+      '<small data-mnow role="status" aria-live="polite" style="display:block;margin-top:2px;color:var(--ink);font-size:var(--fs-sm);font-weight:650"></small></div>' +
       sw("haptics", "Vibration", "On phones that support it", hasVibrate()) +
       '<div class="sec">Seeing</div>' +
       seg("motion", "Motion", [["auto", "Device"], ["reduced", "Less"], ["full", "Full"]]) +
@@ -283,7 +280,10 @@
       });
     });
     Array.prototype.forEach.call(el.querySelectorAll("[data-seg]"), function (b) {
-      b.addEventListener("click", function () { var p = {}; p[b.getAttribute("data-seg")] = b.getAttribute("data-v"); set(p); tick(); });
+      b.addEventListener("click", function () {
+        var p = {}; p[b.getAttribute("data-seg")] = b.getAttribute("data-v"); set(p); tick();
+        if (p.musicStyle) [150, 600].forEach(function (ms) { setTimeout(nowLine, ms); }); // the music starts in the next tasks
+      });
     });
     var vol = el.querySelector("[data-vol]");
     vol.addEventListener("input", function () { set({ volume: +vol.value / 100 }); tick(); });
@@ -296,6 +296,16 @@
     var er = el.querySelector('[data-mem="erase"]');
     if (w.NumbericsKit && w.NumbericsKit.twoStep) w.NumbericsKit.twoStep(er, function () { return true; }, erase, "Sure? Erase everything");
     else er.addEventListener("click", erase);
+    // the armed Erase takes the whole row on one line; Save and Load step aside (TRIAGE5 S4, craft #25)
+    var armedRow = function () {
+      var on = er.textContent !== "Erase";
+      er.style.gridColumn = on ? "1 / -1" : ""; er.style.whiteSpace = on ? "nowrap" : "";
+      Array.prototype.forEach.call(el.querySelectorAll('[data-mem="save"], [data-mem="load"]'), function (b) { b.hidden = on; });
+    };
+    try { new MutationObserver(armedRow).observe(er, { childList: true, characterData: true, subtree: true }); } catch (e) { /* no observer */ }
+    // the header (title and Close) stays at the top while the sheet scrolls, Larger text included (TRIAGE5 S4)
+    var head = el.parentNode && el.parentNode.querySelector(".sh-head");
+    if (head) head.style.cssText = "position:sticky;top:-8px;z-index:2;background:var(--panel);margin:0 0 10px;padding:4px 0";
     sync();
   }
   // reflect the current settings in the open sheet (after a change here, in another tab, or on the device)
@@ -315,6 +325,19 @@
     var mv = X.querySelector("[data-mvol]"), ms = X.querySelector("[data-mstyle]");
     if (mv) mv.disabled = !s.music;
     if (ms) ms.style.display = s.music ? "" : "none"; // not [hidden]: .set sets display
+    var d = X.querySelector("[data-mdesc]"), st = s.musicStyle === "auto" ? AUTO : STY.filter(function (x) { return x[0] === s.musicStyle; })[0];
+    if (d && st) d.textContent = st[1].replace(/\u00a0/g, " ") + ": " + st[2];
+    nowLine();
+  }
+  // "Now playing: Drift" while the music plays; on the games page (no music there, TRIAGE5 S2) where it will play
+  function nowLine() {
+    var el = X && X.isConnected ? X.querySelector("[data-mnow]") : null; if (!el) return;
+    var s = current(), m = w.NumbericsMusic, st = null, txt = "";
+    try { st = m && !m.stub && m.state ? m.state() : null; } catch (e) { st = null; }
+    var g = null; try { g = w.document.querySelector("#games[data-current]"); } catch (e) { g = null; }
+    if (s.music && st && st.playing && st.style) txt = "Now playing: " + (STY.filter(function (x) { return x[0] === st.style; })[0] || [0, st.style])[1];
+    else if (s.music && !g) txt = "Music plays in the games, not on this page.";
+    el.textContent = txt; el.hidden = !txt;
   }
   function open() {
     if (!w.NumbericsUI || !w.NumbericsUI.sheet) return null;
@@ -322,6 +345,7 @@
   }
 
   watch();
+  try { w.addEventListener("numberics:music", function () { nowLine(); }); } catch (e) { /* no window events */ }
   w.NumbericsSettings = {
     KEY: KEY, DEFAULTS: DEF, STYLES: STY.map(function (x) { return { id: x[0], name: x[1], blurb: x[2] }; }), get: get, set: set, on: on, off: off, muted: muted, toggleMute: toggleMute, reducedMotion: reducedMotion, open: open, normalize: normalize,
     memory: { pack: pack, unpack: unpack, snapshot: snapshot, restore: restore, loadText: loadText, confirmLoad: confirmLoad, save: saveFile, erase: erase, wipe: wipe,

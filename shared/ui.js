@@ -1,17 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsUI (docs/design/REDESIGN.md 3.2, 3.6). Builds the top bar into <div id="topbar" data-root="../"></div>:
- * the family mark (a link home) and the Games, Sound (one-tap mute), Trophies and Settings buttons; and the one sheet primitive (3.6) that
- * Games, Trophies, Settings and How to play open in. Games opens NumbericsNav.openSheet() (shared/nav.js: Today and
- * every game card in games.json order); without nav.js it scrolls to the games list. Loaded last, after nav.js.
- *
- * Sheets: sheet(id, build, opts) opens the sheet `id` (one at a time; opening another replaces it), empties its body
- * and calls build(body) to fill it; opts.title (default from the id) and opts.onClose. Focus moves to the close button
- * and back to the opener on close; Tab is trapped; Esc, the close button and a scrim tap close it; the page behind
- * does not scroll, and no key reaches the game while it is open (games also check open()). Fires `numberics:sheet`
- * on window with detail { id, open } on open and on close (Sudoku pauses its clock on it).
- * Narrow screens (TRIAGE4 B3): the "Numberics" word and then the "Games" word hide (theme.css), so every button stays
- * 44 x 44 and the bar never scrolls sideways at 320 px, Larger text included; the words stay as accessible names.
- * The Sound button (TRIAGE4 D2) toggles Sound and Music together (NumbericsSettings.toggleMute) and shows the state. */
+ * NumbericsUI (REDESIGN.md 3.2, 3.6): the top bar (home, Games, Sound, Trophies, Settings) and the one sheet primitive
+ * that Games, Trophies, Settings and How to play open in. Loaded last. Notes: docs/CODE-NOTES.md#shareduijs */
 (function (w) {
   "use strict";
   var doc = w.document;
@@ -44,10 +33,13 @@
     syncMute();
     try { if (!isMuted() && w.NumbericsAudio && w.NumbericsAudio.tick) w.NumbericsAudio.tick(); } catch (e) { /* silent */ }
   }
+  // on the games page it scrolls to the cards (TRIAGE5 S3); on a game page it opens the Games sheet
   function games() {
-    if (w.NumbericsNav && typeof w.NumbericsNav.openSheet === "function") return w.NumbericsNav.openSheet();
-    var row = doc.getElementById("games"); if (!row) return;
-    try { row.scrollIntoView({ block: "center" }); } catch (e) { row.scrollIntoView(); }
+    var row = doc.getElementById("games"), home = !!(row && !row.getAttribute("data-current"));
+    if (!home && w.NumbericsNav && typeof w.NumbericsNav.openSheet === "function") return w.NumbericsNav.openSheet();
+    if (!row) return;
+    var to = (home && doc.getElementById("more")) || row;
+    try { to.scrollIntoView({ block: home ? "start" : "center" }); } catch (e) { to.scrollIntoView(); }
     var a = row.querySelector("a"); if (a) a.focus({ preventScroll: true });
   }
   var ACT = {
@@ -76,8 +68,7 @@
     return el;
   }
   var hookedMute = false;
-  // ---- end cards (REDESIGN.md 2.2, TRIAGE4 family): every .over card on the page gets its game's 56 px glyph on top,
-  // once, so all ten cards match without each game drawing it ----
+  // ---- end cards (REDESIGN.md 2.2): every .over card gets its game's glyph on top, once ----
   var GLYPH = { fibonacci: "spiral", two: "sq:2", endless: "sq:2", three: "sq:3", four: "disc:4", five: "sq:5", six: "sq:6",
     seven: "disc:7", nine: "sq:9", fifteen: "sq:15", sudoku: "grid" };
   function gameId() { var g = doc.getElementById("games"); return g ? g.getAttribute("data-current") || "" : ""; }
@@ -89,8 +80,7 @@
       if (o.querySelector(":scope > .glyph")) return;
       o.insertAdjacentHTML("afterbegin", T.glyph(name).replace("<svg ", '<svg class="glyph" '));
       n++;
-      // a card too tall for a small board scrolls with its buttons pinned (theme.css); .over-more draws the edge above the
-      // buttons while anything is hidden under them, so the player sees there is more
+      // a card too tall scrolls with its buttons pinned; .over-more shows there is more
       var more = function () { o.classList.toggle("over-more", o.scrollTop + o.clientHeight < o.scrollHeight - 2); };
       o.addEventListener("scroll", more, { passive: true }); o.addEventListener("animationstart", more);
       o.addEventListener("animationend", more);
@@ -110,8 +100,7 @@
   }
   function hook() {
     if (hooked) return; hooked = true;
-    // capture on window: runs before any game listener. Esc closes, Tab is trapped, and a key aimed outside the
-    // sheet (focus left on the page) never reaches the game.
+    // capture on window, before any game: Esc closes, Tab is trapped, a key outside the sheet never reaches the game
     w.addEventListener("keydown", function (e) {
       if (!cur) return;
       var inside = !!(e.target && e.target.nodeType === 1 && cur.sheet.contains(e.target));
@@ -135,8 +124,7 @@
       '<div class="sh-body"></div></div>';
     scrim.addEventListener("click", function (e) { if (e.target === scrim) close(); });
     scrim.querySelector(".sh-x").addEventListener("click", function () { close(); });
-    // keys typed inside the sheet stay in it (games listen on document or window, in the bubble phase)
-    // (only while this sheet is the open one: a key that reaches a closed sheet's node is the page's)
+    // keys typed inside the open sheet stay in it
     scrim.addEventListener("keydown", function (e) { if (cur && cur.scrim === scrim) e.stopPropagation(); });
     doc.body.appendChild(scrim);
     return scrim;
@@ -153,7 +141,7 @@
     var h = doc.documentElement, toast = doc.getElementById("toast");
     cur = { id: id, scrim: scrim, sheet: sh, opener: opener, onClose: opts.onClose, overflow: h.style.overflow };
     h.style.overflow = "hidden";                 // the page behind does not scroll
-    if (toast) toast.style.zIndex = "30";        // a toast raised from a sheet shows above the scrim
+    if (toast) toast.classList.remove("on");     // no toast floats over a sheet (TRIAGE5 S1); the kit drops new ones
     scrim.hidden = false;
     if (typeof build === "function") build(body);
     var x = scrim.querySelector(".sh-x");
@@ -168,14 +156,11 @@
     var c = cur; cur = null;
     c.scrim.hidden = true;
     doc.documentElement.style.overflow = c.overflow;
-    var toast = doc.getElementById("toast"); if (toast) toast.style.zIndex = "";
     if (typeof c.onClose === "function") { try { c.onClose(); } catch (e) { /* keep closing */ } }
     if (swap !== true && c.opener && c.opener.focus && doc.contains(c.opener)) {
       try { c.opener.focus({ preventScroll: true }); } catch (e) { c.opener.focus(); }
     }
-    // focus never stays on a node of the hidden sheet: when the opener could not take it (the body, or a sheet that
-    // opened by itself), let it go now, so the very next key reaches the game (the browser would only drop it at the
-    // next frame)
+    // focus never stays on the hidden sheet, so the very next key reaches the game
     var a = doc.activeElement;
     if (swap !== true && a && a !== doc.body && c.scrim.contains(a) && a.blur) a.blur();
     fire(c.id, false);

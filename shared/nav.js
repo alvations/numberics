@@ -1,14 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsNav (docs/design/REDESIGN.md 3.3, 3.4): the games list, in games.json order (O-7), everywhere it shows.
- *   - <nav id="games" class="games" data-root="../" data-current="seven"> : the quiet text row (every game page)
- *   - <div id="games" class="cards" data-root="../" data-current="two">    : the game cards (every game page; the games
- *                                                                            page at the root has no data-current)
- *   - <section id="today" class="today">                                    : the Today card (the games page, the root)
- *   - NumbericsNav.openSheet() : the Games sheet (the top bar's Games button, shared/ui.js): Today, then every card
- *   - NumbericsNav.cards(el, {root, current}) and .today(el, {root}) draw into any element
- * Cards read NumbericsProgress (best, a live run, played) at draw time; nothing is sent anywhere.
- * LIVE mirrors the live entries of games.json, in its order (tests/test-shared.js keeps them identical). Static, so
- * it works from file://. Reordering the family is a one-line move in games.json plus this mirror. */
+ * NumbericsNav (REDESIGN.md 3.3, 3.4): the games list in games.json order (O-7): the text row, the cards, the Today
+ * card and the Games sheet. LIVE mirrors games.json (tests/test-shared.js). Notes: docs/CODE-NOTES.md#sharednavjs */
 (function (w) {
   "use strict";
   var LIVE = [
@@ -54,8 +46,9 @@
       ["", EGG], [6, "hsl(285 55% 66%)"], [1, "hsl(40 30% 88%)"], [5, "hsl(20 75% 64%)"], ["", EGG]]) + "</div>",
     nine: '<div class="mg" style="grid-template-columns:repeat(3,30px)">' + [7, 3, 5].map(function (n, i) {
       var p = ""; for (var k = 0; k < 9; k++) p += '<i style="opacity:' + (k < n ? 0.8 : 0.15) + '"></i>';
-      return '<span class="mt" style="width:30px;height:34px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:hsl(' +
-        [330, 160, 250][i] + ' 60% 64%)">' + n + '<span class="pips">' + p + "</span></span>";
+      // line-height:1 and a 2 px foot keep every dot inside the tile (round 5, craft #2)
+      return '<span class="mt" style="width:30px;height:34px;line-height:1;padding-bottom:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:hsl(' +
+        [330, 160, 250][i] + ' 60% 64%)">' + n + '<span class="pips" style="margin-top:1px">' + p + "</span></span>";
     }).join("") + "</div>",
     fifteen: '<div class="mg" style="grid-template-columns:repeat(3,22px)">' + [8, 1, 6, 3, 5, 7, 4, 9, 2].map(function (n, i) {
       var mine = [1, 4, 7].indexOf(i) >= 0, cpu = [0, 8].indexOf(i) >= 0;
@@ -90,9 +83,7 @@
     el.innerHTML = LIVE.map(function (g) { return card(g, root, cur); }).join("");
   }
 
-  // ---- the Today card (3.4): the three Dailies, done (the day's best) or not yet, and the daily streak, always shown
-  // ("Start a streak today" at 0, TRIAGE4 D4). Chips say "Daily" so they never read as the game cards (D9), and the
-  // Daily Sudoku's chip shows its level. The card redraws at local midnight and when a tab comes back on a new day. ----
+  // ---- the Today card (3.4): the three Dailies and the streak, always shown (TRIAGE4 D4); redraws at midnight ----
   var FLAME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 4 5 5.5 5 10a5 5 0 01-10 0c0-2.4 1.2-3.6 2.4-4.6.3 1.6 1 2.6 2.1 3C11 9 11 6 12 3z"/></svg>';
   var DAILIES = [["seven", "Seven"], ["six", "Six"], ["sudoku", "Sudoku"]];
   function today(el, opts) {
@@ -111,8 +102,9 @@
         : '<span class="streak zero">' + FLAME + "Start a streak today</span>") + "</div>" +
       "<h3>Three dailies, the same for everyone</h3><div class=\"chips\">" + DAILIES.map(function (g) {
         var r = t.done && t.done[g[0]], l = lv[g[0]] ? '<small class="lv">' + esc(cap(lv[g[0]])) + "</small>" : "";
+        var part = !r && t.part && t.part[g[0]]; // a Daily under way shows how far it got ("2 of 6", TRIAGE5 S5)
         return '<a class="chip' + (r ? " done" : "") + '" href="' + root + g[0] + '/?mode=daily" data-daily="' + g[0] + '"' +
-          (r ? ' title="Done today"' : "") + ">Daily " + g[1] + l + "<small>" + (r ? "Best " + esc(r) : "Not yet") + "</small></a>";
+          (r ? ' title="Done today"' : "") + ">Daily " + g[1] + l + "<small>" + (r ? "Best " + esc(r) : part ? esc(part) : "Not yet") + "</small></a>";
       }).join("") + "</div>";
     armMidnight();
   }

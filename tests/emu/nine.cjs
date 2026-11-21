@@ -41,6 +41,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("44 px targets: minus, plus, Take, difficulty, How to play", await p.evaluate(() => ["#less", "#more", "#take", "#diff button", "details.how > summary"].every(q => { const r = document.querySelector(q).getBoundingClientRect(); return r.height >= 44 && r.width >= 44; })));
   ck("the take button is primary", await p.locator("#take.btn.primary").count() === 1);
   ck("the games list is the cards, Nine marked as playing", await p.locator("#games.cards .card").count() === 10 && await p.locator('#games .card[aria-current="page"]').count() === 1);
+  ck("S18 (craft #2): the Nine card art's dots all sit inside their tiles, clear of the 2 px bottom edge", await p.evaluate(() => {
+    const c = document.querySelector('#games .card[aria-current="page"]'), ts = c ? [...c.querySelectorAll(".pv .mt")] : [];
+    return ts.length === 3 && ts.every((t) => { const r = t.getBoundingClientRect(); return [...t.querySelectorAll(".pips i")].every((d) => { const q = d.getBoundingClientRect(); return q.bottom <= r.bottom - 2 && q.top >= r.top; }); });
+  }));
   ck("three tiles on a fresh run", await p.locator(".heap.tile").count() === 3);
   ck("every tile shows its number and its pips", await p.evaluate(() => [...document.querySelectorAll(".heap.tile")].every(t => +t.querySelector(".num").textContent === t.querySelectorAll(".pips i.on").length)));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= 375));
@@ -49,9 +53,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
      (await p.textContent(".sub")).trim() === "Take dots in turns. The last dot wins." && await p.locator(".sub a").count() === 0);
   ck("the games list has the family's one heading: 'More number games'", (await p.textContent("section.more > h2")) === "More number games" && await p.locator("section.more #games .card, section.more #games a").count() > 0);
   ck("empty Best shows a dimmed none (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
-  ck("R16 pills: You, Computer, Record (dimmed none), then Best", JSON.stringify(await p.$$eval(".stat > span", a => a.map(x => x.textContent))) === '["You","Computer","Record","Best"]' &&
+  ck("R16 pills, S18 labels that say what they count: You, Computer, Matches (dimmed none), then Most tiles", JSON.stringify(await p.$$eval(".stat > span", a => a.map(x => x.textContent))) === '["You","Computer","Matches","Most tiles"]' &&
      (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
-  ck("how-to discloses the computer's Pass and Add on Hard (R14) and the R2 rule", /On Hard the computer can also\s+Pass and Add\./.test(await p.textContent(".how")) && /unless you used Add, Pass or Peek\s+in it/.test(await p.textContent(".how")));
+  ck("how-to discloses the computer's Pass and Add on Hard (R14) and the R2 rule", /On Hard the computer can also\s+Pass and Add\./.test(await p.textContent(".how")) && /unless you used Add, Pass, Peek\s+or Undo in it/.test(await p.textContent(".how")));
   ck("three tiles: the panel hugs its row (no 100px of dead space above and below)", await p.evaluate(() => { const b = document.getElementById("board").getBoundingClientRect(), t = document.querySelector(".heap.tile").getBoundingClientRect(); return t.top - b.top < 70 && b.height < b.width * 0.8; }));
   ck("restart says New game (R11)", (await p.textContent("#new")) === "New game");
   ck("disabled Take is the calm style, not gold", await p.evaluate(() => getComputedStyle(document.getElementById("take")).backgroundColor !== getComputedStyle(document.querySelector(".btn.primary:not(:disabled)") || document.body).backgroundColor && document.getElementById("take").disabled));
@@ -59,9 +63,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.locator("#tray .pw").nth(1).click({ force: true });
   ck("tapping an empty power-up explains it (R5)", /^Add: Add 1 to a tile.*Win a round without Add, Pass or Peek to earn one\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("empty tray buttons are aria-disabled, never disabled", await p.locator('#tray .pw[aria-disabled="true"]').count() >= 3 && await p.locator("#tray .pw:disabled").count() === 0);
-  ck("tray tooltip voice: '1: Undo. Take back your last turn.'", (await p.locator("#tray .pw").first().getAttribute("title")) === "1: Undo. Take back your last turn.");
+  ck("tray tooltip voice, with Undo's cost said up front (S9, as Five)", (await p.locator("#tray .pw").first().getAttribute("title")) === "1: Undo. Take back your last turn. No rewards for the rest of this round.");
   await p.keyboard.press("1");
-  ck("key 1 on an unusable Undo explains why", /^Undo: Take back your last turn\. Nothing to take back/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("key 1 on an unusable Undo explains why", /^Undo: Take back your last turn\. No rewards for the rest of this round\. Nothing to take back/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   const h0 = (await S(p)).heaps;
   await p.focus("#board");
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowDown");
@@ -79,6 +83,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await forge(p, { heaps: [5, 3, 7] });
   await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // first tap on a tile picks it, take 1 (cold #31)
   ck("the first tap on a tile picks it with a take of 1, even on a pip", (await p.textContent("#amount")).includes("Take 1 from the 7"));
+  // S18 (cold #2): a second tap this soon is a double tap: the middle of a tile is its top row of pips, and it keeps Take 1
+  await p.locator('.heap[data-i="2"] .pips i[data-k="1"]').click();
+  ck("S18: a double tap on a tile (the second tap on its top pips) still presets Take 1", (await p.textContent("#amount")).includes("Take 1 from the 7"), await p.textContent("#amount"));
+  await p.waitForTimeout(450);
   await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // pip 5 of 7 on the chosen tile: take 3, leaving 4
   ck("tapping a pip on the chosen tile sets the amount", (await p.textContent("#amount")).includes("Take 3 from the 7"));
   await p.click("#more"); await p.click("#less");
@@ -159,6 +167,16 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("R2: a round won after Peek pays nothing and says so", await p.evaluate(() => Object.values(window.__nine.state.power.you).reduce((a, b) => a + b, 0)) === tp - 1 &&
      (await p.textContent("#over-note")) === "No power-up: you used Add, Pass or Peek this round.", await p.textContent("#over-note"));
   await p.click("#again");
+  // S9: a round won after an Undo pays nothing, and the card says so in Five's words (a real Undo, then the same win)
+  await forge(p, { heaps: [0, 3, 1], s: { diff: "easy", score: { you: 0, cpu: 0 } }, you: { undo: 1, peek: 0, add: 0, pass: 0 } });
+  await p.evaluate(() => { const N = window.NumbericsNine; let s = window.__nine.state; s = N.take(s, 2, 1).state; s = N.take(s, 1, 1).state; window.__nine.state = s; });
+  await p.locator("#tray .pw").nth(0).click();
+  ck("S9: Undo marks the round", await p.evaluate(() => window.__nine.state.undone === true && window.__nine.state.heaps.join() === "0,3,1"));
+  await p.evaluate(() => { const N = window.NumbericsNine; let s = window.__nine.state; s = N.take(s, 2, 1).state; s = N.take(s, 1, 1).state; window.__nine.state = s; });
+  await p.locator('.heap[data-i="1"]').click(); await p.click("#more"); await p.click("#take"); await card(p);
+  ck("S9: a round won after Undo pays nothing and says so", (await p.textContent("#over-note")) === "No power-up after Undo this round." &&
+     await p.evaluate(() => window.__nine.state.noAward === "undo" && !window.__nine.state.award), await p.textContent("#over-note"));
+  await p.click("#again");
 
   // the result holds 1.5 s on the board before the card, when you take last and when the computer does
   const timeCard = (p) => p.evaluate(() => new Promise((res) => { const t0 = performance.now(), o = document.getElementById("over");
@@ -183,7 +201,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     const texts = ["", "Your turn: take from one tile.", "You took 7 from the 7, gone. Tap the board for the summary.",
       "Computer used Add (4 to 5), then took 5 from the 5, gone. Your turn.", "Peek: no winning move here. Add or Pass can change that.",
       "Add: Add 1 to a tile (up to 9), then take. Win a round without Add, Pass or Peek to earn one.",
-      "Undo: Take back your last turn. Nothing to take back yet this round.", "Switching now counts as a loss. Tap again to switch.",
+      "Undo: Take back your last turn. No rewards for the rest of this round. Nothing to take back yet.", "Switching now counts as a loss. Tap again to switch.",
       "Pass: Skip your turn (once per round). Win a round without Add, Pass or Peek to earn one.",
       "Peek: Show one winning move, if there is one. Win a round without Add, Pass or Peek to earn one."];
     const tops = await p.evaluate((texts) => texts.map((t) => { document.getElementById("hint").textContent = t; return document.getElementById("board").getBoundingClientRect().top; }), texts);
@@ -200,7 +218,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 4. round end, match end, misere unlock, learn view
   await forge(p, { heaps: [0, 4, 0], s: { score: { you: 0, cpu: 0 }, round: 1 } });
-  await p.locator('.heap[data-i="1"]').click(); await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take"); await card(p);
+  await p.locator('.heap[data-i="1"]').click(); await p.waitForTimeout(450); await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take"); await card(p);
   ck("last take wins the round", await p.isVisible("#over") && (await p.textContent("#over-title")) === "You win round 1" && (await p.textContent("#over-text")) === "You took the last dot · 1-0, first to 3");
   await shot(p, "round");
   await p.click("#again");
@@ -322,7 +340,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage(); const e4 = []; p.on("pageerror", e => e4.push(e.message));
   await p.goto(page);
   await forge(p, { heaps: [5, 3, 7] });
-  await p.locator('.heap[data-i="2"]').click(); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // take 3 from the 7
+  await p.locator('.heap[data-i="2"]').click(); await p.waitForTimeout(450); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // take 3 from the 7
   await p.click("#take");
   let pa = await pipAnims(p);
   ck("a take: three pips leave, 30 ms apart, 180 ms each, with motion", pa.length === 3 && pa.every(a => a.motion && a.dur === 180) && JSON.stringify(pa.map(a => a.delay).sort((a, b) => a - b)) === "[0,30,60]", JSON.stringify(pa));
@@ -338,7 +356,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the ring is gone after its 420 ms", await p.locator(".heap .ring").count() === 0);
   // a tile taken to zero: it stays on top of its empty slot, shrinks and fades
   await forge(p, { heaps: [4, 3, 6] });
-  await p.locator('.heap[data-i="1"]').click(); await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take");
+  await p.locator('.heap[data-i="1"]').click(); await p.waitForTimeout(450); await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take");
   ck("a tile taken to zero: the slot is empty at once, the old tile fades on top of it", await p.locator(".heap.gone > .heap.fx").count() === 1 && await p.locator(".heap.tile[data-i]").count() === 2);
   await p.waitForTimeout(220); await shot(p, "mid-zero");
   await p.waitForTimeout(400);
@@ -383,7 +401,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     p = await ctx.newPage(); const e5 = []; p.on("pageerror", e => e5.push(e.message));
     await p.goto(page);
     await forge(p, { heaps: [5, 3, 7] });
-    await p.locator('.heap[data-i="2"]').click(); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); await p.click("#take");
+    await p.locator('.heap[data-i="2"]').click(); await p.waitForTimeout(450); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); await p.click("#take");
     pa = await pipAnims(p);
     const mo = await motionAnims(p), num = +(await p.textContent('.heap[data-i="2"] .num'));
     if (mode.red) ck(mode.name + ": pips fade together (no motion, at most 160 ms) and the number changes at once",
@@ -453,7 +471,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage(); p.on("pageerror", e => e7.push(e.message));
   await p.goto(page);
   await forge(p, { heaps: [5, 3, 7] });
-  await p.locator('.heap[data-i="2"]').click(); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); await p.click("#take"); // 7 -> 4
+  await p.locator('.heap[data-i="2"]').click(); await p.waitForTimeout(450); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); await p.click("#take"); // 7 -> 4
   const tint = await p.evaluate(() => { const t = document.querySelector('.heap[data-i="2"] > .tint'); if (!t) return null;
     const a = t.getAnimations()[0], k = a ? a.effect.getKeyframes() : [];
     return { h: t.style.getPropertyValue("--h"), want: String(window.NumbericsKit.hue(7)), now: document.querySelector('.heap[data-i="2"]').style.getPropertyValue("--h"),

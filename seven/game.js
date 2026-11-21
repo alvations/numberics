@@ -1,19 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * Numberics Seven: browser client. engine.js owns every rule; this file draws, listens and remembers.
- * A drop returns a wave-by-wave trace; the client plays it on NumbericsMotion's keyed layer (REDESIGN.md 5.5): the disc
- * falls with gravity and settles, each wave pops, cracks its eggs and lets the column above fall, the rising row slides
- * up. Every disc keeps its node (identity-keyed, never rebuilt per drop). A new input finishes the running animation
- * (end state at once, the pending sounds at once, one of each: TRIAGE4 D7) and is applied at once. Under reduced motion (Settings, then the OS, read
- * at each drop) the settled well shows at once and new discs fade in. */
+ * Numberics Seven: browser client. engine.js owns every rule; this file draws, listens and remembers. Every disc keeps
+ * its node on NumbericsMotion's keyed layer (REDESIGN.md 5.5); a new input finishes the running animation (TRIAGE4 D7).
+ * Notes: docs/CODE-NOTES.md#sevengamejs */
 (function () {
   "use strict";
   var N = window.NumbericsSeven, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
   var TR = window.NumbericsTrophies, PG = window.NumbericsProgress;
   var W = N.W, H = N.H, T = M.T, E = M.E;
   var store = K.store("numberics_seven_v1");
-  // sounds and haptics (REDESIGN.md 6.4, 7.3), called at the visual moment from inside the motion timeline; the
-  // family's one rule (shared/motion.js, TRIAGE4 D7): while finish() runs the pending steps at once, their sounds play
-  // then, one of each (a chain's pops sound once), never dropped
+  // sounds and haptics at the visual moment, inside the motion timeline; the family's one rule (TRIAGE4 D7)
   var sfx = M.sfx, buzz = M.buzz;
   function duck(on) { try { if (window.NumbericsMusic && window.NumbericsMusic.duck) window.NumbericsMusic.duck(on); } catch (e) { /* silent */ } }
   function trophy(ev, data) {
@@ -28,8 +23,7 @@
   var kbd = false; // the last power-up was armed from the keyboard
 
   // ---- saved data: one run per mode, best score per mode ----
-  // Every field the client or engine reads is checked, and prev (the Undo snapshot) is checked the same way. A run that
-  // has ended or sits on the brink has 0 drops left, and must load as it is (else the finished Daily came back fresh).
+  // every field is checked (prev too); a run that has ended or sits on the brink loads as it is
   function nat(v, min) { return Number.isInteger(v) && v >= (min || 0); }
   function validState(s, inner) {
     return !!s && typeof s === "object" && N.MODES.indexOf(s.mode) >= 0 && Array.isArray(s.grid) && s.grid.length === W * H &&
@@ -72,8 +66,7 @@
     today = d; delete runs.daily; best.daily = 0; start.daily = 0;
   }
   function newRun(m) { if (m === "daily") checkDay(); start[m] = best[m]; runTro[m] = []; return fresh(m); }
-  // TRIAGE4 D9: today's Daily is one run. Once it has ended it stays on screen, finished, until the day changes; a run
-  // started before midnight is yesterday's (today is the day the run began) and never counts for the new day.
+  // TRIAGE4 D9: today's Daily is one run; once ended it stays finished until the day changes
   function current() { return today === K.daySeed(); }
   function dailyLocked() { return mode === "daily" && current(); }
   var state = runs[mode] || newRun(mode);
@@ -85,10 +78,50 @@
   var boardEl = $("board"), discsEl = $("discs"), cellsEl = $("cells");
   for (var i = 0; i < W * H; i++) { var d = document.createElement("div"); if (i < W) d.className = "top"; cellsEl.appendChild(d); }
 
+  // ---- two tabs (TRIAGE5 S13): a save keeps each mode's higher best and never replaces today's finished Daily; the
+  // stored Daily is read back before a Daily action and when the tab shows again ----
+  function storedRun(s, m) {
+    var r = s && s.runs && s.runs[m];
+    return validState(r) && r.mode === m && (m !== "daily" || s.day === today) ? r : null;
+  }
+  function storedTro(s, m) {
+    var a = s && s.tro && s.tro[m];
+    return Array.isArray(a) ? a.filter(function (id) { return typeof id === "string"; }).slice(0, 20) : [];
+  }
+  function keeps(r, mine) { return !(mine && mine.mode === "daily" && mine.over && !r.over); } // a finished Daily stays
+  function merge(s) {
+    if (!s || typeof s !== "object") return;
+    N.MODES.forEach(function (m) {
+      var b = s.best && s.best[m];
+      if (typeof b === "number" && b >= 0 && (m !== "daily" || s.day === today)) best[m] = Math.max(best[m], b);
+      var r = m === mode ? null : storedRun(s, m);
+      if (r && keeps(r, runs[m])) { runs[m] = r; runTro[m] = storedTro(s, m); }
+    });
+    if (nat(s.eggs)) eggs = Math.max(eggs, Math.min(s.eggs, 3));
+  }
+  // the stored Daily replaces this tab's when another tab wrote it since (seen); true when the screen must redraw
+  var seen = JSON.stringify(runs.daily || null);
+  function syncDaily(s) {
+    if (s === undefined) s = store.load();
+    merge(s);
+    if (mode !== "daily" || !current()) return false;
+    var r = storedRun(s, "daily"), txt = JSON.stringify(r);
+    if (!r || txt === seen || !keeps(r, state)) return false;
+    seen = txt;
+    flush(); endReveal(); targeting = null; viewing = false; note = ""; ended = false; carded = false;
+    state = runs.daily = r; runTro.daily = storedTro(s, "daily");
+    var a = s.start && s.start.daily; start.daily = typeof a === "number" && a >= 0 && a <= best.daily ? a : best.daily;
+    return true;
+  }
   function persist() {
-    runs[mode] = state;
-    if (!state.overflow) best[mode] = Math.max(best[mode], state.score); // a run on the brink is not a result yet
+    var s = store.load();
+    merge(s);
+    var r = mode === "daily" ? storedRun(s, "daily") : null;
+    // a stale tab's unfinished Daily never overwrites today's finished one (the screen catches up on the next sync)
+    if (r && !keeps(state, r)) runs.daily = r; else runs[mode] = state;
+    if (!state.overflow && runs[mode] === state) best[mode] = Math.max(best[mode], state.score); // a run on the brink is not a result yet
     store.save({ mode: mode, runs: runs, best: best, start: start, day: today, tro: runTro, eggs: eggs });
+    seen = JSON.stringify(runs.daily || null);
     // the card summary (REDESIGN.md 3.5): the best of Classic and Blitz (the Daily best is only today's), and this run
     var b = Math.max(best.classic, best.blitz), live = state.drops > 0 && !state.over;
     try { if (PG && PG.put) PG.put("seven", { best: b ? "Best " + K.fmt(b) : "", live: live, liveText: live ? "Score " + K.fmt(state.score) : "" }); }
@@ -247,11 +280,11 @@
     $("hint").textContent = hintText();
     boardEl.classList.toggle("targeting", !!targeting);
     drawCursor(); drawGhost(); drawAim();
-    // one end-card pattern (TRIAGE3): while a card shows, the page's New game is hidden with its space kept, and
-    // focus moves to the card's primary button. On the brink (TRIAGE3 stuck-not-over) the card offers Undo or End.
+    // one end-card pattern (TRIAGE3): New game hidden, space kept, focus on the card's primary; on the brink: Undo or End
     var brink = !!state.overflow, over = $("over");
     over.hidden = !(brink || (state.over && !viewing)) || revealing || busy(); // the well settles before any card
-    $("new").style.visibility = over.hidden ? "" : "hidden";
+    // while today's Daily is played there is nothing to start (TRIAGE5 S14): the button is hidden, space kept
+    $("new").style.visibility = over.hidden && !(dailyLocked() && !state.over) ? "" : "hidden";
     // in today's Daily there is no second run: the page's button and the card's button go to Classic (D9)
     $("new").textContent = $("again").textContent = dailyLocked() ? "Play Classic" : "New game";
     $("over-undo").hidden = $("over-end").hidden = !brink;
@@ -290,8 +323,7 @@
     if (!revealing) return false;
     revealing = false; renderChrome(); return true;
   }
-  // the done callback of every trace: draw the settled well, and if the run just ended (or overflowed with an Undo
-  // in stock), hold it in view first
+  // the done callback of every trace: draw the settled well; a run that just ended is held in view first
   function settle() {
     render();
     if (!state.over && !state.overflow) return;
@@ -300,9 +332,7 @@
     revealT = setTimeout(function () { if (g !== gen) return; endReveal(); }, REVEAL);
   }
 
-  // ---- playing a trace on the keyed layer (REDESIGN.md 5.5). plan() is pure: it walks the engine's trace and gives
-  // each step the identity map before and after it, so the timeline only syncs the layer; finish() runs the steps
-  // left at once, in order, and the well lands on the engine's grid. ----
+  // ---- playing a trace on the keyed layer (REDESIGN.md 5.5): plan() is pure; finish() runs the steps left at once ----
   function plan(trace, from) {
     var cur = from.slice(), out = [];
     trace.forEach(function (step) {
@@ -416,7 +446,7 @@
     var parts = [];
     if (res.lucky) parts.push("Lucky Seven!");
     else if (res.waves >= 3) parts.push("Chain of " + res.waves + "!");
-    res.awarded.forEach(function (a) { parts.push("+" + DEFS[N.POWERS.indexOf(a.power)].label); });
+    res.awarded.forEach(function (a) { parts.push("+1 " + DEFS[N.POWERS.indexOf(a.power)].label); });
     if (res.trace.some(function (t) { return t.type === "clear"; })) parts.unshift("Well cleared!");
     // R2 and R15 say why a reward did not pay, in the neutral toast, never the gold one
     var plain = !res.awarded.length && (res.unpaid.length || res.full.length);
@@ -460,6 +490,7 @@
   }
   function doDrop(col) {
     flush(); note = "";
+    if (mode === "daily" && syncDaily()) return render(true); // another tab played today's Daily: show where it is
     if (targeting || state.over) return;
     if (state.overflow) { endReveal(); return; } // on the brink a drop is refused: the card asks Undo or End
     cursor = col;
@@ -474,6 +505,7 @@
   }
   function activate(id, fromKey) {
     flush(); endReveal(); note = ""; kbd = !!fromKey;
+    if (mode === "daily" && syncDaily()) return render(true);
     if (targeting === id) { targeting = null; return renderChrome(); }
     targeting = null;
     var d = DEFS[N.POWERS.indexOf(id)], w = why(id);
@@ -583,12 +615,17 @@
   });
 
   render();
+  // a tab shown again reads the save back (S13): the bests and other modes' runs, and today's Daily as another tab left it
+  function resync() {
+    if (document.visibilityState === "hidden") return;
+    if (syncDaily()) return render(true);
+    if (!busy()) { shownBest = Math.max(shownBest, best[mode]); showScore(); }
+  }
+  document.addEventListener("visibilitychange", resync);
+  window.addEventListener("pageshow", function (e) { if (e.persisted) resync(); });
 
-  // ---- the toast never covers the level line (cold #30). The shared toast centres on the hint line, and in Seven that
-  // line is the level and drops count, read on every drop; so here a toast (a chain, a power-up, a trophy) sits over
-  // the title instead, which nobody taps. When the title is scrolled out of view the shared place stays. ----
-  // On a wide screen the stats share the title's row: the toast then starts at the title's left edge and must end
-  // before the stats (the score counts up during a chain), or it stays in the shared place.
+  // ---- the toast never covers the level line (cold #30): it sits over the title, and on a wide screen ends before
+  // the stats; otherwise it keeps the shared place ----
   function liftToast() {
     var el = $("toast"), br = document.querySelector("header .brand"), sts = document.querySelector("header .stats");
     if (!el || !br || !el.classList.contains("on")) return;
@@ -604,8 +641,7 @@
   }
   try { new MutationObserver(liftToast).observe($("toast"), { attributes: true, attributeFilter: ["class", "style"] }); } catch (e) { /* the shared place */ }
 
-  // ---- how to play (REDESIGN.md 1.3, 9.7): three steps, each a small drawn well and one sentence, in the shared sheet.
-  // It opens by itself once, on a first visit with nothing saved; the How to play row under the board always has it. ----
+  // ---- how to play (REDESIGN.md 1.3, 9.7): three drawn steps in the shared sheet ----
   function md(v, cls) {
     var n = v >= 1 && v <= 7;
     return '<span class="md' + (cls ? " " + cls : "") + '"' + (n ? ' style="--h2:hsl(' + K.hue(v) + ' 62% 60%)"' : "") + ">" + (n ? v : "") + "</span>";

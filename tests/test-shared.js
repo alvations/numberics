@@ -65,6 +65,14 @@ t("O-9: every games list links Two to two/ and the home link is the root, the ga
   const bad = scan(".").filter(f => !/^docs[\\/]/.test(f)).filter(f => /src="(\.\.\/)+engine\.js"|require\("(\.\.\/)+engine\.js"\)/.test(fs.readFileSync(path.join(root, f), "utf8")));
   ok(!bad.length, "still loads the old root engine.js: " + bad.join(", "));
 });
+t("TRIAGE5 S6: an earned power-up reads \"+1 <Name>\" in every game's toast and reward line, never a bare \"+Name\"", () => {
+  const ids = ["two", "three", "fibonacci", "four", "five", "six", "seven", "nine", "fifteen", "sudoku"], bare = /"[^"\n]*\+"\s*\+\s*(?:NAME|NAMES|PW|PW_NAME|DEFS)\b/;
+  ids.forEach(id => {
+    const js = fs.readFileSync(path.join(root, id, "game.js"), "utf8");
+    ok(!bare.test(js), id + ": a bare \"+Name\" reward: " + (js.match(bare) || [""])[0]);
+    ok(/"[^"\n]*\+1 "\s*\+\s*(?:NAME|NAMES|PW|PW_NAME|DEFS)\b/.test(js), id + ": no \"+1 Name\" reward found");
+  });
+});
 require("./conventions")(t, ok, ["shared/kit.js", "shared/power.js", "shared/nav.js", "shared/theme.css", "shared/boot.js",
   "shared/settings.js", "shared/motion.js", "shared/audio.js", "shared/trophies.js", "shared/progress.js", "shared/ui.js"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

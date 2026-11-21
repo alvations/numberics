@@ -221,8 +221,12 @@ already loads, sets a small stub `window.NumbericsMusic` at load: `play`, `start
 `NumbericsMusic.stub` is true until the real module replaces it. After the first trusted `pointerdown`, `keydown`,
 `touchend` or `click`, if Music is on, it appends one same-origin script element for `music.js` (next to `audio.js`,
 `onload` / `onerror`, nothing written into the document stream); on load it sets the game (`start(id)` if a page called it, else
-`#games[data-current]`, `endless` read as `two`, `two` when there is none), replays the duck, starts the music and calls
-`unlock()` (the gesture already happened), so the music plays on the SFX context. With Music off nothing loads; turning
+`#games[data-current]`, `endless` read as `two`), replays the duck, starts the music and calls
+`unlock()` (the gesture already happened), so the music plays on the SFX context. **The games page plays no music**
+(TRIAGE5 S2, all-ages panel and critic S2; reversible by the owner): a page with no `#games[data-current]` and no
+`start(id)` call (the root, O-9) never loads `music.js`, so its taps keep their sounds (ticks, the trophy chime) and the
+music starts on a game page only. Measured before the change: games-page music was a 2 to 5 s fragment cut off by the
+card tap that left the page, and a 48 KB fetch for it. With Music off nothing loads; turning
 it on later in Settings (a `numberics:settings` event with `music: true`) loads it then. A failed load leaves the stub
 (no retry loop). A page that does load `music.js` itself (the test fixture) gets the real module, and the loader stays out.
 Initial page weight: about +2 KB (the loader, the key shift and the Settings controls), measured with `tools/perf.cjs`.
@@ -240,7 +244,7 @@ Add to `DEF`, `FIELDS` and `normalize()` in `numberics_settings_v1`:
 |---|---|---|---|
 | `music` | boolean, `true` | boolean else default | **Music** switch, sub line "Quiet tunes while you play" |
 | `musicVolume` | number 0..1, `0.5` | clamp to 0..1, round to 0.01 | **Music volume** slider 0 to 100, step 5; disabled while Music is off; no preview tick (the music itself is the preview) |
-| `musicStyle` | `"auto"` or a style id, `"auto"` | one of `auto chill drift pocket quest blocks pulse epic`, else `"auto"` | **Style**: "Auto (per game)" first, then the seven names in that order as `button[aria-pressed]` segments in two rows (each with its blurb as `title`), hidden while Music is off |
+| `musicStyle` | `"auto"` or a style id, `"auto"` | one of `auto chill drift pocket quest blocks pulse epic`, else `"auto"` | **Music style** (O-10): "Auto (per game)" first, then the seven names in that order as `button[aria-pressed]` segments in two rows (each with its blurb as `title`), hidden while Music is off. Under the rows (TRIAGE5 S4): the chosen style's one line ("Drift: Soft bells and a slow pad, no drums.", Auto: "Each game picks its own."), readable on touch, and a status line "Now playing: <name>" while the music plays (refreshed on `numberics:music` and after a pick); on the games page it says "Music plays in the games, not on this page." |
 
 Keep the list of ids in `settings.js` itself (do not read it from `music.js`, which may load later). The **Sound**
 switch stays the SFX switch; Music has its own. Erase keeps these (they live in the settings key).

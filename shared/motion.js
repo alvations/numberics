@@ -1,12 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsMotion (docs/design/REDESIGN.md 5.2, 5.11 to 5.13): the timing and easing tokens, the effective motion
- * setting, an el.animate wrapper, a generation-guarded timeline, the pure identity tracker and the keyed tile layer.
- * Like the original 2048, every tile keeps its element and slides by transform; a merged tile is invisible until the
- * slide lands, then pops on top, and a spawned tile appears after the slide. A new input calls finish() and is applied at once: nothing queues.
- * Only transform and opacity animate. Under reduced motion every change is instant or one opacity fade.
- * The CSS lives in shared/theme.css, in the block marked "B2 motion" (scoped under .nmm-layer, keyframes nmm-*).
- * Sounds follow one rule under fast play (sfx, buzz, seq().sound, TRIAGE4 D7): see seq below.
- * UMD: the pure parts (T, E, ms, fallMs, track, rekey, seq, sfx) also run under require() for the Node tests. */
+ * NumbericsMotion (REDESIGN.md 5.2, 5.11 to 5.13): timing tokens, the effective motion, a guarded timeline, the identity
+ * tracker and the keyed tile layer. Only transform and opacity animate. Notes: docs/CODE-NOTES.md#sharedmotionjs */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(root);
   else root.NumbericsMotion = factory(root);
@@ -22,8 +16,7 @@
   var KEEP = { fade: 1, plus: 1, sheet: 1 }; // opacity only under reduced motion, so they keep their length
   var MOTION_PROPS = { transform: 1, translate: 1, scale: 1, rotate: 1, offsetDistance: 1, offsetPath: 1 };
 
-  // ---- effective motion (5.12, 6.2): the Settings tri-state first, then the device ----
-  // Read at the time of each animation, never cached: "Less" is reduced, "Full" beats the OS, "Device" follows it.
+  // ---- effective motion (5.12, 6.2): Settings first, then the device; read at each animation, never cached ----
   function reduced() {
     var m = null;
     try { if (w.NumbericsSettings && w.NumbericsSettings.get) m = w.NumbericsSettings.get().motion; } catch (e) { m = null; }
@@ -59,10 +52,7 @@
     try { return el.animate(frames, o); } catch (e) { return null; }
   }
 
-  // ---- sounds (TRIAGE4 D7: one rule for sounds under fast play) ----
-  // sfx(name, arg) and buzz(kind) play through NumbericsAudio (a missing module costs a sound, never the game). While a
-  // timeline is being finished by a new input, its pending sounds play at once, deduplicated by name (at most one of
-  // each): never dropped, never bunched into a pile of the same sound.
+  // ---- sounds (TRIAGE4 D7): a finish plays the pending sounds at once, one of each, never dropped ----
   var dedup = null; // the names played by the finish() that is running now, or null
   function audio(name, arg) {
     var A = (w && w.NumbericsAudio) || (typeof globalThis !== "undefined" && globalThis.NumbericsAudio) || null;
@@ -77,22 +67,15 @@
     if (dedup) { if (dedup["buzz:" + kind]) return; dedup["buzz:" + kind] = 1; }
     audio("buzz", kind);
   }
-  // together(fn, set): run fn with its sounds deduplicated by name as one group (joins a group already running).
-  // A game whose finish also runs its own final step (Three's settle) wraps both in one together().
+  // together(fn, set): run fn with its sounds deduplicated by name as one group
   function together(fn, set) {
     if (dedup) return fn();
     dedup = set || {};
     try { return fn(); } finally { dedup = null; }
   }
 
-  // ---- seq: a generation-guarded timeline. s.at(ms, fn); s.finish() runs every pending fn now, in time order
-  // (steps a step schedules run too, so a cascade of waves completes at once); s.cancel() drops them (a reset).
-  // The sound rule (D7): s.sound(ms, fn) is a step that only makes sounds. finish(interrupted) is what a new input
-  // calls; it runs the pending steps at once, and their sfx()/buzz() calls are deduplicated by name. When that finish
-  // ended a running animation (a pending step, or interrupted: the caller's layer was still busy), the input is fast
-  // play, so the sound steps the same input schedules play at once instead of waiting for the slide to land: under
-  // quick play a join sounds with its own move, never on the next key and never dropped. s.finishing() is true while
-  // finish() runs its steps (a step can skip its visuals then). ----
+  // ---- seq: a generation-guarded timeline: at(ms, fn), sound(ms, fn), finish(interrupted), cancel(), finishing().
+  // The D7 sound rule in full: docs/CODE-NOTES.md#sharedmotionjs ----
   function seq() {
     var q = [], gen = 0, n = 0, running = false, fast = null, fastT = null; // fast: the at-once group, or null
     function fire(item) {
@@ -139,9 +122,7 @@
     return s;
   }
 
-  // ---- track (pure): an engine trace {from,to,merge}[] -> identities. ids[cell] is the client's id map (never in the
-  // engine or the save). Each tile keeps its id as it slides; the two tiles of a merge both slide into the target and
-  // a NEW id is made for the merged tile; spawned cells (a cell, an array of cells, or -1) get new ids. ----
+  // ---- track (pure): an engine trace -> tile identities; a merge makes a NEW id ----
   function track(ids, trace, spawned, nextId) {
     ids = ids || []; trace = trace || [];
     var next = +nextId || 1, used = {}, i;
@@ -175,8 +156,7 @@
     return { ids: ids, next: next };
   }
 
-  // ---- layer: the keyed tile layer (5.2). opts = { cols, rows, make(tile) -> HTMLElement, paint(node, tile),
-  // slide (ms, default T.slide; Three uses T.step), clip (true: tiles outside the layer are clipped) } ----
+  // ---- layer: the keyed tile layer (5.2). opts = { cols, rows, make(tile), paint(node, tile), slide, clip } ----
   function layer(el, opts) {
     opts = opts || {};
     if (!el || !el.classList) // no board (a page without one, or Node): an inert layer, so callers never need a guard
@@ -239,13 +219,7 @@
       // in-flight slides are not snapped: a CSS transition retargets smoothly from where the tile is
     }
 
-    // sync(tiles, fx): tiles = [{id, cell | r,c, ...}] (the authoritative board). fx (all optional):
-    //   merges [{id, to, from:[id, id]}]  the merged-from ids slide to `to` and wait under the new tile as `gone`
-    //   spawns [{id, cell}]               the new tile appears after the slide
-    //   enter  {id: {r, c}}               the new tile slides in from that (off-board) cell (Three)
-    //   falls  [{id, rows}]               the tile drops `rows` slots onto its cell with gravity, then settles (Seven, Four)
-    //   out    [id]                       a removed tile fades and shrinks away (Smash); pop [id]: an existing tile pops (Boost)
-    //   fade   true                       every new node fades in (Undo, load: a re-keyed board)
+    // sync(tiles, fx): fx = { merges, spawns, enter, falls, out, pop, fade }, all optional (CODE-NOTES.md)
     function sync(tiles, fx) {
       fx = fx || {};
       var red = reduced(), i, k;
@@ -272,9 +246,7 @@
         if (fresh) { if (!frag) frag = doc.createDocumentFragment(); frag.appendChild(node); }
         if (merged[id]) {
           flag(node, "merged");
-          // B2 (the original 2048): the merged tile is invisible until the slide has landed, then it pops. The pop's CSS
-          // keyframes start at scale .72 with a backwards fill through the slide-long delay; this hold keeps the face
-          // at opacity 0 for exactly that delay, so nothing new shows before the pair meets. finish() ends it at once.
+          // B2: the merged tile stays invisible until the slide lands, then it pops
           if (!red) anim(face(node), [{ opacity: 0 }, { opacity: 0 }], { duration: slide, fill: "none" });
         }
         else if (falls[id]) {

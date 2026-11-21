@@ -63,3 +63,8 @@ the `why`, with the measured value), or a measurement fix. Run the full gate (3 
 the budget with headroom over the measured median (roughly 1.5x for timings, 25 to 30 percent for weight), and never
 raise a budget to make an unexplained regression pass: find the regression. Lower budgets when a game gets lighter
 or faster, so the headroom keeps catching regressions.
+
+**Page weight.** Every page loads every shared module, so a byte in `shared/` costs every page. Long explanatory
+comments of the shared modules (and of the heaviest game clients) live in `docs/CODE-NOTES.md`, word for word; the
+files keep their SPDX header, a short summary with a pointer, and the short comments beside the code (21 Nov: this
+took 15 KB off every page and brought Four, Five and Seven back under 250 KB with no change to any view).

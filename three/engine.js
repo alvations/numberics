@@ -25,6 +25,14 @@
  * - Power-ups: Undo, Smash (remove a tile), Swap (two neighbouring tiles), Third (a 1 or 2 becomes a 3).
  *   Start with one Undo, cap 9, earned only by a Flush; Undo restores the whole snapshot.
  *
+ * TIERS (O-13, Two's recipe, docs/DESIGN.md "Three tiers"): Hard is the rule above exactly (flushes only; a Hard game
+ *   has no tier field). Medium and Easy also pay each JOIN that makes a big enough tile (payFrom): Medium a tile as big
+ *   as the top tile, from 18 up (reach 0); Easy a tile at least half the top tile, from 9 up (reach 2: two ladder rungs
+ *   are a halving, 36 -> 18, 48 -> 24). The floor (18) moves with the reach, because Three's runs live near it (the
+ *   human bot's median top tile is 36): with one floor for both, Easy paid within 1.2x of Medium. Joins pay before the
+ *   swipe's flushes, every qualifying join in the swipe pays one, and the R2 line is a flush's: the swipe right after
+ *   Smash, Swap or Third pays nothing (state.free; res.free says so), a power-up never joins tiles, Undo restores the
+ *   snapshot, the stock caps at 9 (a join on a full stock is flagged full). Measured with tools/sim-three.js tiers.
  * TUNING, round 2 (node tools/sim-three.js, 20 Nov 2026; run cap 3000 moves). Round 1 tuned on a 1-ply
  * points bot (greedy, median 277 swipes), but people locked the board in 61 to 166 swipes. The bot that
  * plays like them is "human": one move ahead, 10 per merge + 5 per empty cell + 30 per flush + noise, no
@@ -66,7 +74,14 @@
     b369: [1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 6, 9],
     b3x: [1, 1, 1, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3],
   };
-  var DEFAULT = { step: true, stepMax: 6, flushTo: "clear", flushMin: 3, bag: "b12", bonus: false, start: 9 }; // variant L, see TUNING
+  var DEFAULT = { step: true, stepMax: 6, flushTo: "clear", flushMin: 3, bag: "b12", bonus: false, start: 9, // variant L, see TUNING
+                  reach: { easy: 2, medium: 0 }, floor: 18 }; // the tiers (O-13), see TIERS
+  var TIERS = ["easy", "medium", "hard"];
+  function tierOf(s) { return s && (s.tier === "easy" || s.tier === "medium") ? s.tier : "hard"; }
+  // The value ladder: tiles only double (3, 6, 12, 24 ...) or come from 3 + 6 = 9 (9, 18, 36 ...), so the rungs are
+  // 3, 6, 9, 12, 18, 24, 36, 48, 72, 96, 144 ... (rung k). rung(v) is the highest rung at or below v.
+  function ladder(k) { return k <= 0 ? 3 : k % 2 ? 3 * Math.pow(2, (k + 1) / 2) : 9 * Math.pow(2, k / 2 - 1); }
+  function rung(v) { var k = 0; while (ladder(k + 1) <= v) k++; return k; }
 
   function rand(seed) {
     var a = (seed + 0x6d2b79f5) >>> 0, t = a;
@@ -88,9 +103,19 @@
     }
 
     function clone(s) {
-      return { grid: s.grid.slice(), next: s.next, bag: s.bag.slice(), score: s.score, top: s.top,
+      var c = { grid: s.grid.slice(), next: s.next, bag: s.bag.slice(), score: s.score, top: s.top,
                moves: s.moves, flushes: s.flushes, best: s.best, used: s.used, seed: s.seed, over: s.over,
                free: !!s.free, power: Object.assign({}, s.power), prev: s.prev };
+      if (tierOf(s) !== "hard") c.tier = s.tier; // Hard carries no field, so Hard states stay byte-identical
+      return c;
+    }
+    // the smallest tile a join must make to pay on this state's tier (O-13): Hard none (flushes only); otherwise the
+    // reach counts rungs down from the top tile, or from the floor while the top tile is below it. Three's runs live
+    // near the floor (median top tile 36), so the floor moves with the reach too, or Easy would pay as Medium does.
+    function payFrom(s) {
+      var t = tierOf(s);
+      if (t === "hard") return Infinity;
+      return ladder(Math.max(rung(s.top), rung(R.floor)) - R.reach[t]);
     }
     function snapshot(s) { var c = clone(s); c.prev = null; return c; }
 
@@ -109,9 +134,10 @@
       return s.bag.pop();
     }
 
-    function newGame(seed) {
+    function newGame(seed, tier) {
       var s = { grid: new Array(SIZE * SIZE).fill(0), next: 0, bag: [], score: 0, top: 0, moves: 0, flushes: 0,
                 best: 0, used: 0, seed: seed >>> 0, over: false, free: false, power: { undo: 1, smash: 0, swap: 0, third: 0 }, prev: null };
+      if (tier === "easy" || tier === "medium") s.tier = tier;
       var cells = []; for (var i = 0; i < SIZE * SIZE; i++) cells.push(i);
       for (var k = 0; k < R.start; k++) {
         var pick = Math.floor(roll(s) * cells.length), c = cells.splice(pick, 1)[0];
@@ -231,12 +257,15 @@
     function move(state, dir) {
       var res = { state: state, moved: false, gained: 0, trace: [], spawned: -1, flushes: [] };
       if (DIRS.indexOf(dir) < 0 || state.over) return res;
-      var s = clone(state), movedLines = [];
+      var s = clone(state), movedLines = [], made = [];
       lines(dir).forEach(function (idx) {
         var r = stepLine(idx.map(function (i) { return s.grid[i]; }));
         if (!r.moved) return;
         idx.forEach(function (cell, j) { s.grid[cell] = r.out[j]; });
-        r.steps.forEach(function (st) { res.trace.push({ from: idx[st.from], to: idx[st.to], merge: st.merge }); });
+        r.steps.forEach(function (st) {
+          res.trace.push({ from: idx[st.from], to: idx[st.to], merge: st.merge });
+          if (st.merge) made.push(idx[st.to]);
+        });
         res.gained += r.gained; movedLines.push(idx);
       });
       if (!movedLines.length) return res;
@@ -244,6 +273,17 @@
       s.score += res.gained; s.moves++;
       s.grid.forEach(function (v) { if (v > s.top) s.top = v; });
       var pay = !state.free; s.free = false; // the swipe right after a board-changing power-up pays no power-up
+      // Easy and Medium (O-13): every join that makes a tile at the tier's bar (payFrom, from the top tile before the
+      // swipe) pays one, in board order, before any flush; the same R2 line as a flush (state.free). A Hard result has
+      // no joins or free field, so Hard results stay byte-identical to the rules before the tiers.
+      var from = payFrom(state);
+      if (tierOf(state) !== "hard") { res.joins = []; if (state.free) res.free = true; }
+      made.forEach(function (cell) {
+        var v = s.grid[cell];
+        if (v < from) return;
+        var got = pay ? award(s) : null;
+        res.joins.push({ at: cell, value: v, power: got, paid: pay, full: pay && !got });
+      });
       resolveFlushes(s, res.flushes, pay);
       // the next tile enters at the far edge of one moved line (the edge swiped away from)
       var entries = movedLines.map(function (idx) { return idx[SIZE - 1]; }).filter(function (c) { return !s.grid[c]; });
@@ -290,7 +330,8 @@
       return { state: s, ok: true, flushes: flushes || [] };
     }
 
-    return { DIRS: DIRS, POWERS: POWERS, CAP: CAP, SIZE: SIZE, RULES: R, newGame: newGame, move: move, use: use,
+    return { DIRS: DIRS, POWERS: POWERS, CAP: CAP, SIZE: SIZE, RULES: R, TIERS: TIERS, REACH: R.reach, FLOOR: R.floor,
+             tierOf: tierOf, payFrom: payFrom, newGame: newGame, move: move, use: use,
              canMove: canMove, usable: usable, canMerge: canMerge, stepLine: stepLine, findRuns: findRuns,
              isThree: isThree, adjacent: adjacent };
   }
@@ -302,9 +343,8 @@
   // repeat with a ring, one more each lap. A value off the ladder (an old save) takes the rung just below it.
   var RAINBOW = ["red", "orange", "yellow", "green", "blue", "indigo", "violet",
                  "pink", "teal", "lime", "silver", "sand", "aqua", "white"];
-  function ladder(k) { return k === 0 ? 3 : k % 2 ? 3 * Math.pow(2, (k + 1) / 2) : 9 * Math.pow(2, k / 2 - 1); }
-  // the highest rung at or below v
-  api.rung = function (v) { var k = 0; while (ladder(k + 1) <= v) k++; return k; };
+  // (ladder and rung are defined at the top, with the tiers)
+  api.rung = rung;
   api.ladder = ladder;
   api.colour = function (v) {
     if (!(v >= 3 && v % 3 === 0)) return { band: -1, name: "grey", octave: 0 };

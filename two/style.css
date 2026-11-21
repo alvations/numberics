@@ -151,7 +151,8 @@ details.how{ margin:6px 0 0; background:var(--panel); border:1px solid var(--lin
 details.how summary{ min-height:var(--tap); display:flex; align-items:center; padding:0 14px; cursor:pointer; font-weight:650; font-size:var(--fs-sm); color:var(--mute); }
 details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 
-/* ===== the games row on each game page (the root shows the cards below; each D package moves its page to them) ===== */
+/* ===== the games row: a plain row of game links (kept for any page that has one; every game page now lists the
+   other games as cards under "More number games", shared/nav.js) ===== */
 .games{ display:flex; flex-wrap:wrap; justify-content:center; gap:0 4px; margin:10px 0 4px; font-size:var(--fs-sm); }
 .games a{ color:var(--mute); display:inline-flex; align-items:center; min-height:var(--tap); padding:0 6px; }
 .games a[aria-current="page"]{ color:var(--accent-text); text-decoration:none; }
@@ -290,13 +291,13 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 @keyframes two-ring{ from{ box-shadow:0 0 0 0 var(--accent); opacity:1; } to{ box-shadow:0 0 0 .8cqw var(--accent); opacity:0; } }
 .tiles.nmm-reduced .tile.ring::after{ animation:two-ring-fade 420ms linear both; }
 @keyframes two-ring-fade{ from{ box-shadow:0 0 0 .8cqw var(--accent); opacity:1; } to{ box-shadow:0 0 0 .8cqw var(--accent); opacity:0; } }
-/* the score "+N" (TRIAGE4, craft #3): it sits above the SCORE label, never on it, near the value's size with a halo in the
-   page colour so it reads over any text behind it; it floats up 16 px and fades (640 ms); under reduced motion it only fades */
-.stat .plus{ position:absolute; left:-8px; right:-8px; bottom:100%; text-align:center; font-weight:850; font-size:var(--fs-lg);
-  line-height:1.1; color:var(--accent-text); pointer-events:none; z-index:3; white-space:nowrap;
-  text-shadow:0 0 3px var(--bg), 0 0 6px var(--bg), 0 0 10px var(--bg);
-  animation:two-plus 640ms var(--e-out) forwards; font-variant-numeric:tabular-nums; }
-@keyframes two-plus{ 0%{ opacity:0; transform:translateY(0); } 15%{ opacity:1; } 60%{ opacity:1; } 100%{ opacity:0; transform:translateY(-16px); } }
+/* the score "+N" (TRIAGE5 S20, craft #13, cold #8): it stays INSIDE the Score box, never on the subtitle above it. It takes
+   the label row for its beat on a strip of the box's own colour, so it replaces "SCORE" cleanly instead of overprinting
+   it (TRIAGE4 craft #3); it rises 6 px into place and fades (640 ms); under reduced motion it only fades */
+.stat .plus{ position:absolute; left:1px; right:1px; top:1px; padding:4px 0 2px; text-align:center; font-weight:850;
+  font-size:var(--fs-sm); line-height:1.2; color:var(--accent-text); background:var(--panel); border-radius:var(--r-sm) var(--r-sm) 0 0;
+  pointer-events:none; z-index:3; white-space:nowrap; animation:two-plus 640ms var(--e-out) forwards; font-variant-numeric:tabular-nums; }
+@keyframes two-plus{ 0%{ opacity:0; transform:translateY(6px); } 15%{ opacity:1; transform:translateY(0); } 70%{ opacity:1; } 100%{ opacity:0; transform:translateY(0); } }
 :root[data-motion="reduced"] .stat .plus{ animation:two-fadeout 640ms linear forwards; }
 @keyframes two-fadeout{ to{ opacity:0; } }
 /* the New best moment: a gold ring on the Best stat (opacity, 420 ms) */

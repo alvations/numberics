@@ -27,6 +27,12 @@
     </div>
   </header>
 
+  <div id="diff" class="seg" role="group" aria-label="Difficulty">
+    <button type="button" data-diff="easy">Easy</button>
+    <button type="button" data-diff="medium">Medium</button>
+    <button type="button" data-diff="hard">Hard</button>
+  </div>
+
   <section id="tray" class="tray" aria-label="Power-ups"></section>
   <p id="hint" class="hint" role="status"></p>
 
@@ -51,7 +57,9 @@
   </div>
   <details class="how" id="how"><summary>How to play</summary>
     <p>Swipe or use the arrow keys: every tile moves one step. 1 and 2 make 3; from 3 up equal tiles merge,
-       and so do 3 and 6 (they make 9). Line up 3, 6, 9 in a row or column (either way round) for a rainbow flush: it clears for points and a power-up.</p>
+       and so do 3 and 6 (they make 9). Line up 3, 6, 9 in a row or column (either way round) for a rainbow flush: it clears for points and a power-up.
+       On Medium, a join that makes a tile as big as your top tile, from 18 up, earns one too; on Easy, a join that
+       makes at least half your top tile, from 9 up. Hard pays flushes only.</p>
     <ul class="rules">
       <li>1 and 2 (the small grey halves) make 3. Two 1s or two 2s never merge.</li>
       <li>From 3 up, equal tiles merge.</li>

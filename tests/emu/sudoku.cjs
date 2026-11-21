@@ -71,7 +71,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.locator(".c").nth(e[8]).click(); await p.keyboard.press(String(await quietDigit(e[8])));
   let s = await st(p);
   ck("the 9th filled cell with no clash (wrong digits too) earns one charge", tot(s) === pre + 1 && s.high === 9, JSON.stringify(s.stock));
-  ck("the earn toast says what the player did, in gold, in the family form", await toastIs(p, /^9 cells filled: \+(Reveal|Check|Candidates)$/, false), await p.textContent("#toast"));
+  ck("the earn toast says what the player did, in gold, in the family form", await toastIs(p, /^9 cells filled: \+1 (Reveal|Check|Candidates)$/, false), await p.textContent("#toast"));
   ck("the earn toast never covers the difficulty row (TRIAGE4, cold #40)", await p.evaluate(() => { const t = document.getElementById("toast").getBoundingClientRect(), l = document.getElementById("levels").getBoundingClientRect(); return t.bottom <= l.top || t.top >= l.bottom; }),
     JSON.stringify(await p.evaluate(() => [document.getElementById("toast").getBoundingClientRect().bottom, document.getElementById("levels").getBoundingClientRect().top])));
   ck("Undo now shows its infinity badge", (await p.textContent("#pw-undo i")) === "∞" && await p.locator("#pw-undo i").isVisible());
@@ -380,7 +380,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("first visit starts on Easy (REDESIGN.md 1.3)", (await st(p)).difficulty === "easy" && (await p.getAttribute("#levels button[data-l=easy]", "aria-pressed")) === "true");
   ck("first visit opens How to play with three steps, each a picture and one sentence", await p.isVisible("#sh-howto") &&
     await p.locator("#sh-howto .howto .step").count() === 3 && await p.locator("#sh-howto .step .pv .sq9").count() === 3 &&
-    (await p.locator("#sh-howto .step p").allTextContents()).join("|") === "Fill every row, column and box with 1 to 9.|Tap a cell, then a number.|Notes are pencil marks. Red shows a clash.");
+    (await p.locator("#sh-howto .step p").allTextContents()).join("|") === "Fill every row, column and box with 1 to 9.|Tap a cell, then a number; its small digit is how many are left.|Notes are pencil marks. Red shows a clash.");
   ck("the how-to sheet is styled: a fixed scrim, the sheet on screen", await p.evaluate(() => { const s = document.getElementById("sh-howto"), r = s.querySelector(".sheet").getBoundingClientRect();
     return getComputedStyle(s).position === "fixed" && r.top >= 0 && r.bottom <= innerHeight + 1 && getComputedStyle(s.querySelector(".sheet")).borderTopLeftRadius !== "0px"; }));
   const tPause = await p.evaluate(() => window.__sudoku.elapsed);
@@ -394,7 +394,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("How to play opens only once", !(await p.isVisible("#sh-howto")));
   ck("the How to play row is a collapsed details row under the board, with the full rules text", await p.evaluate(() => {
     const d = document.getElementById("how"); return d.tagName === "DETAILS" && !d.open && d.querySelector("summary").textContent === "How to play" &&
-      /Fill every row, column and 3x3 box with 1 to 9\. Keys: 1-9, arrows, Backspace, N notes, U undo,\s+H reveal, C check, F candidates\. Every 9 cells with no clash earns a power-up\./.test(d.textContent); }));
+      /Fill every row, column and 3x3 box with 1 to 9\. Keys: 1-9, arrows, Backspace, N notes, U undo,\s+H reveal, C check, F candidates\. Every 9 cells with no clash earns a power-up\.\s+A key's small digit is how many of that number are left to place\./.test(d.textContent); }));
   await p.click("#how summary"); await p.click("#how-steps");
   ck("See the three steps opens the sheet again", await p.isVisible("#sh-howto"));
   await p.keyboard.press("Escape");
@@ -603,5 +603,53 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("yesterday's Daily solved after midnight: solved and shown, but not today's chip and not a Daily for the trophies", (await st(p)).solved &&
     await p.evaluate(() => !NumbericsProgress.today().sudoku) && ys && ys[2].daily === false, JSON.stringify(ys) + " " + await p.evaluate(() => JSON.stringify(NumbericsProgress.today())));
   ck("no page errors on yesterday's Daily", errs.length === 0, errs.join("|"));
+  await ctx.close();
+  // 24. TRIAGE5 B1: nine equal rows and columns whatever their content (an empty row of the 21 Nov Daily was 12 px tall)
+  const rowsCols = (p) => p.evaluate(() => { const rs = [...document.querySelectorAll("#board .r")];
+    const h = rs.map(r => r.children[0].getBoundingClientRect().height), w = [...rs[0].children].map(c => c.getBoundingClientRect().width);
+    const all = h.concat(w); return { h, w, spread: Math.max(...all) - Math.min(...all), min: Math.min(...all) }; });
+  const forgeEmpty = (p) => p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__sudoku.state));
+    for (let k = 0; k < 9; k++) { s.puzzle[3 * 9 + k] = 0; s.grid[3 * 9 + k] = 0; s.puzzle[k * 9 + 5] = 0; s.grid[k * 9 + 5] = 0; }
+    s.history = []; s.moves = 0; window.__sudoku.state = s; return s.puzzle.slice(27, 36).every(v => !v) && [0, 1, 2, 3, 4, 5, 6, 7, 8].every(r => !s.puzzle[r * 9 + 5]); });
+  for (const [vw, vh, large] of [[390, 844, false], [320, 640, true], [1280, 860, false]]) {
+    ({ ctx, p, errs } = await page({ viewport: { width: vw, height: vh } }, large ? () => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ text: "large" })); } catch (e) { /* blocked */ } } : null));
+    const forged = await forgeEmpty(p), rc = await rowsCols(p);
+    ck("B1 " + vw + " px" + (large ? " Larger text" : "") + ": a puzzle with an empty row and an empty column keeps nine equal rows and columns",
+      forged && rc.spread <= 1 && rc.min >= 28 && (!large || await p.evaluate(() => document.documentElement.dataset.text === "large")), JSON.stringify(rc));
+    await shot(p, "b1-empty-" + vw);
+    await ctx.close();
+  }
+  ({ ctx, p, errs } = await page({ viewport: { width: 390, height: 844 } }));
+  await p.goto(url + "sudoku/?mode=daily");
+  const dRows = await p.evaluate(() => { const s = window.__sudoku.state; return [0, 1, 2, 3, 4, 5, 6, 7, 8].filter(r => s.puzzle.slice(r * 9, r * 9 + 9).every(v => !v)).length; });
+  const drc = await rowsCols(p);
+  ck("B1 today's real Daily at 390 px: nine equal rows and columns (" + dRows + " rows with no clue today)", drc.spread <= 1 && drc.min >= 30, JSON.stringify(drc));
+
+  // TRIAGE5 S15 (cold #3): a level tap during a Daily in progress asks first and says the Daily is kept
+  const de = await empties(p); await p.locator("#board .c").nth(de[0]).click(); await p.keyboard.press(String((await st(p)).solution[de[0]]));
+  const dState = await st(p);
+  await p.click("#levels button[data-l=easy]");
+  ck("S15: Easy during a Daily in progress only asks Sure? and says the Daily is kept", (await p.textContent("#levels button[data-l=easy]")) === "Sure?" &&
+    (await p.evaluate(() => window.__sudoku.mode)) === "daily" && await toastIs(p, /Your Daily is kept\.$/, "info"), await p.textContent("#toast"));
+  await p.click("#levels button[data-l=easy]");
+  ck("S15: the second tap opens Easy", (await p.evaluate(() => window.__sudoku.mode)) === "play" && (await st(p)).difficulty === "easy");
+  await p.click("#levels button[data-l=daily]");
+  ck("S15: the Daily is kept, its digit still there", (await p.evaluate(() => window.__sudoku.mode)) === "daily" && (await st(p)).seed === dState.seed && (await st(p)).grid.join() === dState.grid.join());
+
+  // TRIAGE5 S15 (cold #11): the pad's small numbers say what they count: each key's label and tooltip, and (for sighted
+  // players, with no new line on the page) the How to play step and text; the step's key picture carries the count too
+  ck("S15: every pad key names its count (\"5, 4 left to place\" or \"5, all placed\") in its label and tooltip", await p.evaluate(() => {
+    const ks = [...document.querySelectorAll("#pad button")];
+    return ks.length === 9 && ks.some(b => b.querySelector("small").textContent) && ks.every(b => { const n = b.querySelector("small").textContent, t = n ? n + " left to place" : "all placed";
+      return b.getAttribute("aria-label") === b.dataset.d + ", " + t && b.title === b.dataset.d + ": " + t; }); }));
+
+  // TRIAGE5 S15 (craft #9): the Solved card has the family card edge and a solid fill, so no digit shows through
+  await solveNow(p);
+  ck("S15: the Solved card is opaque, edged and shadowed", await p.evaluate(() => { const c = getComputedStyle(document.getElementById("win")), pr = document.createElement("i");
+    pr.style.color = c.backgroundColor; document.body.appendChild(pr); const a = getComputedStyle(pr).color; pr.remove();
+    return !/,\s*0?\.\d+\)$|\/\s*0?\.\d+\)$/.test(a) && parseFloat(c.borderTopWidth) >= 1 && c.boxShadow !== "none" && !document.getElementById("win").hidden; }),
+    await p.evaluate(() => { const c = getComputedStyle(document.getElementById("win")); return c.backgroundColor + " " + c.borderTopWidth + " " + c.boxShadow; }));
+  await shot(p, "daily-solved-card");
+  ck("no page errors on the TRIAGE5 checks", errs.length === 0, errs.join("|"));
   await ctx.close();
 };

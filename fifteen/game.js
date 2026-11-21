@@ -14,7 +14,7 @@
   var EARN = "Win a round without Erase, Double or Peek to earn one.";
   var DEFS = F.POWERS.map(function (p) {
     return { id: p, label: PW[p], earn: EARN, desc: {
-      undo: "Take back your last turn.", erase: "Remove one of the computer's numbers, then claim a different one.",
+      undo: "Take back your last turn. No rewards for the rest of this round.", erase: "Remove one of the computer's numbers, then claim a different one.",
       peek: "Show the number to block, or the one that wins.", double: "Claim two numbers this turn." }[p] };
   });
   var DIFF = { easy: "Easy", medium: "Medium", hard: "Hard" };
@@ -95,6 +95,17 @@
   function numAt(cell) { for (var k = 1; k <= 9; k++) if (cellOf(k) === cell) return k; return 5; }
   function sumText(line) { return line.join(" + ") + " = 15"; }
 
+  // Numbers pillars can be narrower than "computer" at the 12 px floor: there the label reads "cpu" (owner O-11)
+  function fitLabels() {
+    tiles.forEach(function (el) {
+      var tag = el.lastChild;
+      if (!tag.textContent || state.owner[+el.dataset.n - 1] !== 2) return;
+      tag.textContent = "computer";
+      if (view !== "grid" && tag.scrollWidth > tag.clientWidth + 0.5) tag.textContent = "cpu";
+    });
+  }
+  window.addEventListener("resize", fitLabels);
+  try { new MutationObserver(fitLabels).observe(document.documentElement, { attributes: true, attributeFilter: ["data-text"] }); } catch (e) { /* old browser */ }
   function render() {
     var res = state.result, line = res && res.line;
     tiles.forEach(function (el, i) {
@@ -113,6 +124,7 @@
       el.tabIndex = c === cur ? 0 : -1;
     });
     boardEl.classList.toggle("grid", view === "grid");
+    fitLabels();
     boardEl.classList.toggle("targeting", !!armed);
     $("v-numbers").setAttribute("aria-pressed", String(view === "numbers"));
     $("v-grid").setAttribute("aria-pressed", String(view === "grid"));
@@ -122,7 +134,7 @@
     rec.textContent = none ? "none" : recText(record); rec.classList.toggle("none", none);
     rec.setAttribute("aria-label", "Matches won " + record.won + ", lost " + record.lost + ", drawn " + record.drawn);
     Array.prototype.forEach.call($("diff").children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.d === state.diff)); });
-    DEFS[1].earn = state.diff === "hard" ? "On Hard you get one after a drawn round." : EARN;
+    DEFS[1].earn = state.diff === "hard" ? "On Hard you get one after the first drawn round of a match." : EARN;
     P.tray($("tray"), DEFS, state.power, {
       armed: armed, disabled: whyNot, onUse: activate,
       onInfo: function (id, text) { note = text; $("hint").textContent = note; },
@@ -190,6 +202,7 @@
     else if (res.winner === 1 && res.why === "full") msg = "Power-ups full.";            // R15
     else if (res.winner === 1 && res.why === "powered") msg = "No power-up: you used Erase or Double this round.";
     else if (res.winner === 1 && res.why === "peeked") msg = "No power-up: you used Peek this round.";   // Peek is help (TRIAGE3)
+    else if (res.winner === 1 && res.why === "undo") msg = "No power-up after Undo this round.";        // S9, as Five
     else if (res.winner === 2 && res.earned) msg = "The computer earned a " + PW[res.earned] + ".";
     best.textContent = msg; best.hidden = !msg; best.className = gold ? "best" : "note";
     $("next").hidden = !!m; $("again").hidden = !m;
@@ -232,10 +245,8 @@
       if (ended) {
         var w = state.result && state.result.winner;
         if (w === 1) { snd("win"); buzz("win"); } else if (w === 2) { snd("lose"); buzz("lose"); }
-        drawLine();
       }
     });
-    if (!ended) clearLine();
     if (cpuPending()) schedule();
   }
   // trophies at a round's end (REDESIGN.md 8.4): quiet here, because the card that follows shows them as pills
@@ -243,23 +254,6 @@
     var res = state.result; cardIds = [];
     cardIds = cardIds.concat(trophy("round", { won: res.winner === 1, view: view, firstMid: run.first === 5 }, true));
     if (state.match) cardIds = cardIds.concat(trophy("match", { won: state.match.winner === 1, diff: state.diff }, true));
-  }
-  // the winning line in Grid view: one SVG line through the three centres, drawn by stroke-dashoffset (5.8, as Four)
-  var wl = $("wl"), wlLine = wl.firstElementChild;
-  // an <svg> has no `hidden` property (only HTML elements do): set the attribute, which .wl[hidden] hides
-  function clearLine() { wl.setAttribute("hidden", ""); }
-  function drawLine() {
-    var res = state.result;
-    if (!res || !res.line || view !== "grid") return clearLine();
-    var cells = res.line.map(function (k) { return { n: k, c: F.CELL_OF[k] }; }).sort(function (a, b) { return a.c - b.c; });
-    var a = tiles[cells[0].n - 1], b = tiles[cells[2].n - 1], base = tilesEl.getBoundingClientRect();   // one read
-    var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-    var x1 = ra.left + ra.width / 2 - base.left, y1 = ra.top + ra.height / 2 - base.top;
-    var x2 = rb.left + rb.width / 2 - base.left, y2 = rb.top + rb.height / 2 - base.top, len = Math.hypot(x2 - x1, y2 - y1);
-    wlLine.setAttribute("x1", x1); wlLine.setAttribute("y1", y1); wlLine.setAttribute("x2", x2); wlLine.setAttribute("y2", y2);
-    wlLine.style.strokeDasharray = len; wlLine.style.strokeDashoffset = 0; wl.removeAttribute("hidden");
-    var an = M.play(wlLine, [{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: M.T.line, easing: M.E.out }, [{ opacity: 0 }, { opacity: 1 }]);
-    if (an) anims.push(an);
   }
   function schedule() {
     clearTimeout(timer); var g = ++gen;
@@ -359,7 +353,7 @@
     if (v === "grid" && !seen && !quiet) { seen = true; note = "Same board: every line adds up to 15."; }
     else if (note === TIP) note = "";
     var old = M.reduced() ? null : rects();
-    persist(); render(); clearLine();
+    persist(); render();
     if (old) {
       var now = rects();
       tiles.forEach(function (el, i) {
@@ -374,21 +368,20 @@
       });
     }
     snd("tick");
-    if (state.result && v === "grid") tl.at(old ? FLIP_TOTAL : 0, drawLine);
   }
 
   // ---- match flow ----
   // R12: quitting a live match (New game or a level switch after the first move) records it as lost
   function startMatch(diff) {
     if (live()) { record.lost++; levels[state.diff].lost++; }
-    finishFx(); clearLine(); run = runOf(null); runPrev = null; cardIds = [];
+    finishFx(); run = runOf(null); runPrev = null; cardIds = [];
     cancelCpu(); clearHold(); armed = null; peek = null; fresh = {}; note = ""; cpuNote = "";
     state = F.newMatch(K.freshSeed(), diff || state.diff); counted = false; persist(); render();
     if (cpuPending()) schedule();
   }
   function nextRound() {
     if (!state.result || state.match) return;
-    finishFx(); clearLine(); run.first = 0; runPrev = null; cardIds = [];
+    finishFx(); run.first = 0; runPrev = null; cardIds = [];
     cancelCpu(); clearHold(); armed = null; peek = null; fresh = {}; note = ""; cpuNote = "";
     var back = $("over").contains(document.activeElement);
     state = F.nextRound(state);
@@ -487,7 +480,7 @@
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-match. Not reachable from the UI.
   window.__demo = function () {
     try { window.NumbericsUI.close(); } catch (e) { /* no sheet */ }
-    finishFx(); clearLine();
+    finishFx();
     cancelCpu(); clearHold(); armed = null; fresh = {}; note = ""; cpuNote = ""; record = { won: 2, lost: 1, drawn: 0 };
     var s = F.newMatch(2026, "medium");
     s.round = 3; s.wins = [1, 1, 0]; s.rounds = [1, 0];
@@ -496,7 +489,7 @@
     state = s; peek = null; fresh = { 5: true }; render();
   };
   window.__fifteen = {
-    get state() { return state; }, set state(s) { finishFx(); clearLine(); cancelCpu(); clearHold(); claiming = {}; state = s; armed = null; peek = null; note = ""; cpuNote = ""; render(); if (cpuPending()) schedule(); },
+    get state() { return state; }, set state(s) { finishFx(); cancelCpu(); clearHold(); claiming = {}; state = s; armed = null; peek = null; note = ""; cpuNote = ""; render(); if (cpuPending()) schedule(); },
     get run() { return run; }, get cardIds() { return cardIds.slice(); }, get levels() { return levels; },
     get view() { return view; }, render: render, get record() { return record; },
     get holding() { return holding; }, get viewing() { return viewing; }, HOLD: HOLD, THINK: THINK,

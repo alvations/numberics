@@ -1,15 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsProgress (docs/design/REDESIGN.md 3.5, 8.5): the per-game summaries the cards and the Today card read.
- * One key, numberics_progress_v1, written by each game whenever it persists:
- *   { v:1, games:{ "<id>":{ best, live, liveText, at } }, howto:{ "<id>":true },
- *     daily:{ "YYYYMMDD":{ "<id>":"text" | { t:"text", s:score, low:bool } } } }
- * Only today's daily entry is kept. daily(id, text, { score, low }) keeps the day's BEST result (TRIAGE4 D9): a later
- * result replaces it only when its score is higher (or lower, with low:true, as for a time); without a score the
- * latest text is kept. Writes are batched by NumbericsKit.store (one idle write, flushed on pagehide).
- * dailyLevel(date) is the Daily Sudoku's level (Easy Monday to Thursday, Medium Friday and Saturday, Hard Sunday): the
- * Today chip shows it; one rule, one place. Every read and write goes through NumbericsKit.store (try/catch, memory fallback);
- * nothing is ever sent anywhere. Also holds the pure local-day helpers and the Daily streak rule that
- * NumbericsTrophies uses (one rule, one place). UMD: the pure parts run in Node tests. */
+ * NumbericsProgress (REDESIGN.md 3.5, 8.5): the per-game summaries the cards and the Today card read, in
+ * numberics_progress_v1 through NumbericsKit.store; the day helpers and the Daily streak rule. Notes: docs/CODE-NOTES.md#sharedprogressjs */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(root);
   else root.NumbericsProgress = factory(root);
@@ -53,7 +44,7 @@
 
   // ---- the store ----
   var store = mkStore(KEY), twoStore = null, twoMemo;
-  function blank() { return { v: 1, games: {}, howto: {}, daily: {} }; }
+  function blank() { return { v: 1, games: {}, howto: {}, daily: {}, part: {} }; }
   function clean(o) {
     var d = blank(); if (!o || typeof o !== "object") return d;
     if (o.games && typeof o.games === "object") Object.keys(o.games).forEach(function (id) {
@@ -65,6 +56,9 @@
     var t = dayKey();
     if (o.daily && typeof o.daily === "object" && o.daily[t] && typeof o.daily[t] === "object") {
       d.daily[t] = {}; Object.keys(o.daily[t]).forEach(function (id) { var e = entry(o.daily[t][id]); if (e) d.daily[t][id] = e; });
+    }
+    if (o.part && typeof o.part === "object" && o.part[t] && typeof o.part[t] === "object") {
+      d.part[t] = {}; Object.keys(o.part[t]).forEach(function (id) { if (typeof o.part[t][id] === "string") d.part[t][id] = o.part[t][id]; });
     }
     return d;
   }
@@ -119,6 +113,11 @@
     e[k] = next; d.daily = {}; d.daily[t] = e; save(d); return true;
   }
   function today() { var e = load().daily[dayKey()] || {}, o = {}; Object.keys(e).forEach(function (k) { o[k] = text(e[k]); }); return o; }
+  // a Daily under way (TRIAGE5 S5): dailyPart(id, "2 of 6"), today's line for the Today chip until it is done
+  function dailyPart(id, txt) {
+    var d = load(), t = dayKey(), e = d.part[t] || {}; e[norm(id)] = String(txt); d.part = {}; d.part[t] = e; save(d); return true;
+  }
+  function parts() { var e = load().part[dayKey()] || {}, o = {}; Object.keys(e).forEach(function (k) { o[k] = e[k]; }); return o; }
   function dailyLevel(dt) { var w = (dt || now()).getDay(); return w === 0 ? "hard" : w >= 5 ? "medium" : "easy"; }
   function seenHowto(id) { return !!load().howto[norm(id)]; }
   function markHowto(id) { var d = load(); d.howto[norm(id)] = true; save(d); }
@@ -126,17 +125,16 @@
   function fam() { var T = lib("NumbericsTrophies", "./trophies.js"); return T && T.fam ? T.fam() : { played: {}, dailyDays: [], streak: { n: 0, last: "" } }; }
   function played(id) { id = norm(id); return !!(fam().played[id] || load().games[id] || (id === "two" && fromTwoSave())); }
   function streak() { return streakNow(fam().streak, dayKey()); }
-  // everything the Today card draws: the local date line, the streak (always shown, TRIAGE4 D4), today's Daily
-  // results (the day's best) and the Daily Sudoku's level
+  // everything the Today card draws
   function todayCard() {
     var d = now(), label = "";
     try { label = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); } catch (e) { label = dayKey(d); }
-    return { day: dayKey(d), label: label, streak: streak(), done: today(), levels: { sudoku: dailyLevel(d) } };
+    return { day: dayKey(d), label: label, streak: streak(), done: today(), part: parts(), levels: { sudoku: dailyLevel(d) } };
   }
   // ms from now until the next local midnight (the Today card redraws then)
   function msToMidnight() { var d = now(); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 1).getTime() - d.getTime(); }
   return {
-    KEY: KEY, put: put, get: get, daily: daily, today: today, seenHowto: seenHowto, markHowto: markHowto,
+    KEY: KEY, put: put, get: get, daily: daily, dailyPart: dailyPart, parts: parts, today: today, seenHowto: seenHowto, markHowto: markHowto,
     played: played, streak: streak, todayCard: todayCard, dailyLevel: dailyLevel, msToMidnight: msToMidnight,
     // pure day helpers and the streak rule (NumbericsTrophies uses these)
     now: now, dayKey: dayKey, prevDay: prevDay, isDay: isDay, streakAfter: streakAfter, streakNow: streakNow,

@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Numberics Two</title>
-<meta name="description" content="Two: 2048 with no top tile. Every tile is a power of two; join them past 2048 and keep going, with power-ups earned from every new highest tile.">
+<meta name="description" content="Two: 2048 with no top tile. Every tile is a power of two; join them past 2048 and keep going, with power-ups earned from big joins, on Easy, Medium or Hard.">
 <meta name="theme-color" content="#12131a">
 <script src="../shared/boot.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2312131a'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E2%3C/text%3E%3C/svg%3E">
@@ -25,6 +25,12 @@
       <div class="stat"><span>Top tile</span><b id="top" class="none">none</b></div>
     </div>
   </header>
+
+  <div id="diff" class="seg" role="group" aria-label="Difficulty">
+    <button type="button" data-diff="easy">Easy</button>
+    <button type="button" data-diff="medium">Medium</button>
+    <button type="button" data-diff="hard">Hard</button>
+  </div>
 
   <section id="tray" class="tray" aria-label="Power-ups"></section>
   <p id="hint" class="hint" role="status"></p>
@@ -48,7 +54,9 @@
     <button id="new" class="btn" type="button">New game</button>
   </div>
   <details class="how"><summary>How to play</summary>
-    <p>Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up.
+    <p>Slide with arrow keys, WASD or a swipe. Equal tiles merge. Power-ups come from big joins, from 32 up:
+     on Hard, each new highest tile earns one; on Medium, each join that makes a tile as big as your biggest;
+     on Easy, each join that makes a tile at least half your biggest.
      Swapped and boosted tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost.
      Keys 1 to 4 use the power-ups. Merge past 2048 and keep going.</p>
     <p><button id="how-steps" class="btn" type="button" data-howto>Show the three steps</button></p>

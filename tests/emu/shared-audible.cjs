@@ -84,8 +84,8 @@ const fmt = o => JSON.stringify(o, (k, v) => (typeof v === "number" ? r4(v) : v)
 module.exports = async function ({ browser, url, ck }) {
   const games = JSON.parse(fs.readFileSync(path.join(ROOT, "games.json"), "utf8")).filter(g => g.status === "live");
   const HOWTO = JSON.stringify({ v: 1, games: {}, howto: Object.fromEntries(games.map(g => [g.id, true]).concat([["endless", true]])), daily: {} });
-  // Two moves from the root to two/ (games.json path); fall back to the root while the move is in flight
-  const pathOf = id => { const g = games.find(x => x.id === id); return g && g.path != null ? g.path : id === "two" ? "" : id + "/"; };
+  // every game's page is its games.json path (Two in two/, O-9); a game with no path fails loudly, never the games page
+  const pathOf = id => { const g = games.find(x => x.id === id); if (!g || !g.path) throw new Error("games.json has no path for " + id); return g.path; };
 
   async function open(base, where, o) {
     o = o || {};
@@ -224,8 +224,10 @@ module.exports = async function ({ browser, url, ck }) {
     ck("visible again: the music resumes, audible", !s.paused && s.playing && s.notes > n0 && m.music.peak > MUSIC_AUDIBLE, fmt({ s, m }));
 
     // navigation: to another game by its card, then back
+    // by the card only: a page with no Fibonacci card fails here (no fallback to a typed URL, TRIAGE5 S8)
     const fibHref = await p.evaluate(() => { const a = document.querySelector('#games a[data-id="fibonacci"]'); return a ? a.getAttribute("href") : null; });
-    if (fibHref) await p.click('#games a[data-id="fibonacci"]'); else await p.goto(url + pathOf("fibonacci"));
+    ck("navigate: the page has a Fibonacci card", !!fibHref);
+    if (fibHref) await p.click('#games a[data-id="fibonacci"]');
     await p.waitForFunction(() => !!window.__meter && !!window.NumbericsAudio, null, { timeout: 5000 });
     await p.waitForTimeout(200);
     const fresh = await p.evaluate(() => ({ ctx: window.__meter.ctxs, stub: window.NumbericsMusic.stub === true }));
@@ -272,13 +274,20 @@ module.exports = async function ({ browser, url, ck }) {
     const e = await errors(); ck("mute as the first tap: no errors or rejections", !e.length, e.join(" | "));
     await c.close();
   }
-  // the games page at the root (O-9: no game of its own): a tap there loads the music as MUSIC.md says (no
-  // #games[data-current]: Two's style), one context, no errors
+  // the games page at the root (O-9: no game of its own): no music there (TRIAGE5 S2). Taps, a Settings change and a
+  // style pick load no music.js and make no music bus; the taps keep their sounds (the mute button's tick); no errors
   {
     const { c, p, reqs, errors } = await open(url, "");
-    await p.mouse.click(5, 300); const up = await musicUp(p); await p.waitForTimeout(2200);
-    const m = await measure(p, 900), s = up ? await st(p) : null;
-    ck("games page: a tap starts the music (Chill, MUSIC.md Loading), audible, one context", up && reqs.length === 1 && s.style === MAP.two && m.music.peak > MUSIC_AUDIBLE && await p.evaluate(() => window.__meter.ctxs) === 1, fmt({ s, m }));
+    await p.mouse.click(5, 300); await p.waitForTimeout(1500);
+    await p.click("#topbar .tb-mute"); await p.waitForTimeout(200);
+    await p.evaluate(() => window.__read()); await p.click("#topbar .tb-mute"); await p.waitForTimeout(150);
+    const tick = await p.evaluate(() => window.__read());
+    await p.click('#topbar [data-open="settings"]'); await p.waitForTimeout(250);
+    await p.click('[data-seg=musicStyle][data-v="drift"]'); await p.waitForTimeout(1500);
+    const m = await measure(p, 700), s = await p.evaluate(() => ({ stub: !!(window.NumbericsMusic && window.NumbericsMusic.stub), taps: window.__meter.taps.map(t => t.kind).sort().join(",") }));
+    ck("games page: no music after taps, an unmute and a style pick (music.js never loaded, no music bus, silent)",
+      reqs.length === 0 && s.stub && !/music/.test(s.taps) && m.music.peak < SILENT, fmt({ reqs, s, m }));
+    ck("games page: the taps keep their sounds (the unmute tick is audible)", tick.sfx.peak > AUDIBLE, fmt(tick));
     const e = await errors(); ck("games page: no errors or rejections", !e.length, e.join(" | "));
     await c.close();
   }

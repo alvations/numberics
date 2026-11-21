@@ -92,7 +92,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("tray tooltip voice: 2: Smash. Remove one tile.", (await p.getAttribute("#tray .pw:nth-child(2)", "title")) === "2: Smash. Remove one tile.");
   ck("tray aria-label carries the count", /^Smash, 0 left\./.test(await p.getAttribute("#tray .pw:nth-child(2)", "aria-label")));
   await p.click("#tray .pw:nth-child(2)", { force: true });
-  ck("tapping an empty Smash explains it and how to earn it", /^Smash: Remove one tile\. Each new highest tile from 32 up earns/.test(await p.textContent("#hint")));
+  ck("tapping an empty Smash explains it and how to earn it", /^Smash: Remove one tile\. Each join that makes a tile as big as your biggest, from 32 up, earns/.test(await p.textContent("#hint")));
   await p.click("#tray .pw:nth-child(1)", { force: true });
   ck("tapping Undo with nothing to rewind explains why", /^Undo: Take back the last move\. Undo goes back one move/.test(await p.textContent("#hint")));
   await p.keyboard.press("4");
@@ -456,14 +456,14 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("New game starts a fresh run record", await p.evaluate(() => window.__numberics.run.used === 0 && window.__numberics.run.stuckUse === null));
   const saved2 = await p.evaluate(() => { NumbericsKit.flush(); return JSON.parse(localStorage.getItem("numberics_endless_v1")); }); // saves are batched (TRIAGE4 D6)
   ck("the run record is saved with the game, under the old key", saved2 && saved2.run && saved2.run.used === 0 && saved2.state && typeof saved2.bestScore === "number");
-  ck("progress is put on persist (best, live)", await p.evaluate(() => { const g = window.NumbericsProgress.get("two"); return !!g && /^Best /.test(g.best) && g.live === false; }));
+  ck("progress is put on persist (best, live)", await p.evaluate(() => { const g = window.NumbericsProgress.get("two"); return !!g && /^Medium best /.test(g.best) && g.live === false; }));
   ck("no page errors in trophy checks", e10.length === 0, e10.join("|"));
   await ctx.close();
 
   // first visit: the How to play sheet opens by itself, once; a returning Two player never sees it unasked
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); p = await ctx.newPage(); await p.goto(two);
   ck("first visit: How to play opens by itself with three steps", await p.isVisible("#sh-howto") && await p.locator("#sh-howto .step").count() === 3);
-  ck("its steps read as the spec", (await p.textContent("#sh-howto .howto")).includes("Make a new biggest tile from 32 up to earn a power-up. There is no top tile."));
+  ck("its steps read as the spec", (await p.textContent("#sh-howto .howto")).includes("Make a tile as big as your biggest, from 32 up, to earn a power-up. There is no top tile.")); // a first visit is Medium (O-12)
   await shot(p, "d-two-howto");
   const mv8 = await p.evaluate(() => window.__numberics.state.moves);
   await p.keyboard.press("ArrowLeft");
@@ -528,21 +528,25 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("no page errors in budget checks", e11.length === 0, e11.join("|"));
   await ctx.close();
 
-  // 9. TRIAGE4 (craft #3, #12, #18; Family end card): the open hint, the "+N" above the SCORE label, the board's focus ring
+  // 9. TRIAGE4 (craft #12, #18; Family end card) and TRIAGE5 S20: the open hint, the "+N" inside the Score box, the board's focus ring
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await ctx.addInitScript(HOW);
   p = await ctx.newPage(); const e12 = []; p.on("pageerror", x => e12.push(x.message)); await p.goto(two);
   ck("R4: the hint row is not blank on open: it says how to play", (await p.textContent("#hint")) === "Swipe or use the arrow keys.", await p.textContent("#hint"));
   await forge(p, [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { score: 0 });
   await p.keyboard.press("ArrowLeft");
-  const pl = await p.evaluate(() => { const q = document.querySelector(".stat .plus"), lab = document.getElementById("score").parentNode.querySelector("span");
-    if (!q) return null; const a = q.getBoundingClientRect(), b = lab.getBoundingClientRect(), v = document.getElementById("score");
-    return { bottom: a.bottom, labTop: b.top, fs: parseFloat(getComputedStyle(q).fontSize), vfs: parseFloat(getComputedStyle(v).fontSize), text: q.textContent }; });
-  ck("R4: the score +N sits above the SCORE label, never on it", !!pl && pl.bottom <= pl.labTop + 0.5, JSON.stringify(pl));
-  ck("R4: ...at the value's size (not a faint 11 px)", !!pl && pl.fs >= pl.vfs - 0.5 && pl.fs >= 16, JSON.stringify(pl));
-  await p.waitForTimeout(80);
-  const pl2 = await p.evaluate(() => { const q = document.querySelector(".stat .plus"), lab = document.getElementById("score").parentNode.querySelector("span");
-    return q ? { bottom: q.getBoundingClientRect().bottom, labTop: lab.getBoundingClientRect().top, op: +getComputedStyle(q).opacity } : null; });
-  ck("R4: ...and it is fully shown early, still clear of the label as it rises", !!pl2 && pl2.op > 0.9 && pl2.bottom <= pl2.labTop + 0.5, JSON.stringify(pl2));
+  // TRIAGE5 S20 (craft #13, cold #8) supersedes R4's "above the label": the "+N" stays inside the Score box (above it, it
+  // sat on the subtitle). It takes the label row on an opaque strip of the box's colour, so it never overprints "SCORE".
+  const popAt = () => p.evaluate(() => { const q = document.querySelector(".stat .plus"), box = document.getElementById("score").parentNode, lab = box.querySelector("span");
+    if (!q) return null; const a = q.getBoundingClientRect(), b = box.getBoundingClientRect(), l = lab.getBoundingClientRect(), sub = document.querySelector(".sub").getBoundingClientRect(), cs = getComputedStyle(q);
+    return { inside: a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5 && a.left >= b.left - 0.5 && a.right <= b.right + 0.5,
+      coversLabel: a.top <= l.top + 1.5 && a.bottom >= l.bottom - 0.5, onSub: !(a.bottom <= sub.top || a.top >= sub.bottom || a.right <= sub.left || a.left >= sub.right),
+      bg: cs.backgroundColor, fs: parseFloat(cs.fontSize), op: +cs.opacity, text: q.textContent }; });
+  const pl = await popAt();
+  ck("S20: the score +N stays inside the Score box, never on the subtitle", !!pl && pl.inside && !pl.onSub, JSON.stringify(pl));
+  await p.waitForTimeout(110);
+  const pl2 = await popAt();
+  ck("S20: ...and it is fully shown early, still inside the box", !!pl2 && pl2.op > 0.9 && pl2.inside, JSON.stringify(pl2));
+  ck("S20: ...in place it covers the SCORE label row on an opaque strip (never overprints it), bold at 14 px or more", !!pl2 && pl2.coversLabel && !/rgba\(\d+, \d+, \d+, 0\)|transparent/.test(pl2.bg) && pl2.fs >= 14, JSON.stringify(pl2));
   await p.waitForTimeout(300);
   ck("R4: the open hint clears after the first move", (await p.textContent("#hint")) === "");
   // the board's ring: reach it from the keyboard (focus-visible), as a keyboard player would

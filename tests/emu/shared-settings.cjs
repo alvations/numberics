@@ -222,11 +222,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
     const snap = await nmKeys(q);
     await openSettings(q);
     const c2 = q.waitForEvent("filechooser"); await q.click('#sh-settings [data-mem="load"]'); await (await c2).setFiles(f);
-    await q.waitForFunction(() => document.getElementById("toast").classList.contains("on"));
-    ck("a bad file shows 'That file is not a Numberics save.' over the sheet (" + path.basename(f) + ")",
-      (await q.textContent("#toast")) === "That file is not a Numberics save." && await q.evaluate(() => {
-        const t = document.getElementById("toast"), r = t.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-        return +getComputedStyle(t).zIndex > +getComputedStyle(document.querySelector("#sh-settings")).zIndex || t.contains(hit); }));
+    await q.waitForFunction(() => { const m = document.querySelector("#sh-settings [data-memst]"); return m && !m.hidden && m.textContent; });
+    // TRIAGE5 S1: no toast over an open sheet; the sheet's own status line says it
+    ck("a bad file says 'That file is not a Numberics save.' in the sheet, and no toast floats over it (" + path.basename(f) + ")",
+      (await q.textContent("#sh-settings [data-memst]")).indexOf("That file is not a Numberics save.") === 0 &&
+      await q.evaluate(() => !document.getElementById("toast").classList.contains("on")));
     ck("a bad file changes nothing (" + path.basename(f) + ")", JSON.stringify(await nmKeys(q)) === JSON.stringify(snap));
     await q.keyboard.press("Escape");
   }

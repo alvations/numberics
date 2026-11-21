@@ -8,8 +8,13 @@ for every game. Each game has its own page (Two is `two/`), and the **Games** bu
 **Two** is 2048 with the ceiling removed. Every tile is a power of two: join them past 2048 and keep going; there is no
 winning tile, only how far you get before the board locks. (Two was called Endless; saved games carry over.)
 
-Every new highest tile from 32 up earns a **power-up**: **Undo**, **Smash** (delete a tile), **Swap**
-(exchange two cells), **Boost** (double a tile). Use them to dig out of a jam and stay alive.
+Big joins, from 32 up, earn a **power-up**: **Undo**, **Smash** (delete a tile), **Swap**
+(exchange two cells), **Boost** (double a tile). Use them to dig out of a jam and stay alive. Pick how often:
+on **Hard** each new highest tile earns one, on **Medium** each join that makes a tile as big as your highest, on
+**Easy** each join that makes a tile at least half your highest (about 2x and 3x Hard's rate; `docs/DESIGN.md`).
+**Fibonacci** and **Three** have the same three tiers, spaced the same way: in Fibonacci, Medium and Easy also pay joins
+that make your top tile or one or three numbers below it (from 55); in Three, Hard pays each Flush, and Medium and Easy
+also pay a join as big as your top tile (from 18) or at least half of it (from 9).
 
 ## The games
 

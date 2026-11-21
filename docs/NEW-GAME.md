@@ -24,11 +24,13 @@ Every game follows the same contract, so it looks and plays like Two (`two/`). R
 <title>Numberics Seven</title>
 <meta name="description" content="One sentence.">
 <meta name="theme-color" content="#14151c">
+<script src="../shared/boot.js"></script>
 <link rel="icon" href="data:image/svg+xml,...a 7 in accent gold on #14151c, like the Two icon...">
 <link rel="stylesheet" href="../shared/theme.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div id="topbar" class="topbar" data-root="../"></div>
 <main id="app">
   <header>
     <div class="brand"><h1>Seven</h1><p class="sub">One short line in the Two voice.</p></div>
@@ -39,19 +41,30 @@ Every game follows the same contract, so it looks and plays like Two (`two/`). R
   <div id="board" class="board" tabindex="0" aria-label="..."> ... <div id="over" class="over" hidden>...</div></div>
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
   <p class="how">One or two lines: controls and the goal. Never spoil strategy.</p>
-  <nav id="games" class="games" data-root="../" data-current="seven" aria-label="Numberics games"></nav>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">More number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="seven"></div>
+  </section>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>
+<script src="../shared/settings.js"></script>
+<script src="../shared/motion.js"></script>
+<script src="../shared/audio.js"></script>
+<script src="../shared/trophies.js"></script>
+<script src="../shared/progress.js"></script>
 <script src="../shared/power.js"></script>
 <script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
 <script src="game.js"></script>
 <script src="../shared/nav.js"></script>
+<script src="../shared/ui.js"></script>
 </body>
 </html>
 ```
 Layout order is fixed: header (title + stats) -> power-up tray -> hint line -> board -> New game -> how-to ->
-games row. Turn-based games against the computer put the difficulty `.seg` row under the header.
+"More number games" with the game cards (shared/nav.js draws them; `data-current` marks this game, and it is how
+shared/audio.js knows a game page, where music may play, TRIAGE5 S2). The old text row `<nav class="games">` is gone. Turn-based games against the computer put the difficulty `.seg` row under the header.
 
 ## Rules that every game keeps
 - Power-ups (section 0a): `NumbericsPower.tray(...)` for the tray, `stock/award/spend` in the engine; start with

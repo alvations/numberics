@@ -65,7 +65,7 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 .levels{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px; } /* Easy, Medium, Hard and the Daily (REDESIGN.md 9.10) */
 .levels button{ min-height:var(--tap); background:var(--panel); color:var(--mute); border:1px solid var(--line); border-radius:10px; padding:4px; font:inherit; font-size:.85rem; cursor:pointer; }
 .levels button[aria-pressed="true"]{ color:var(--ink); border-color:var(--accent); }
-.board{ display:grid; grid-template-columns:repeat(9,1fr); width:100%; aspect-ratio:1; background:var(--line-2); gap:1px;
+.board{ display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); grid-template-rows:repeat(9,minmax(0,1fr)); width:100%; aspect-ratio:1; background:var(--line-2); gap:1px;
   border:2px solid var(--line-2); border-radius:14px; overflow:hidden; container-type:inline-size; touch-action:manipulation; }
 .c{ position:relative; background:var(--cell); display:flex; align-items:center; justify-content:center; font-size:6cqw;
   font-variant-numeric:tabular-nums; cursor:pointer; user-select:none; -webkit-user-select:none; color:var(--digit); }
@@ -76,6 +76,7 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 .c.bad.same{ color:var(--bad-soft); } /* a clash on the blue same-digit fill keeps 4.5:1 (craft nit 4) */
 .c:nth-child(9n+4),.c:nth-child(9n+7){ box-shadow:-2px 0 0 var(--line-2); }
 .r{ display:contents; } /* role="row" wrappers for valid grid ARIA; the cells stay items of the board grid */
+/* TRIAGE5 B1: nine fixed rows and columns, equal whatever their content (an empty row of the 21 Nov Daily was 12 px) */
 .r:nth-child(3) .c,.r:nth-child(6) .c{ border-bottom:2px solid var(--line-2); }
 /* each cell: the value (.v, the digit or the notes) and a colour overlay (.fx) for the clash flash, the unit sweep and
    the solve pulse (REDESIGN.md 5.10). Only opacity and transform animate; no will-change on the 81 cells (5.13). */
@@ -259,10 +260,14 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .pv .hw{ display:flex; align-items:center; gap:10px; }
 .pv .key{ width:24px; height:28px; display:grid; place-items:center; border-radius:6px; background:var(--panel); border:1px solid var(--line-2);
   font-weight:800; font-size:13px; color:var(--ink); }
+.pv .key{ position:relative; } .pv .key small{ position:absolute; right:3px; bottom:1px; font-size:8px; font-weight:400; color:var(--mute); line-height:1.1; } /* TRIAGE5 S15: the pad's count, as on the page */
 details.how .how-more{ display:flex; justify-content:center; margin:0 14px 12px; }
 /* a solve can earn several trophies at once: the pill row scrolls inside the card, so the card never spills past the
    board and its buttons stay in view */
 #win{ overflow:hidden; }
+/* TRIAGE5 S15 (craft #9): the Solved card has the family card edge (the board frame stays drawn round it) and a solid
+   fill with the family shadow, so the solved digits never show through behind it */
+#win{ background:var(--bg); border:2px solid var(--line-2); box-shadow:var(--sh-2); }
 #win > *{ flex:none; }
 #win > #win-pills{ flex:0 1 auto; min-height:44px; overflow:auto; overscroll-behavior:contain; align-content:flex-start; padding:2px 0; }
 

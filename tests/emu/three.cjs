@@ -96,7 +96,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the run cleared from the board", !s.grid[8] && !s.grid[0] && !s.grid[4]);
   ck("flush scored sum x length = 54", s.score === 54);
   ck("flush earned one power-up", s.power.undo + s.power.smash + s.power.swap + s.power.third === 2);
-  ck("toast announces the rainbow flush", /^Rainbow flush 3-6-9, \+54\s+\+(Undo|Smash|Swap|Third)$/.test(flushToast), flushToast);
+  ck("toast announces the rainbow flush", /^Rainbow flush 3-6-9, \+54 \+1 (Undo|Smash|Swap|Third)$/.test(flushToast), flushToast);
   ck("cold #14: the hint band says what the earned power-up does", /^Earned an? (Undo: take back the last move|Smash: remove one tile|Swap: trade two neighbouring tiles|Third: turn a 1 or a 2 into a 3)\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   ck("then the trophy it earned toasts, once the flush has played", /^Trophy: First flush$/.test(await p.textContent("#toast")), await p.textContent("#toast"));
   ck("a flush toast is a reward (gold)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("bad"))));
@@ -107,7 +107,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await set(p, [1, 3, 0, 0, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12], { moves: 3, power: { undo: 0, smash: 0, swap: 0, third: 0 } });
   ck("empty tray buttons are aria-disabled, never disabled", await p.evaluate(() => [...document.querySelectorAll("#tray .pw")].every(b => !b.disabled && b.getAttribute("aria-disabled") === "true")));
   await p.locator("#tray .pw").nth(1).click({ force: true });
-  ck("tapping an empty Smash explains it and how to earn it", (await p.textContent("#hint")) === "Smash: Remove one tile. Earn one with every Flush.", await p.textContent("#hint"));
+  ck("tapping an empty Smash explains it and how to earn it (Medium, a first visit)", (await p.textContent("#hint")) === "Smash: Remove one tile. Earn one with every Flush, or a join as big as your top tile (18 up).", await p.textContent("#hint"));
   ck("an empty power-up does not arm", await p.locator("#board.targeting").count() === 0);
   await p.keyboard.press("1");
   ck("key 1 on an empty Undo explains it too", /^Undo: Take back the last move\. You start with one/.test(await p.textContent("#hint")), await p.textContent("#hint"));
@@ -503,7 +503,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const endRep = await p.evaluate(() => window.__rep.filter(r => r[1] === "end"));
   ck("end event once, with score, flushes and the run", endRep.length === 1 && endRep[0][2].score === 500 && endRep[0][2].flushes === 7 && endRep[0][2].run.used === 2, JSON.stringify(endRep));
   ck("the run's end earns Hello, numbers, shown as a pill on the end card", await p.isVisible("#over") && /Hello, numbers/.test(await p.textContent("#over-pills")));
-  ck("progress summary: best, live and liveText on every persist", await p.evaluate(() => { const g = NumbericsProgress.get("three"); return g && /^Best /.test(g.best) && g.live === false && /^Score /.test(g.liveText); }));
+  ck("progress summary: best, live and liveText on every persist", await p.evaluate(() => { const g = NumbericsProgress.get("three"); return g && /^Medium best /.test(g.best) && g.live === false && /^Score /.test(g.liveText); }));
   await p.click("#again");
   ck("New game: the progress shows no live run until the first move", await p.evaluate(() => NumbericsProgress.get("three").live === false));
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp");
@@ -587,11 +587,32 @@ module.exports = async function ({ browser, url, ck, shot }) {
   console.log("three budgets: moves " + bud.moves + ", frames " + fr.length + ", p95 " + p95.toFixed(1) + " ms, max " + fr[fr.length - 1].toFixed(1) + " ms, >17.5 ms " + (over * 100).toFixed(1) +
     "% (idle baseline: p95 " + idleP95.toFixed(1) + " ms, >17.5 ms " + (idleOver * 100).toFixed(1) + "%)");
   ck("60-move session: most inputs moved", bud.moves >= 40, bud.moves);
-  // S6: fixed bars, not relative to the idle page (a busy machine must not raise the bar); needs a quiet machine
-  ck("frames (needs a quiet machine): p95 at most 20 ms and at most 10% of frames over 17.5 ms",
+  // S6: fixed bars, not relative to the idle page (a busy machine must not raise the bar); needs a quiet machine. Four's
+  // rule (TRIAGE5 S8): when the idle page itself misses frames (idle p95 over 18 ms, e.g. agents running in parallel) the
+  // check says SKIP, never passes and never fails
+  if (idleP95 <= 18) ck("frames (a quiet machine): p95 at most 20 ms and at most 10% of frames over 17.5 ms",
     p95 <= 20 && over <= 0.10, "p95 " + p95 + " over " + over + " idle " + idleP95 + "/" + idleOver);
+  else console.log("  SKIP three: frames check needs a quiet machine (idle p95 " + idleP95.toFixed(2) + " ms > 18)");
   ck("tile nodes never exceed the board's tiles + 8", bud.nodes.every(([d, e]) => d <= e + 8), JSON.stringify(bud.nodes.filter(([d, e]) => d > e + 8)));
   ck("after the last move settles, one node per tile", bud.after[0] === bud.after[1], JSON.stringify(bud.after));
   ck("no page errors in the budget run", e11.length === 0, e11.join("|"));
   await ctx.close();
+
+  // the tiers (O-13), O-14 at 375x812, as Two and Fibonacci (tests/emu/_tiers.cjs)
+  const board3 = (a, b, tr) => async (p) => {
+    await p.evaluate((x) => { const s = window.__three.state; if (x.tr === "hard") delete s.tier; else s.tier = x.tr;
+      s.grid = new Array(16).fill(0); s.grid[0] = x.a; s.grid[1] = x.b; s.grid[15] = 36; s.top = 36; s.next = 1;
+      s.power = { undo: 0, smash: 0, swap: 0, third: 0 }; s.prev = null; s.free = false; s.over = false; window.__three.state = s; }, { a, b, tr });
+    await p.keyboard.press("ArrowLeft");
+  };
+  await require("./_tiers.cjs")({ browser, url, ck, shot }, {
+    id: "three", api: "__three", key: "numberics_three_v1",
+    rules: { medium: /or a join as big as your top tile \(18 up\)/, easy: /or a join half your top tile or more \(9 up\)/ },
+    easy: (p, tr) => board3(9, 9, tr)(p), medium: (p, tr) => board3(18, 18, tr)(p),
+    made: { easy: /^Made 18 \+1 (Undo|Smash|Swap|Third)$/, medium: /^Made 36 \+1 (Undo|Smash|Swap|Third)$/ },
+    oldSave: { bestScore: 5000, bestUsed: 0, base: 5000, seen: true, flushed: true,
+      state: { grid: [18, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 36], next: 1, bag: [1, 2, 1, 2], score: 1200, top: 36, moves: 40,
+        flushes: 2, best: 54, used: 0, seed: 99, over: false, free: false, power: { undo: 1, smash: 0, swap: 0, third: 0 }, prev: null } },
+    oldSwipe: "ArrowLeft", oldBest: "5,000", pop: false
+  });
 };

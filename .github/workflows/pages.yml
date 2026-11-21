@@ -47,24 +47,35 @@ jobs:
           node tests/run.js
       - name: Assemble the site (stable at /, beta at /beta/; only what the pages load)
         run: |
+          # every root-level page, style, script and data file of either layout (Two at the root on main today; the
+          # games page with home.css on build/v2, O-9), so a new root file never 404s whichever branch's copy runs
           assemble () {
             src="$1"; out="$2"; mkdir -p "$out"
-            # the root files of either layout: Two at the root (main today), or the games page with home.css (O-9, build/v2)
-            for f in index.html home.css engine.js game.js style.css games.json .nojekyll LICENSE NOTICE; do
-              [ -e "$src/$f" ] && cp -r "$src/$f" "$out/"
+            for f in "$src"/*.html "$src"/*.css "$src"/*.js "$src"/games.json "$src"/.nojekyll "$src"/LICENSE "$src"/NOTICE; do
+              [ -e "$f" ] && cp -r "$f" "$out/"
             done
             cp -r "$src/shared" "$src/screenshots" "$out/"
             [ -d "$src/two" ] && cp -r "$src/two" "$out/"
             for p in $(cd "$src" && node -e 'require("./games.json").filter(g => g.status === "live" && g.path).forEach(g => console.log(g.path))'); do
               cp -r "$src/$p" "$out/"
             done
+            return 0
           }
           assemble stable _site
-          if [ "${{ steps.beta.outcome }}" = "success" ]; then assemble beta _site/beta; else echo "beta skipped"; fi
+          if [ "${{ steps.beta.outcome }}" = "success" ]; then
+            assemble beta _site/beta
+          else
+            # a failing beta is not published, but the beta already live stays live (critic R5 S1)
+            echo "beta failed its tests: keeping the published beta"
+            if git clone -q --depth 1 --branch gh-pages "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" old \
+              && [ -d old/beta ]; then cp -r old/beta _site/beta; fi
+          fi
       - name: Publish to gh-pages
         run: |
+          s=$(git -C stable rev-parse --short HEAD); b=$(git -C beta rev-parse --short HEAD)
+          if [ "${{ steps.beta.outcome }}" = "success" ]; then bl="beta from build/v2 $b"; else bl="beta kept (build/v2 $b failed its tests)"; fi
           cd _site
           git init -q -b gh-pages
           git add -A
-          git -c user.name=alvations -c user.email=alvations@gmail.com commit -q -m "Publish Numberics: stable from main ${GITHUB_SHA::7}, beta from build/v2"
+          git -c user.name=alvations -c user.email=alvations@gmail.com commit -q -m "Publish Numberics: stable from main $s, $bl"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" gh-pages

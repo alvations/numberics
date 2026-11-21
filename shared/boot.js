@@ -1,14 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * Numberics boot (docs/design/REDESIGN.md 6.2). The first script in <head>, before any CSS, synchronous, so the page
- * paints in the right theme at once: reads numberics_settings_v1 (try/catch: sandboxes throw) and sets
- * <html data-theme data-text data-contrast data-motion> and meta[name=theme-color]. Unknown or malformed fields fall
- * back to the default one by one. Motion and theme "auto" follow the device, and keep following it while the page is open.
- * settings.js re-runs NumbericsBoot.apply() after a change.
- *
- * The beta namespace (owner: build/v2 is deployed at /numberics/beta/, same origin as the stable site): under a path
- * with "/beta/", the shim below stores every localStorage key "numberics_*" as "numberics_beta_*", and key(), length
- * and clear() see only those, so every module (Memory Save, Load and Erase included) works unchanged and never reads
- * or writes the stable site's keys. Keys of other names pass through. Nothing changes anywhere else. */
+ * Numberics boot (REDESIGN.md 6.2): the first script in <head>, synchronous, so the page paints in the right theme; and
+ * the /beta/ storage namespace shim. Notes: docs/CODE-NOTES.md#sharedbootjs */
 (function (w) {
   "use strict";
   var S = null, LS = null;

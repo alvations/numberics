@@ -270,7 +270,9 @@
     Array.prototype.forEach.call($("pad").children, function (b) {
       var d = +b.dataset.d, left = 9 - counts[d];
       b.disabled = left <= 0; b.querySelector("small").textContent = left > 0 ? left : "";
-      b.setAttribute("aria-label", d + ", " + (left > 0 ? left : "none") + " left");
+      // TRIAGE5 S15 (cold #11): the small number is how many of that digit are still to place; the label says so
+      var said = left > 0 ? left + " left to place" : "all placed";
+      b.setAttribute("aria-label", d + ", " + said); b.title = d + ": " + said;
     });
     $("notes").textContent = "Notes: " + (notesMode ? "on" : "off"); $("notes").setAttribute("aria-pressed", String(notesMode));
     renderTray();
@@ -339,7 +341,7 @@
       sel = -1; marks = null; hold = true; viewing = false; clearTimeout(holdT);
       var solvedState = state;
       holdT = setTimeout(function () { if (state === solvedState && hold) showCard(); }, HOLD); // a newer puzzle wins
-    } else if (state.gain && state.gain.length) { toast(state.high + " cells filled: +" + PW_NAME[state.gain[0]]); sfx("power"); }
+    } else if (state.gain && state.gain.length) { toast(state.high + " cells filled: +1 " + PW_NAME[state.gain[0]]); sfx("power"); }
     save(); render();
     // the feedback for this change, on the board that is now drawn (state is already final: input never waits)
     if (placed) { placeFx(k); if (clash) clashFx(k, state.grid[k]); }
@@ -469,12 +471,16 @@
     finishFx(); sfx("tick");
     if (mode === "daily") stash(); // the regular puzzle's slot is what a level button acts on
     var ps = mode === "daily" ? play.state : state, inPlay = mode === "play";
-    if (!inPlay && ps && ps.difficulty === l && !ps.solved) return switchTo("play"); // back to the puzzle you left
     if (inPlay && l === state.difficulty && risky()) return toast("Tap New puzzle to restart", "bad");
-    if ((inPlay ? risky() : playRisky()) && (inPlay ? l !== state.difficulty : true) && levelArm !== l) {
+    // TRIAGE5 S15 (cold #3): leaving a Daily in progress asks too, and says the Daily is kept (its own slot, one tap back)
+    var back = !inPlay && ps && ps.difficulty === l && !ps.solved; // back to the regular puzzle you left
+    var ask = inPlay ? risky() && l !== state.difficulty : risky() || (playRisky() && !back);
+    if (ask && levelArm !== l) {
       disarmLevel(); levelArm = l; b.textContent = "Sure?";
+      if (!inPlay) toast("Tap again for " + (back ? "your " + cap(l) + " puzzle" : "a new " + cap(l) + " puzzle") + ". Your Daily is kept.", "info");
       levelT = setTimeout(disarmLevel, 3000); return;
     }
+    if (back) return switchTo("play");
     fresh(l);
   }
   LEVELS.concat(["daily"]).forEach(function (l) {
@@ -502,7 +508,7 @@
     { picture: '<div class="sq9"><span>5</span><span class="u">3</span><span>7</span><span class="u">6</span><span>1</span><span>9</span>' +
       '<span class="u">2</span><span>4</span><span>8</span></div>', text: "Fill every row, column and box with 1 to 9." },
     { picture: '<div class="hw"><div class="sq9"><span>5</span><span></span><span>7</span><span>6</span><span class="s"></span><span>9</span>' +
-      '<span>2</span><span></span><span>8</span></div><span class="key">4</span></div>', text: "Tap a cell, then a number." },
+      '<span>2</span><span></span><span>8</span></div><span class="key">4<small>3</small></span></div>', text: "Tap a cell, then a number; its small digit is how many are left." },
     { picture: '<div class="sq9"><span>5</span><span class="n">1 4<br>8</span><span>7</span><span class="x">6</span><span></span><span>9</span>' +
       '<span>2</span><span class="x">6</span><span>8</span></div>', text: "Notes are pencil marks. Red shows a clash." }
   ];

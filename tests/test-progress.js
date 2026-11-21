@@ -108,4 +108,14 @@ t("dailyLevel: Easy Monday to Thursday, Medium Friday and Saturday, Hard Sunday;
   fresh(); at(2026, 11, 21); const c = P.todayCard(); ok(c.levels.sudoku === "medium" && c.streak === 0 && c.day === "20261121", JSON.stringify(c));
   at(2026, 11, 25, 23); ok(P.msToMidnight() === 3600 * 1000 + 1000, String(P.msToMidnight()));
 });
+t("a Daily under way (TRIAGE5 S5): dailyPart is today's progress on the Today card; a new day drops it", () => {
+  fresh(); at(2026, 11, 21);
+  ok(typeof P.dailyPart === "function", "dailyPart exists");
+  P.dailyPart("six", "1 of 6"); P.dailyPart("six", "2 of 6");
+  const c = P.todayCard(); ok(c.part && c.part.six === "2 of 6" && !c.done.six, JSON.stringify(c));
+  P.daily("six", "6 made"); ok(P.todayCard().done.six === "6 made" && P.todayCard().part.six === "2 of 6", "both kept; the card shows done first");
+  at(2026, 11, 22); ok(JSON.stringify(P.todayCard().part) === "{}", "a new day starts empty");
+  LS.m[P.KEY] = JSON.stringify({ v: 1, part: { "20261122": { six: 5, seven: "3 of 6" } } });
+  ok(JSON.stringify(P.parts()) === '{"seven":"3 of 6"}', "a non-text entry is dropped: " + JSON.stringify(P.parts()));
+});
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

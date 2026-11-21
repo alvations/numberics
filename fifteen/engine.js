@@ -21,11 +21,15 @@
  *   a round won by a side that used Peek in it earns nothing (why "peeked"), and that mark survives Undo.
  * - Undo (you only) rewinds to the start of your last turn, the computer's reply included, restoring the
  *   whole snapshot (stock, score, round) minus the Undo charge spent, and a Peek spent since then stays
- *   spent (R3). It never crosses a decided round or match (R1), nor into a new round.
- * - On Hard you start each match with one Undo and no Erase; a round that follows a DRAWN round starts
- *   you with at least one Erase (perfect play is a draw; the Erase breaks it, so a perfect player draws,
- *   wins with the Erase, and so on: every Hard match won, 2-0. A round won with it earns nothing, and Hard
- *   stays harder than Medium for a sensible player: tests/test-fifteen.js measures both).
+ *   spent (R3). It never crosses a decided round or match (R1), nor into a new round. A round you win after an
+ *   Undo in it earns nothing (why "undo"; round 5, S9: one Undo rule for the round games, as Five), and that mark
+ *   survives later rewinds.
+ * - On Hard you start each match with one Undo and no Erase; the round after the match's FIRST drawn round
+ *   starts you with at least one Erase, once per match (round 5, S10: an Erase after every draw let a player
+ *   who spends it well win Hard as often as Medium). Perfect play is a draw; the Erase breaks it, so a perfect
+ *   player draws, wins with the Erase, then draws out: every Hard match won, 1-0. A round won with it earns
+ *   nothing, and Hard stays harder than Medium for a sensible player, even one who spends the Erase where the
+ *   solver says it wins: tests/test-fifteen.js measures both).
  * - The round that decides the match earns nothing: a new match starts a fresh stock, so that reward
  *   could never be used. A reward skipped because every slot is full says so (result.why "full", R15).
  * - The computer earns power-ups only on Hard, by the same rule, only Erase or Double (the two it
@@ -157,11 +161,13 @@
       claimsLeft: 1, usedPower: false, blocked: 0, acted: false,
       powered: [false, false, false], // [unused, you, computer]: used Erase or Double this round (R2)
       peeked: [false, false, false],  // used Peek this round: help, so that round pays nothing (TRIAGE3)
+      undone: false,             // you used Undo this round: winning it pays nothing (S9, as Five)
+      drawErase: false,          // Hard: the after-draw Erase was handed out this match (once per match, S10)
       wins: [0, 0, 0],           // [draws, your rounds, computer rounds]
       rounds: [],                // winner of each finished round (0 draw)
-      result: null,              // {winner, line: [a,b,c] | null, earned: name|null, why: null|"powered"|"peeked"|"full"|"match"}
+      result: null,              // {winner, line: [a,b,c] | null, earned: name|null, why: null|"powered"|"peeked"|"undo"|"full"|"match"}
       match: null,               // {winner: 0|1|2} once the match is decided
-      // Hard is a solved draw: after a drawn Hard round you get an Erase to break it (nextRound)
+      // Hard is a solved draw: after the match's first drawn Hard round you get an Erase to break it (nextRound, S10)
       power: stock({ undo: 1 }), cpuPower: stock({}),
       prev: null, moves: 0, last: [],
     };
@@ -189,6 +195,7 @@
     if (winner && earns(s, winner)) {
       if (s.usedPower || (s.powered && s.powered[winner])) why = "powered";   // R2
       else if (s.peeked && s.peeked[winner]) why = "peeked";                   // Peek is help (TRIAGE3)
+      else if (winner === 1 && s.undone) why = "undo";                         // a round won after Undo (S9)
       else if (s.match) why = "match";                                         // nothing left to spend it on
       else { earned = award(s, winner); if (!earned) why = "full"; }            // R15
     }
@@ -246,6 +253,7 @@
       // and so does the help it gave: a round you peeked in still pays nothing after the rewind
       r.peeked = [false, !!(state.peeked && state.peeked[1]) || !!(r.peeked && r.peeked[1]), !!(r.peeked && r.peeked[2])];
       r.prev = null; r.last = [];
+      r.undone = true;   // S9: a round won after an Undo pays nothing, in all three round games
       return { ok: true, state: r };
     }
     var side = state.turn;
@@ -339,8 +347,9 @@
     s.round++; s.starter = 3 - s.starter; s.turn = s.starter;
     s.owner = [0, 0, 0, 0, 0, 0, 0, 0, 0];
     s.claimsLeft = 1; s.usedPower = false; s.blocked = 0; s.acted = false; s.powered = [false, false, false]; s.peeked = [false, false, false];
-    s.result = null; s.prev = null; s.last = [];
-    if (s.diff === "hard" && drawn) s.power.erase = Math.max(s.power.erase, 1);   // a drawn Hard round hands you an Erase
+    s.undone = false; s.result = null; s.prev = null; s.last = [];
+    // the match's first drawn Hard round hands you an Erase; later draws do not (S10)
+    if (s.diff === "hard" && drawn && !s.drawErase) { s.power.erase = Math.max(s.power.erase, 1); s.drawErase = true; }
     return s;
   }
   // a fresh match keeps the difficulty, resets the stock (each run starts with one Undo)

@@ -25,7 +25,6 @@ const PLAY = {
   // the games page (O-9) has no game: it opens the Games and Trophies sheets from the top bar and closes them with Esc
   // (its cards and Today chips are links, which play never clicks)
   root: { keys: ["Escape"], click: 0, seqP: 0.5, seq: [['#topbar [data-open="games"]'], ['#topbar [data-open="trophies"]']] },
-  endless: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
   two: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
   fibonacci: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
   three: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.1 },

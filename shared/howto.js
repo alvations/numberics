@@ -1,21 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsHowto (docs/design/REDESIGN.md 1.3, 3.6, 9; TRIAGE4 D8): the one How to play sheet every game uses,
- * exposed as NumbericsUI.howto (shared/ui.js delegates to it). One shape for all ten games:
- *   - the title is "How to play <Game>", the steps are a small picture and one sentence each, a Play button closes it;
- *   - the collapsed "How to play" row under the board has one button, labelled "Show the three steps";
- *   - first visit: it opens by itself once (NumbericsProgress seenHowto / markHowto), never on a page with a saved
- *     game, and never over a sheet that is already open. Keys never reach the game while it is open (shared/ui.js).
- *
- * howto(gameId, opts) wires the row's button and makes the first-visit check; it returns { open(onClose), close(),
- * shown } (shown: it opened by itself). opts:
- *   title     the game's name ("Two"); a title that already starts with "How to play" is kept as it is
- *   steps     [{ text, picture(el) }]: picture fills the step's picture box (an HTML string is also accepted)
- *   saved     true when this page loaded a saved game: then it never opens by itself
- *   button    the row's button (an element or an id); default the [data-howto] button, else the button in details.how
- *   onOpen    called before every open (a game finishes its running animation here)
- *   onButton  called when the row's button is pressed, before the sheet opens (a game's tick sound); onPlay: on Play
- *   onClose   called after every close; onFirstClose: after the sheet that opened by itself closes
- * Without the sheet module the row itself is opened instead, so the rules are still one tap away. */
+ * NumbericsHowto (REDESIGN.md 1.3, 3.6, 9; TRIAGE4 D8): the one How to play sheet, as NumbericsUI.howto(gameId, opts).
+ * Its shape, the first-visit rule and opts: docs/CODE-NOTES.md#sharedhowtojs */
 (function (w) {
   "use strict";
   var doc = w.document, LABEL = "Show the three steps";

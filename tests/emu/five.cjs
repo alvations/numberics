@@ -89,6 +89,15 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await idle(p);
   s = await st(p);
   if (!s.roundOver) {
+    // S12 (mechanics #7): the first tap asks, saying the cost; nothing is taken back yet
+    await p.click("#tray .pw:nth-child(1)");
+    s = await st(p);
+    ck("S12: the first Undo tap asks and says the cost, nothing taken back yet", s.tiles[2] === 0 && s.power.p.undo === 1 &&
+      (await p.textContent("#hint")) === "Tap Undo again: no more rewards this round." &&
+      await p.locator("#tray .pw.armed").count() === 1 && await p.locator("#board.targeting").count() === 0, await p.textContent("#hint"));
+    ck("S12: the Undo button's own words say the cost", /^1: Undo\. Take back your turn and the computer's reply\. No rewards for the rest of this round\.$/.test(await p.locator("#tray .pw").nth(0).getAttribute("title")), await p.locator("#tray .pw").nth(0).getAttribute("title"));
+    ck("S12: the Undo ask fits one line at 375px, so the board never moves", await p.evaluate(() => { const h = document.getElementById("hint"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).lineHeight) * 1.5; }));
+    await shot(p, "undo-ask");
     await p.click("#tray .pw:nth-child(1)");
     s = await st(p);
     ck("Undo rewinds to before the Nudge, stock restored", s.tiles[2] === 4 && s.power.p.nudge === 1 && s.power.p.undo === 0, JSON.stringify(s));
@@ -106,7 +115,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const t0 = Date.now(); await card(p); const held = Date.now() - t0;
   ck("R13: the card follows after the hold", held > 900 && held < 2500, String(held));
   ck("round 3: round won reads 'You win round 1'", await p.isVisible("#over") && (await p.textContent("#over-title")) === "You win round 1", await p.textContent("#over-title"));
-  ck("round 3: subline '<what burst> · You 1 : 0 Computer', plus what the round paid (cold #24)", /^Your 1 onto their 4 made 5 · You 1 : 0 Computer · earned (Undo|Split|Shield|Nudge)(, (Undo|Split|Shield|Nudge))*$/.test((await p.textContent("#over-text")).replace(/\u00a0/g, " ")), await p.textContent("#over-text"));
+  ck("round 3: subline '<what burst> · You 1 : 0 Computer', plus what the round paid (cold #24)", /^Your 1 onto their 4 made 5 · You 1 : 0 Computer · earned ([2-9] )?(Undo|Split|Shield|Nudge)(, ([2-9] )?(Undo|Split|Shield|Nudge))*$/.test((await p.textContent("#over-text")).replace(/\u00a0/g, " ")), await p.textContent("#over-text"));
   ck("round 3: focus is on the card's primary button", await p.evaluate(() => document.activeElement && document.activeElement.id === "again"));
   ck("round 3: the lower New game is hidden while the card shows, its space kept", await p.evaluate(() => { const n = document.getElementById("new"); return getComputedStyle(n).visibility === "hidden" && n.getBoundingClientRect().height > 30; }));
   await p.click("#over-view");
@@ -222,6 +231,39 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.waitForFunction(() => !window.__five.busy && !window.__five.holding, null, { timeout: 5000 });
   if ((await st(p)).roundOver) { await p.click("#again"); }
   await idle(p);
+  // S12 (mechanics #7): the Undo that starts the no-reward rest of the round asks first; the ask lapses, a tile tap
+  // drops it, and once the round is unpaid a further Undo goes at once
+  const none4 = { undo: 0, split: 0, shield: 0, nudge: 0 };
+  await forge(p, { tiles: [1, 1, 1, 1], power: { p: { undo: 3, split: 0, shield: 0, nudge: 0 }, c: none4 } });
+  await slot(p, 0).click(); await slot(p, 1).click(); await idle(p);
+  const undoAt = p.locator("#tray .pw").nth(0);
+  await undoAt.click();
+  ck("S12: the ask is armed", await p.locator("#tray .pw.armed").count() === 1 && /^Tap Undo again: no more rewards this round\./.test(await p.textContent("#hint")));
+  await p.waitForTimeout(3300);
+  s = await st(p);
+  ck("S12: the ask lapses after 3 s and nothing was taken back", await p.locator("#tray .pw.armed").count() === 0 && s.power.p.undo === 3 && !s.undone &&
+    !/no more rewards/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  await undoAt.click(); await slot(p, 0).click();
+  s = await st(p);
+  ck("S12: a tile tap drops the ask and plays on (the tile is picked)", await p.locator("#tray .pw.armed").count() === 0 && s.power.p.undo === 3 &&
+    await p.locator(".slot.sel").count() === 1, await p.textContent("#hint"));
+  await slot(p, 0).click(); // put it down again
+  await undoAt.click(); await undoAt.click();
+  s = await st(p);
+  ck("S12: the second tap takes it back and the round pays nothing from now on", s.power.p.undo === 2 && s.undone === true);
+  await slot(p, 0).click(); await slot(p, 1).click(); await idle(p);
+  await undoAt.click();
+  s = await st(p);
+  ck("S12: once the round is unpaid, Undo goes at once (no cost left to warn of)", s.power.p.undo === 1 && await p.locator("#tray .pw.armed").count() === 0);
+  await p.keyboard.press("Escape");
+  // S17 (cold #7): the round summary lists each power-up once, with its count
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__five.state));
+    Object.assign(s, { tiles: [2, 1, 0, 0], roundOver: "p", matchOver: null, last: null, earned: ["split", "nudge", "split"], undone: false, draws: 0 });
+    window.__five.state = s; });
+  await p.waitForFunction(() => !document.getElementById("over").hidden, null, { timeout: 3000 });
+  ck("S17: 'earned 2 Split, Nudge', never 'Split, Split'", / · earned 2 Split, Nudge$/.test((await p.textContent("#over-text")).replace(/\u00a0/g, " ")), await p.textContent("#over-text"));
+  await shot(p, "summary-counts");
+  await p.click("#again"); await idle(p);
   // R5: a number key on an empty slot explains it, exactly like a tap
   await forge(p, { tiles: [2, 1, 1, 1], power: { p: { undo: 0, split: 0, shield: 0, nudge: 0 }, c: { undo: 0, split: 0, shield: 0, nudge: 0 } } });
   await p.focus("#board"); await p.keyboard.press("3");
@@ -635,4 +677,29 @@ module.exports = async function ({ browser, url, ck, shot }) {
     ck("no page errors (" + tag + ")", e13.length === 0, e13.join("|"));
     await c.close();
   }
+
+  // S16 (craft #16, cold #9, all ages): the YOU label reads at 4.5:1 or more over the real board in every theme,
+  // measured from computed colours; the side labels grow with Larger text
+  const ratio = (sel) => {
+    const bg = el => { for (; el; el = el.parentElement) { const c = getComputedStyle(el).backgroundColor; if (!/^rgba\(.*, 0\)$/.test(c) && c !== "transparent") return c; } return "rgb(0, 0, 0)"; };
+    const lum = c => c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); })
+      .reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const el = document.querySelector(sel || ".side.bottom .who"), a = lum(getComputedStyle(el).color), b = lum(bg(el));
+    return { r: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), fg: getComputedStyle(el).color, bg: bg(el), text: el.textContent };
+  };
+  const sizes = {};
+  for (const [theme, contrast, text] of [["dark", "normal", "normal"], ["light", "normal", "normal"], ["dark", "high", "normal"], ["light", "high", "normal"], ["dark", "normal", "large"]]) {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    await c.addInitScript((o) => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify(o)); } catch (e) { /* blocked */ } }, { theme, contrast, text });
+    const q = await c.newPage(); await go(q);
+    const tag = theme + (contrast === "high" ? " High contrast" : "") + (text === "large" ? " Larger text" : "");
+    const m = await q.evaluate(ratio);
+    ck("S16: the YOU label is at least 4.5:1 over the board (" + tag + ")", m.text === "You" && m.r >= 4.5, JSON.stringify(m));
+    const mc = await q.evaluate(ratio, ".side:not(.bottom) .who");
+    ck("S16: the Computer label is at least 4.5:1 over the board too (" + tag + ")", /computer/i.test(mc.text) && mc.r >= 4.5, JSON.stringify(mc));
+    sizes[text] = (sizes[text] || 0) || await q.evaluate(() => [...document.querySelectorAll(".who")].map(e => parseFloat(getComputedStyle(e).fontSize)));
+    if (theme === "light") await shot(q, "you-" + theme + "-" + contrast);
+    await c.close();
+  }
+  ck("S16: both side labels, Computer included, grow with Larger text", sizes.large.every((v, i) => v > sizes.normal[i] + 1), JSON.stringify(sizes));
 };

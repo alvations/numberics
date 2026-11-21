@@ -23,10 +23,8 @@
   }
   function spend(s, name) { if (!s[name]) return false; s[name]--; return true; }
 
-  // Tray: defs = [{id, label, desc, earn?}] (exactly 4, Undo first). desc: "Take back the last move."
-  // opts = {armed, disabled(id) -> bool | reason string, onUse(id), earn: "How to earn charges.", hint: element,
-  //         onInfo(id, text)}. Buttons are never `disabled`: a button that cannot act now gets
-  //         aria-disabled + class "empty", and a tap explains it instead (phones have no hover).
+  // Tray: defs = [{id, label, desc, earn?}] (4, Undo first); opts = {armed, disabled(id), onUse(id), earn, hint, onInfo}.
+  // Buttons are never `disabled`: aria-disabled + class "empty", and a tap explains why.
   function info(d, s, why, opts) {
     var t = d.label + ": " + (d.desc || d.title || "") + " ";
     if (typeof why === "string" && why) t += why;

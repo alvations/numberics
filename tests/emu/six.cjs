@@ -572,4 +572,43 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage(); await p.goto(page); await setL(p, "9 9 9 9 9");
   ck("desktop: five-number gaps at least 44 px wide, square tiles in one row", await p.evaluate(() => [...document.querySelectorAll("#line .gp")].every(g => g.getBoundingClientRect().width >= 44)) && await p.locator("#line.narrow, #line.stack").count() === 0);
   await ctx.close();
+  // make "2 2 2" into 2 + 2 + 2 by tapping (touch) or clicking each gap until it reads "+"
+  const make222 = async (q, touch) => {
+    await setL(q, "2 2 2");
+    for (let k = 0; k < 2; k++) for (let g = 0; g < 6 && (await q.evaluate((k) => window.__six.state.cur.g[k], k)) !== "+"; g++) {
+      const gp = q.locator('.gp[data-g="' + k + '"]'); if (touch) await gp.tap(); else await gp.click();
+    }
+    await q.waitForFunction(() => window.__six.state.done, null, { timeout: 3000 });
+  };
+  // S19 (craft #31): no "(Enter)" on a touch screen; a keyboard device keeps it, and a key press brings it back
+  ctx = await newCtx({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, deviceScaleFactor: 2 });
+  p = await ctx.newPage(); await p.goto(page); await make222(p, true);
+  ck("S19: touch: 'Made 6. Next line.' with no (Enter)", (await p.textContent("#hint")) === "Made 6. Next line.", await p.textContent("#hint"));
+  await shot(p, "touch-made");
+  await p.keyboard.press("Shift");
+  ck("S19: touch device, then a key: the (Enter) hint is back", (await p.textContent("#hint")) === "Made 6. Next line (Enter).", await p.textContent("#hint"));
+  await ctx.close();
+  ctx = await newCtx({ viewport: { width: 1280, height: 860 } });
+  p = await ctx.newPage(); await p.goto(page); await make222(p, false);
+  ck("S19: keyboard and mouse: 'Made 6. Next line (Enter).'", (await p.textContent("#hint")) === "Made 6. Next line (Enter).", await p.textContent("#hint"));
+  await ctx.close();
+
+  // S16 (craft #15, cold #9): the solved "= 6" reads at 4.5:1 or more over the real board in every theme, from
+  // computed colours
+  for (const [theme, contrast] of [["dark", "normal"], ["light", "normal"], ["dark", "high"], ["light", "high"]]) {
+    ctx = await newCtx({ viewport: { width: 390, height: 844 } });
+    await ctx.addInitScript((o) => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify(o)); } catch (e) { /* blocked */ } }, { theme, contrast });
+    p = await ctx.newPage(); await p.goto(page); await make222(p, false);
+    const m = await p.evaluate(() => {
+      const bg = el => { for (; el; el = el.parentElement) { const c = getComputedStyle(el).backgroundColor; if (!/^rgba\(.*, 0\)$/.test(c) && c !== "transparent") return c; } return "rgb(0, 0, 0)"; };
+      const lum = c => c.match(/[\d.]+/g).slice(0, 3).map(Number).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); })
+        .reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+      const el = document.getElementById("val"), a = lum(getComputedStyle(el).color), b = lum(bg(el));
+      return { r: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), fg: getComputedStyle(el).color, bg: bg(el), text: el.textContent, gold: document.getElementById("board").classList.contains("gold") };
+    });
+    const tag = theme + (contrast === "high" ? " High contrast" : "");
+    ck("S16: the solved '= 6' is at least 4.5:1 over the board (" + tag + ")", m.gold && m.text === "= 6" && m.r >= 4.5, JSON.stringify(m));
+    await p.waitForTimeout(700); if (theme === "light") await shot(p, "made-" + theme + "-" + contrast);
+    await ctx.close();
+  }
 };

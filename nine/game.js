@@ -8,8 +8,10 @@
   var store = K.store("numberics_nine_v1");
   var CPU_MS = 650;               // the computer's think time: a pause, not motion, so reduced motion keeps it
   var HOLD_MS = 1500;             // R13: the last take stays on an undimmed board this long before the end card
+  var DOUBLE_MS = 400;            // S18: a second tap this soon after picking a tile is a double tap, not a new take
+  var selAt = 0;                  // when the chosen tile was picked
   var DEFS = [
-    { id: "undo", label: "Undo", desc: "Take back your last turn." },
+    { id: "undo", label: "Undo", desc: "Take back your last turn. No rewards for the rest of this round." }, // S9: as Five
     { id: "add", label: "Add", desc: "Add 1 to a tile (up to 9), then take." },
     { id: "pass", label: "Pass", desc: "Skip your turn (once per round)." },
     { id: "peek", label: "Peek", desc: "Show one winning move, if there is one." },
@@ -230,7 +232,7 @@
   function why(id) {
     if (!state.power.you[id]) return false;
     if (!live()) return "Not after a round ends.";
-    if (id === "undo") return N.canUndo(state) ? false : "Nothing to take back yet this round.";
+    if (id === "undo") return N.canUndo(state) ? false : "Nothing to take back yet."; // S9: the Undo line got longer
     if (state.turn !== "you") return "Wait for your turn.";
     if (id === "pass" && state.passed && state.passed.you) return "Once per round.";
     if (id === "pass" && !N.canPass(state)) return "Not right after the computer passes.";
@@ -303,9 +305,10 @@
     if (up && !was) setTimeout(function () { if (cardWas) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* a nicety */ } } }, 0);
     if (live()) return;
     var sc = state.score.you + "-" + state.score.cpu;
-    // the reward line: what paid, or why nothing did (R2: Add or Pass used; R15: every slot full)
-    var aw = state.award && state.award.who === "you" ? "+" + NAME[state.award.name] :
+    // the reward line: what paid, or why nothing did (R2: Add or Pass used; S9: Undo used; R15: every slot full)
+    var aw = state.award && state.award.who === "you" ? "+1 " + NAME[state.award.name] :
       state.roundOver === "you" && state.noAward === "power" ? "No power-up: you used Add, Pass or Peek this round." :
+      state.roundOver === "you" && state.noAward === "undo" ? "No power-up after Undo this round." :
       state.roundOver === "you" && state.noAward === "full" ? "Power-ups full." : "";
     var bv = best[bestKey(state)];
     $("over-best").hidden = !(state.matchOver === "you" && newBest);
@@ -392,6 +395,7 @@
     if (!myTurn() || !state.heaps[i]) return;
     if (sel !== i) peekMark = null;
     info = ""; if (sel !== i || amt) sfx("tick");
+    if (sel !== i) selAt = Date.now();
     sel = i; amount = Math.max(1, Math.min(state.heaps[i], amt || 1));
     render();
   }
@@ -453,8 +457,9 @@
     var h = e.target.closest ? e.target.closest(".heap[data-i]") : null; if (!h) return;
     var i = +h.getAttribute("data-i"), v = state.heaps[i];
     if (targeting === "add") return addTo(i);
-    // a pip sets the take only on the chosen tile; the first tap on a tile picks it with a take of 1 (cold #31:
-    // a first tap that landed on a pip took 7 from an 8 by accident)
+    // a pip sets the take only on the chosen tile; the first tap picks it with a take of 1 (cold #31). S18: a tile's
+    // middle is its top pips, so a double tap set "Take 7 from the 7": a tap within DOUBLE_MS of the pick keeps 1.
+    if (sel === i && Date.now() - selAt < DOUBLE_MS) return;
     var pip = e.target.closest(".pips i");
     if (pip && sel === i) { var k = +pip.getAttribute("data-k"); if (k < v) return select(i, v - k); }
     if (sel === i) return step(sel === i && amount >= v ? 1 - amount : 1); // tapping the chosen tile again takes one more (wraps)

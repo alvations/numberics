@@ -35,7 +35,6 @@
   <div id="board" class="board" tabindex="0" aria-label="The numbers 1 to 9. Arrow keys move, Enter claims.">
     <div id="hash" class="hash" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div id="tiles" class="tiles"></div>
-    <svg id="wl" class="wl" aria-hidden="true" hidden><line></line></svg>
     <div id="over" class="over" hidden>
       <h2 id="over-title">Round over</h2>
       <div id="trio" class="trio" role="img"></div>
@@ -61,8 +60,8 @@
     <p>Three numbers that make 15 win a round. A win without Erase, Double or Peek earns a power-up, and power-ups last
      one match: each new match starts with one Undo. Grid shows the same nine numbers as a magic square: every line adds
      up to 15, so it is tic-tac-toe.</p>
-    <p>On Hard the computer plays perfectly, so perfect play draws. A drawn round gives you an Erase, so perfect play wins:
-     use the Erase well and you win the next round. The computer can Erase and Double. Keys: arrows, Enter, V, 1-4.</p>
+    <p>On Hard the computer plays perfectly, so perfect play draws. The first drawn round of a match gives you an Erase,
+     once per match, so perfect play wins: use that Erase well and you win the next round. The computer can Erase and Double. Keys: arrows, Enter, V, 1-4.</p>
     <p class="how-more"><button id="how-steps" class="btn" type="button" data-howto>Show the three steps</button></p>
   </details>
   <section class="more" aria-labelledby="more">

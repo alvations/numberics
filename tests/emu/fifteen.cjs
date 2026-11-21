@@ -44,8 +44,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
     ck("a saved choice is kept (Hard after reload)", (await S(p0)).diff === "hard");
     const seg = await p0.locator(".views button").evaluateAll(b => b.map(x => x.getBoundingClientRect().height));
     ck("the Numbers/Grid switch is 44 px tall", seg.every(h => h >= 44), JSON.stringify(seg));
-    // integration: the win line is hidden until a win (a zero-length round-capped line drew a dot in the board's corner)
-    ck("no win line (or stray dot) on a fresh board", await p0.evaluate(() => document.getElementById("wl").hasAttribute("hidden") && getComputedStyle(document.getElementById("wl")).display === "none"));
+    // owner O-11: no line is drawn through a winning three (Grid view), so there is no line element at all
+    ck("no win line element on the page (owner O-11)", await p0.evaluate(() => !document.getElementById("wl") && !document.querySelector(".tiles svg, .board > svg, .board line")));
     ck("the games list is the cards, this game marked", await p0.locator("#games.cards a.card").count() === 10 && await p0.locator('#games a.card[aria-current="page"][data-id="fifteen"]').count() === 1);
     ck("no page errors (first visit)", e0.length === 0, e0.join("|"));
     await c0.close();
@@ -71,7 +71,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("pills are You, Computer, Record", (await p.locator(".stat > span").allTextContents()).join() === "You,Computer,Record", (await p.locator(".stat > span").allTextContents()).join());
   ck("empty record reads none, dimmed", (await p.textContent("#rec")) === "none" && await p.locator("#rec.none").count() === 1);
   ck("round number in the hint at the start of a round", /^Round 1 of 5\. Your turn/.test(await p.textContent("#hint")), await p.textContent("#hint"));
-  ck("R14: the how-to says the computer can use power-ups on Hard", /On Hard [\s\S]*computer can Erase and\s+Double/.test(await p.textContent(".how")) && /without Erase, Double or Peek/.test(await p.textContent(".how")) && /On Hard the computer plays perfectly, so perfect play draws\. A drawn round gives you an Erase, so perfect play wins/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
+  ck("R14: the how-to says the computer can use power-ups on Hard", /On Hard [\s\S]*computer can Erase and\s+Double/.test(await p.textContent(".how")) && /without Erase, Double or Peek/.test(await p.textContent(".how")) && /On Hard the computer plays perfectly, so perfect play draws\. The first drawn round of a match gives you an Erase, once per match, so perfect play wins/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
   // TRIAGE4: the how-to says power-ups last one match and points at Grid (cold #10, mechanics #3)
   ck("how-to: power-ups last one match; Grid is the magic square", /power-ups last one match: each new match starts with one Undo/.test((await p.textContent(".how")).replace(/\s+/g, " ")) && /Grid shows the same nine numbers as a magic square/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
   await forge(p, { diff: "easy" });
@@ -103,7 +103,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the computer's tiles are all the cool fill", look.theirs === look.cool && look.theirs2 === look.cool, JSON.stringify(look));
   ck("free tiles are neutral", look.free === look.cell, JSON.stringify(look));
   ck("number on a claimed tile is dark ink (readable)", /^rgb\((2\d|1\d|\d),/.test(look.mineInk), look.mineInk);
-  ck("the computer's tile label says computer", look.label === "computer");
+  ck("the computer's tile label says computer, or cpu where a Numbers pillar is too narrow (O-11)", look.label === "computer" || look.label === "cpu", look.label);
   ck("ownership needs no ring", look.mineShadow === "none", look.mineShadow);
   await p.keyboard.press("Tab"); await p.evaluate(() => document.querySelector('.ft[data-n="2"]').focus());
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowLeft");
@@ -116,7 +116,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("empty ones are aria-disabled", await p.locator('#tray .pw[aria-disabled="true"]').count() === 4);
   await p.locator("#tray .pw").nth(3).click({ force: true });
   ck("tapping empty Double explains it and how to earn it", /^Double: Claim two numbers this turn\. Win a round/.test(await p.textContent("#hint")), await p.textContent("#hint"));
-  ck("tray tooltip voice", (await p.locator("#tray .pw").nth(0).getAttribute("title")) === "1: Undo. Take back your last turn.");
+  ck("tray tooltip voice", (await p.locator("#tray .pw").nth(0).getAttribute("title")) === "1: Undo. Take back your last turn. No rewards for the rest of this round.");
   await forge(p, { owner: B([2], [4]), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 0 } });
   await p.keyboard.press("2");
   ck("key 2 with no Erase explains too", /^Erase: /.test(await p.textContent("#hint")), await p.textContent("#hint"));
@@ -151,7 +151,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("second tap starts a Hard match", (await S(p)).diff === "hard" && (await p.textContent('#diff button[data-d="hard"]')) === "Hard");
   ck("Hard round 1: no Erase", (await S(p)).power.erase === 0 && /^Round 1 of 5\. Your turn\. Claim any number\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await p.locator("#tray .pw").nth(1).click({ force: true });
-  ck("empty Erase on Hard says how it comes", /On Hard you get one after a drawn round/.test(await p.textContent("#hint")), await p.textContent("#hint"));
+  ck("empty Erase on Hard says how it comes", /On Hard you get one after the first drawn round of a match\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await p.evaluate(() => { const st = window.__fifteen.state; st.round = 2; st.rounds = [0]; st.wins = [1, 0, 0]; st.power.erase = 1; window.__fifteen.state = st; });
   ck("after a draw, Hard tells you about the round's Erase", /^Round 2 of 5\. Your turn; you hold an Erase\.$/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await p.click('#diff button[data-d="medium"]');
@@ -366,7 +366,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("Numbers: tiles stay a good tap size at 375px (44px or more)", bx.every(b => b.w >= 44 && b.h >= 44), JSON.stringify(bx[0]));
   const hop = await p.evaluate(() => getComputedStyle(document.querySelector("#hash i")).opacity);
   ck("Numbers: no grid lines drawn", hop === "0", hop);
-  ck("Numbers: the computer label fits inside its tile", await p.evaluate(() => { const t = document.querySelector('.ft[data-n="1"]'), s = t.lastChild; s.textContent = "computer"; const ok = s.scrollWidth <= t.clientWidth; s.textContent = ""; return ok; }));
+  // owner O-11: labels read across (never sideways), are never cut off, and every number sits at the same height
+  await forge(p, { owner: B([2, 8], [4, 5]), turn: 1 });
+  const al = await p.evaluate(() => [...document.querySelectorAll(".ft")].map(t => { const s = t.lastChild, b = t.firstChild, r = t.getBoundingClientRect();
+    return { n: t.dataset.n, txt: s.textContent, wm: getComputedStyle(s).writingMode, cut: s.scrollWidth > s.clientWidth + 0.5, top: Math.round(b.getBoundingClientRect().top - r.top), mid: Math.round(b.getBoundingClientRect().left + b.getBoundingClientRect().width / 2 - r.left - r.width / 2) }; }));
+  ck("Numbers: owner labels read across, never sideways (O-11)", al.filter(a => a.txt).length === 4 && al.every(a => a.wm === "horizontal-tb"), JSON.stringify(al));
+  ck("Numbers: no owner label is cut off (O-11)", al.every(a => !a.cut), JSON.stringify(al));
+  ck("Numbers: every number at the same height and centred, owned or free (O-11)", new Set(al.map(a => a.top)).size === 1 && al.every(a => Math.abs(a.mid) <= 1), JSON.stringify(al));
   await p.click("#v-grid"); await p.waitForTimeout(600); bx = await boxes();
   const rowOf = (ns) => new Set(ns.map(n => bx[n - 1].y)).size === 1;
   ck("Grid: the magic square 8 1 6 / 3 5 7 / 4 9 2", rowOf([8, 1, 6]) && rowOf([3, 5, 7]) && rowOf([4, 9, 2]) && bx[7].x < bx[0].x && bx[0].x < bx[5].x && bx[7].y < bx[2].y && bx[2].y < bx[3].y, JSON.stringify(bx));
@@ -435,6 +441,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("Peek names your win", /7 wins it/.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await tile(p, 7).click(); await card(p);
   ck("a round won after Peek pays nothing, and says why", (await p.textContent("#over-best")) === "No power-up: you used Peek this round." && (await S(p)).result.earned === null, await p.textContent("#over-best"));
+  // S9: a round won after an Undo pays nothing either, and the card says so in Five's words
+  await forge(p, { owner: B([2, 6], [1, 3]), turn: 1, undone: true, power: { undo: 0, erase: 0, peek: 0, double: 0 } });
+  await tile(p, 7).click(); await card(p);
+  ck("S9: a round won after Undo pays nothing, and says why", (await p.textContent("#over-best")) === "No power-up after Undo this round." && (await S(p)).result.why === "undo", await p.textContent("#over-best"));
   await forge(p, { owner: B([2], []), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 0 } });
   await p.locator("#tray .pw").nth(2).click({ force: true });
   ck("the tray says Peek stops the reward", /Win a round without Erase, Double or Peek to earn one\./.test(await p.textContent("#hint")), await p.textContent("#hint"));
@@ -500,11 +510,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
     const t = window.__fifteen; const r = t.run; t.state = s; r.first = 5; });
   await tile(p, 9).click();                                   // 1 + 5 + 9 = 15, the middle column of the magic square
   await p.waitForTimeout(300);
-  const wl = await p.evaluate(() => { const l = document.querySelector("#wl line"), sv = document.getElementById("wl"); return { shown: !sv.hasAttribute("hidden") && getComputedStyle(sv).display !== "none", x1: +l.getAttribute("x1"), y1: +l.getAttribute("y1"), x2: +l.getAttribute("x2"), y2: +l.getAttribute("y2"), anim: l.getAnimations().map(a => Object.keys(a.effect.getKeyframes()[0])) }; });
-  ck("Grid win: a line is drawn through the three", wl.shown && Math.abs(wl.x1 - wl.x2) < 2 && Math.abs(wl.y1 - wl.y2) > 50, JSON.stringify(wl));
-  ck("Grid win: the line draws by stroke-dashoffset", wl.anim.some(k => k.includes("strokeDashoffset")), JSON.stringify(wl.anim));
+  ck("Grid win: no line is drawn through the three (owner O-11)", await p.evaluate(() => !document.querySelector("#wl, .tiles svg, .board > svg, .board line")));
   ck("Grid win: the winning three pulse", await p.locator(".ft.win").count() === 3);
-  await shot(p, "win-line");
+  await shot(p, "grid-win");
   await card(p);
   const ids = await p.evaluate(() => window.__fifteen.cardIds);
   ck("trophies: a round won in Grid view, started on 5", ["fif_round", "fif_grid", "fif_mid"].every(i => ids.includes(i)), ids.join());
@@ -546,7 +554,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 17.5 ms: vsync jitter in headless (d-notes B2); dropped frames <= 5%
   ck("frames: at most 5% over 17.5 ms in a 30-move session", slow / frs.length <= 0.05, slow + "/" + frs.length + " worst " + worst.toFixed(1));
   const nodes1 = await p.evaluate(() => document.getElementsByTagName("*").length);
-  ck("nodes: the board never grows (nine tiles, one line)", await p.locator(".ft").count() === 9 && await p.locator("#wl line").count() === 1 && nodes1 <= nodes0 * 1.05, nodes0 + " -> " + nodes1);
+  ck("nodes: the board never grows (nine tiles, no line)", await p.locator(".ft").count() === 9 && await p.locator(".board line").count() === 0 && nodes1 <= nodes0 * 1.05, nodes0 + " -> " + nodes1);
   ck("no page errors (motion and trophies)", errs5.length === 0, errs5.join("|"));
   await ctx.close();
 
@@ -608,6 +616,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
         const ls = await labels();
         ck("labels at least 12 px and inside the tile (" + w + (big ? " Larger text" : "") + ", " + v + ")", ls.length === 4 && ls.every(l => l.fs >= 12 && l.inside), JSON.stringify(ls));
         ck("no sideways scroll (" + w + (big ? " Larger text" : "") + ", " + v + ")", await q.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+        if (v === "numbers") {     // owner O-11 at every size: across, never cut, numbers level
+          const al = await q.evaluate(() => [...document.querySelectorAll(".ft")].map(t => ({ txt: t.lastChild.textContent, wm: getComputedStyle(t.lastChild).writingMode,
+            cut: t.lastChild.scrollWidth > t.lastChild.clientWidth + 0.5, top: Math.round(t.firstChild.getBoundingClientRect().top - t.getBoundingClientRect().top) })));
+          ck("Numbers labels across, uncut, numbers level (" + w + (big ? " Larger text" : "") + ")", al.every(a => a.wm === "horizontal-tb" && !a.cut) && new Set(al.map(a => a.top)).size === 1, JSON.stringify(al));
+        }
         if (w === 320 && big && v === "numbers") await shot(q, "320-large");
       }
     }

@@ -288,8 +288,16 @@ t("lazy music: Music off loads nothing; turning it on later loads it then; stop(
   const p = lazyWin(); p.w.NumbericsMusic.stop(); p.w.fire("click", { isTrusted: true });
   const calls = p.real(); p.added[0].onload(); ok(!calls.some(c => c[0] === "start"), "stopped: no start");
 });
-t("lazy music: game id from #games[data-current], endless -> two, none -> two; a failed load is survived", () => {
-  [[{ getAttribute: () => "endless" }, "two"], [null, "two"], [{ getAttribute: () => "seven" }, "seven"]].forEach(([g, want]) => {
+t("lazy music: the games page (no #games[data-current]) never loads music.js; a page's own start() still does (TRIAGE5 S2)", () => {
+  const o = lazyWin({ game: null });
+  ["pointerdown", "keydown", "touchend", "click"].forEach(k => o.w.fire(k, { isTrusted: true }));
+  o.w.fire("numberics:settings", { detail: { music: true } });
+  ok(o.added.length === 0, "games page: nothing fetched after taps and a Settings change");
+  const g = lazyWin({ game: null }); g.w.NumbericsMusic.start("sudoku"); g.w.fire("click", { isTrusted: true });
+  ok(g.added.length === 1, "a page that names its game loads it");
+});
+t("lazy music: game id from #games[data-current], endless -> two; a failed load is survived", () => {
+  [[{ getAttribute: () => "endless" }, "two"], [{ getAttribute: () => "seven" }, "seven"]].forEach(([g, want]) => {
     const o = lazyWin({ game: g }); o.w.fire("touchend", { isTrusted: true }); const calls = o.real(); o.added[0].onload();
     ok(calls.find(c => c[0] === "start")[1] === want, want);
   });

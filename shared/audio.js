@@ -1,17 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * NumbericsAudio (docs/design/REDESIGN.md 6.4, 7): procedural Web Audio sounds and vibration. No files, no network.
- *
- * One AudioContext, created and resumed only inside a user gesture (pointerdown / keydown / touchend / click,
- * capture listeners registered once on load), synchronously in the handler as melon-eight does, so iOS and iframes
- * unlock. Before the first gesture every sound is a silent no-op and no context exists.
- * Graph: voice gain -> master gain (volume * 0.5, 0 when Sound is off; changes ramp over 30 ms) ->
- * DynamicsCompressor (-18 dB, 4:1, 3 ms, 120 ms) -> destination. One call = one voice; at most 8 voices
- * (the oldest is cut with a 5 ms fade); the same sound at most once per 40 ms; nothing plays while the tab is hidden.
- * Every node is stopped and disconnected when its voice ends.
- * Settings come from NumbericsSettings.get() (safe fallback) and the window event "numberics:settings".
- * docs/design/MUSIC.md: the SFX gains, the key shift (numberics:music), dip(), musicBus() (one context) and the lazy
- * music loader at the end of this file (a stub NumbericsMusic now, shared/music.js after the first gesture).
- * Also require()-able: module.exports = { make, note, NAMES, BUZZ, lazyMusic } for the Node tests. */
+ * NumbericsAudio (REDESIGN.md 6.4, 7; MUSIC.md): procedural Web Audio sounds and vibration, no files, no network. One
+ * context, made only inside a user gesture; the lazy music loader at the end. Notes: docs/CODE-NOTES.md#sharedaudiojs */
 (function (root) {
   "use strict";
   var NAMES = "tick slide merge land pop burst pip place best power trophy win lose bad".split(" ");
@@ -150,10 +139,7 @@
       } catch (e) { return false; }
       return true;
     }
-    // The context starts a moment after resume() (a context made on a key that is not an activation, such as Escape,
-    // or on any first tap where the browser starts it asynchronously). Sounds asked for within WAKE_MS of that resume
-    // are booked on the waking clock, so the tap that wakes it is not silent; if the start comes later than that, those
-    // voices are cut rather than played late.
+    // sounds asked for within WAKE_MS of resume() play on the waking clock; later ones are cut, never played late
     function wake(p) {
       var g = ++wakeGen, t0 = now(); waking = t0 + WAKE_MS;
       function settle() {
@@ -237,8 +223,7 @@
       try { return nav.vibrate(pat) !== false; } catch (e) { return false; }
     }
 
-    // render(name, arg, o): the sound through the same graph in an OfflineAudioContext.
-    // Resolves { peak, clipped, len } or null when OfflineAudioContext is missing. o.volume (0..1, default 1), o.key.
+    // render(name, arg, o): the sound rendered offline -> { peak, clipped, len }, or null
     function render(name, arg, o) {
       o = o || {};
       var OAC = null; try { OAC = w.OfflineAudioContext || w.webkitOfflineAudioContext || null; } catch (e) { OAC = null; }
@@ -284,8 +269,10 @@
       var g = q.game; if (!g) try { g = d.querySelector("#games[data-current]").getAttribute("data-current"); } catch (e) { g = null; }
       return g === "endless" || !g ? "two" : g;
     }
+    // the games page plays no music, only a game page does (TRIAGE5 S2)
+    function gamePage() { if (q.game) return true; try { return !!d.querySelector("#games[data-current]"); } catch (e) { return false; } }
     function load(s) {
-      if (st || !tapped || !src || real() || !on(s)) return;
+      if (st || !tapped || !src || real() || !on(s) || !gamePage()) return;
       st = 1;
       var el = d.createElement("script"); el.src = src; el.async = true;
       el.onload = function () {

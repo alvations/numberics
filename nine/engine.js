@@ -88,6 +88,8 @@
     // R2: a side that used Add, Pass or Peek this round earns nothing for winning it (round 3: Peek counts as help,
     // like Six's Hint); Pass is once per round per side. s.peeked survives Undo, so Peek + Undo cannot clear it.
     s.powered = { you: false, cpu: false }; s.passed = { you: false, cpu: false }; s.peeked = { you: false, cpu: false };
+    // R2 for Undo (round 5, S9, as Five): once you Undo in a round, winning it pays nothing; the mark survives later rewinds
+    s.undone = false;
     s.lastTurn = null; s.last = null; s.prev = null; s.roundOver = null; s.award = null;
   }
   // A new run: level 3 (or o.level), round 1 of a best of five, one Undo each side.
@@ -124,10 +126,11 @@
     s.roundOver = winner; s.score[winner]++;
     // Winning a round earns one power-up, unless the winner used Add, Pass or Peek in it (R2: a power-up never earns
     // one). The computer earns too, on Hard only (it only plays them on Hard). s.noAward says why nothing paid:
-    // "power" (Add, Pass or Peek used) or "full" (every slot at the cap, R15).
+    // "power" (Add, Pass or Peek used), "undo" (you used Undo this round, S9) or "full" (every slot at the cap, R15).
     s.award = null; s.noAward = null;
     if (winner === "you" || s.diff === "hard") {
       if (s.powered && s.powered[winner]) s.noAward = "power";
+      else if (winner === "you" && s.undone) s.noAward = "undo";
       else {
         var name = Power.award(s.power[winner], winner === "you" ? POWERS : CPU_POWERS, rnd(s));
         if (name) s.award = { who: winner, name: name }; else s.noAward = "full";
@@ -176,7 +179,8 @@
   function canUndo(s) { return !!s.prev && (s.power.you.undo || 0) > 0 && live(s); }
 
   // Power-ups for the side to move (the player calls this with s.turn === "you"; undo is the player's only).
-  //   undo        restores the start of the player's last turn, stock included (no farming); spent Peeks stay spent
+  //   undo        restores the start of the player's last turn, stock included (no farming); spent Peeks stay spent;
+  //               the round no longer pays you (s.undone, S9)
   //   add, tile   +1 to one live tile, never past 9; once per turn; you still take after it
   //   pass        skip this turn; once per round per side, and not right after the other side passed
   //   peek        spends a charge and returns one winning move in .move (null when there is none); the round no longer pays
@@ -189,6 +193,7 @@
       u.power.you.peek = Math.min(u.power.you.peek, s0.power.you.peek);
       // ...and a round with a Peek in it stays unpaid (R2): Undo never clears what the Peek showed
       if (s0.peeked && s0.peeked.you) { markPowered(u, "you"); u.peeked = u.peeked || { you: false, cpu: false }; u.peeked.you = true; }
+      u.undone = true; // R2 (S9): a round won after an Undo pays nothing, in all three round games
       return { ok: true, state: u };
     }
     if (!live(s0)) return fail;
@@ -224,20 +229,17 @@
   }
 
   // ---- the computer ----
-  // measured (round 4, 2000 matches a level): a beginner (evens two tiles, else random) wins about 59% of Medium
-  // rounds on three tiles (46% with no slip), against 86% on Easy and 2% on Hard; perfect play still always wins
+  // S11: Medium plays the winning reply but slips MEDIUM_SLIP of the time at any tile count; a lone last tile is always
+  // taken; Hard never slips. Perfect play still wins every Easy and Medium match. Table: docs/DESIGN.md, Nine.
   var MEDIUM_SLIP = 0.25;
   function randomMove(s) { return pickIn(s, legalMoves(s.heaps)); }
   function liveCount(h) { return h.filter(Boolean).length; }
   // Decide the computer's move on s (mutates s.seed only). Returns {tile, to}.
   function chooseMove(s) {
-    var h = s.heaps, best = peek(h, s.misere);
+    var h = s.heaps, best = peek(h, s.misere), n = liveCount(h);
     if (s.diff === "easy") return randomMove(s);
     if (s.diff === "medium") {
-      // Medium plays the winning reply once two tiles remain, but slips MEDIUM_SLIP of the time with two tiles
-      // (round 4, mechanics #7: never slipping left a beginner no way to win). A lone last tile is always taken.
-      var n = liveCount(h);
-      if (best && (n === 1 || (n === 2 && rnd(s) >= MEDIUM_SLIP))) return best;
+      if (best && (n === 1 || rnd(s) >= MEDIUM_SLIP)) return best;
       return randomMove(s);
     }
     if (best) return pickIn(s, winningMoves(h, s.misere));

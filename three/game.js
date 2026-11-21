@@ -28,8 +28,23 @@
 
   var saved = store.load();
   var hadSave = !!(saved && valid(saved.state));
-  var best = { score: (saved && saved.bestScore) || 0, used: (saved && saved.bestUsed) || 0 };
-  var state = hadSave ? saved.state : E.newGame(K.freshSeed());
+  // Tiers (O-13, as Two: three/engine.js payFrom): Easy, Medium, Hard differ only in which joins also earn a power-up
+  // (Hard: flushes only). The tier is the state's own (state.tier; none = Hard), so a save from before the tiers loads
+  // as Hard and nobody's game in progress changes rules. A first visit with no save starts on Medium. `tier` (the
+  // choice for the next game) is saved with the game.
+  var TIER_NAME = { easy: "Easy", medium: "Medium", hard: "Hard" };
+  function okTier(t) { return E.TIERS.indexOf(t) >= 0; }
+  var tier = saved && okTier(saved.tier) ? saved.tier : hadSave ? E.tierOf(saved.state) : "medium";
+  var state = hadSave ? saved.state : E.newGame(K.freshSeed(), tier);
+  tier = E.tierOf(state);
+  // Best score per tier: bestScore / bestUsed (the old fields) stay Hard's, so an old save keeps its best on Hard;
+  // Easy and Medium keep theirs in `bests`.
+  var bests = { hard: { score: (saved && +saved.bestScore) || 0, used: (saved && +saved.bestUsed) || 0 } };
+  ["easy", "medium"].forEach(function (t) {
+    var b = saved && saved.bests && saved.bests[t];
+    bests[t] = { score: (b && +b.score) || 0, used: (b && +b.used) || 0 };
+  });
+  var best = bests[tier];
   // the record when this run began, so the end screen can say "New best." (an old save has none: count it as 0
   // only if this run already holds the record)
   var base = saved && Number.isFinite(saved.base) ? saved.base : (best.score > state.score ? best.score : 0);
@@ -53,10 +68,12 @@
   function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
 
   function persist() {
+    best = bests[E.tierOf(state)];
     if (state.score > best.score) { best.score = state.score; best.used = state.used; }
-    store.save({ state: state, bestScore: best.score, bestUsed: best.used, base: base, seen: seen, flushed: flushed });
-    try {
-      if (PR) PR.put(ID, { best: best.score ? "Best " + K.fmt(best.score) : "", live: !state.over && state.moves > 0,
+    store.save({ state: state, tier: tier, bestScore: bests.hard.score, bestUsed: bests.hard.used,
+      bests: { easy: bests.easy, medium: bests.medium }, base: base, seen: seen, flushed: flushed });
+    try { // the card summary: this tier's best
+      if (PR) PR.put(ID, { best: best.score ? TIER_NAME[E.tierOf(state)] + " best " + K.fmt(best.score) : "", live: !state.over && state.moves > 0,
         liveText: "Score " + K.fmt(state.score) });
     } catch (e) { /* the card summary is a nicety */ }
   }
@@ -142,13 +159,23 @@
   }
 
   // ---- drawing the chrome (stats, tray, hint, end card) ----
-  var EARN = "Earn one with every Flush.";
+  // how each tier earns, one short sentence each (the tray says it; How to play says the same; O-14)
+  var EARNS = {
+    hard: "Earn one with every Flush.",
+    medium: "Earn one with every Flush, or a join as big as your top tile (18 up).",
+    easy: "Earn one with every Flush, or a join half your top tile or more (9 up)."
+  };
   var DEFS = [
-    { id: "undo", label: "Undo", desc: "Take back the last move.", earn: "You start with one. " + EARN },
-    { id: "smash", label: "Smash", desc: "Remove one tile.", earn: EARN },
-    { id: "swap", label: "Swap", desc: "Trade two neighbouring tiles.", earn: EARN },
-    { id: "third", label: "Third", desc: "Turn a 1 or a 2 into a 3.", earn: EARN },
+    { id: "undo", label: "Undo", desc: "Take back the last move." },
+    { id: "smash", label: "Smash", desc: "Remove one tile." },
+    { id: "swap", label: "Swap", desc: "Trade two neighbouring tiles." },
+    { id: "third", label: "Third", desc: "Turn a 1 or a 2 into a 3." },
   ];
+  // the tray's defs with this tier's earn line (Undo: you start with one)
+  function defs() {
+    var e = EARNS[E.tierOf(state)];
+    return DEFS.map(function (d) { return { id: d.id, label: d.label, desc: d.desc, earn: (d.id === "undo" ? "You start with one. " : "") + e }; });
+  }
   var NAME = { undo: "Undo", smash: "Smash", swap: "Swap", third: "Third" };
   // targeting copy always says how to tap (phones aim by tapping); with a keyboard it adds arrows + Enter and Esc.
   // Every line fits on one line at 375 px, so the hint never pushes the board down (craft #11, #13).
@@ -175,15 +202,16 @@
              swap: "No two different tiles sit side by side.", third: "There is no 1 or 2 on the board." }[id];
   }
   function explain(id) {
-    var d = DEFS[E.POWERS.indexOf(id)];
+    var d = defs()[E.POWERS.indexOf(id)];
     note = P.info(d, state.power, why(id), {}); chrome();
     snd("bad");
   }
 
   var shownNext = null;
   function chrome() {
+    Array.prototype.forEach.call($("diff").children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-diff") === E.tierOf(state))); });
     $("score").textContent = K.fmt(state.score);
-    var bv = Math.max(best.score, state.score); // R11: an empty best is a dimmed "none", never 0
+    var bv = Math.max(bests[E.tierOf(state)].score, state.score); // R11: an empty best is a dimmed "none", never 0
     $("best").textContent = bv ? K.fmt(bv) : "none"; $("best").classList.toggle("none", !bv);
     var nx = $("next");
     if (shownNext !== state.next) {
@@ -191,7 +219,7 @@
       if (shownNext !== null) M.play(nx, [{ opacity: 0 }, { opacity: 1 }], { duration: 120, easing: "linear" }, [{ opacity: 0 }, { opacity: 1 }]);
       shownNext = state.next;
     }
-    P.tray($("tray"), DEFS, state.power, {
+    P.tray($("tray"), defs(), state.power, {
       armed: targeting && targeting.name,
       disabled: why,
       onUse: activate,
@@ -200,6 +228,7 @@
     // stuck with only Undo left: the run is over unless it is rewound, so it gets the end card too (cold #13), with Undo
     var stuck = !state.over && !E.canMove(state) && onlyUndo();
     $("hint").textContent = targeting ? targetHint()
+      : tierArm && !state.over ? "Tap " + TIER_NAME[tierArm] + " again: this ends the run."
       : note ? note
       : state.over ? (viewing ? "Tap the board for the summary." : "")
       : stuck ? ""
@@ -255,20 +284,31 @@
   // one toast per flush event (a reward); a flush a power-up set up scores but pays no power-up (R2). The hint band then
   // says what the earned power-up does, until the next action (cold #12, #14: "Third" is not guessable from its name)
   function earned(list) {
-    var got = []; list.forEach(function (f) { if (f.power && got.indexOf(f.power) < 0) got.push(f.power); });
+    var got = []; list.forEach(function (f) { if (f.power && got.indexOf(f.power) < 0) got.push(f.power); }); // flushes and joins
     if (!got.length) return "";
     if (got.length > 1) return "Earned " + got.map(function (p) { return NAME[p]; }).join(" and ") + ". Tap one to see what it does.";
     var d = DEFS[E.POWERS.indexOf(got[0])];
     return "Earned " + (got[0] === "undo" ? "an " : "a ") + d.label + ": " + d.desc.charAt(0).toLowerCase() + d.desc.slice(1);
   }
-  function announce(list) {
-    if (!list.length) return;
+  // joins (Easy, Medium: O-13) that reached the tier's bar: each pays "+1 Name" in the same toast as the swipe's flush
+  function announce(list, joins) {
+    joins = joins || [];
+    var jp = joins.filter(function (j) { return j.power; }).map(function (j) { return " +1 " + NAME[j.power]; }).join("");
+    if (!list.length) {
+      if (!joins.length) return;
+      var top = Math.max.apply(null, joins.map(function (j) { return j.value; })), made = "Made " + K.fmt(top);
+      if (jp) K.toast(made + jp);
+      else if (joins.some(function (j) { return j.full; })) K.toast(made + ". Power-ups full.", "info"); // R15
+      else K.toast(made + ". No reward right after a power-up.", "info"); // R2: the swipe after Smash, Swap or Third
+      note = earned(joins);
+      return;
+    }
     flushed = true;
     var f = list[0], tail = list.length > 1 ? "  (x" + list.length + " cascade)" : "";
     // R15: a flush on a full stock says so, never a silent missing reward
-    var pays = f.power ? "  +" + NAME[f.power] : f.full ? ". Power-ups full" : f.paid ? "" : " (no power-up)";
-    K.toast("Rainbow flush " + f.values.join("-") + (f.value ? " = " + f.value : "") + ", +" + K.fmt(f.points) + pays + tail);
-    note = earned(list);
+    var pays = f.power ? " +1 " + NAME[f.power] : f.full ? ". Power-ups full" : f.paid ? "" : " (no power-up)";
+    K.toast("Rainbow flush " + f.values.join("-") + (f.value ? " = " + f.value : "") + ", +" + K.fmt(f.points) + pays + jp + tail);
+    note = earned(joins.concat(list));
   }
 
   // the last step of every timeline: the authoritative board, the end card, and the run's end
@@ -327,8 +367,9 @@
     begin(settle(newBest, { flushes: fl.length, top: state.top, grid: state.grid.slice(), moves: state.moves, run: run() }));
     tl.at(end, done);
 
-    announce(fl);
-    if (fl.some(function (f) { return f.power; })) sounds.sound(STEP, function () { snd("power"); });
+    var joins = r.joins || []; // Easy and Medium only
+    announce(fl, joins);
+    if (fl.some(function (f) { return f.power; }) || joins.some(function (j) { return j.power; })) sounds.sound(STEP, function () { snd("power"); });
     if (state.top > prevTop && state.top >= 96) buzz("big");
     if (newBest) ring();
     persist();
@@ -444,12 +485,33 @@
     viewing = on; note = ""; chrome();
     if (on) boardEl.focus({ preventScroll: true }); else $("again").focus({ preventScroll: true });
   }
-  function startNew() {
-    flush(); targeting = null; note = ""; viewing = false; pills = []; ended = false;
-    base = Math.max(best.score, state.score);
-    state = E.newGame(K.freshSeed()); persist(); render(true);
+  function startNew(t) {
+    flush(); targeting = null; note = ""; viewing = false; pills = []; ended = false; disarmTiers();
+    if (state.score > best.score) { best.score = state.score; best.used = state.used; }
+    if (t) tier = t;
+    best = bests[tier]; base = best.score;
+    state = E.newGame(K.freshSeed(), tier); persist(); render(true);
     duck(false);
   }
+  // ---- difficulty (the family's #diff row, as Two): a different tier starts a new game in it; while a run is going
+  // the button first says "Sure?" for 3 s and the hint line says why (R10). The choice is saved. ----
+  var tierArm = null, tierT = null;
+  function disarmTiers() {
+    clearTimeout(tierT); tierT = null; tierArm = null;
+    Array.prototype.forEach.call($("diff").children, function (x) { x.textContent = TIER_NAME[x.getAttribute("data-diff")]; });
+  }
+  Array.prototype.forEach.call($("diff").children, function (b) {
+    var t = b.getAttribute("data-diff");
+    b.addEventListener("click", function () {
+      snd("tick");
+      if (t === E.tierOf(state)) return;
+      if (state.moves > 0 && !state.over && tierArm !== t) {
+        disarmTiers(); K.clearToast(); tierArm = t; b.textContent = "Sure?"; chrome();
+        tierT = setTimeout(function () { disarmTiers(); chrome(); }, 3000); return;
+      }
+      startNew(t); K.toast(TIER_NAME[t] + ": new game");
+    });
+  });
 
   // ---- How to play: three steps in the family's one sheet (REDESIGN.md 1.3, 9.3; shared/howto.js, TRIAGE4 D8) ----
   function tiny(v) { var s = document.createElement("span"); s.className = "mt"; paint(s, v); return s.outerHTML; }
@@ -470,7 +532,7 @@
       onOpen: function () { flush(); targeting = null; chrome(); },
       onClose: function () { if (!seen) { seen = true; persist(); } } });
   });
-  K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, startNew);
+  K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, function () { startNew(); });
   $("again").addEventListener("click", function () { snd("tick"); startNew(); });
   $("over-view").addEventListener("click", function () { view(true); });
   $("over-undo").addEventListener("click", function () { activate("undo"); boardEl.focus({ preventScroll: true }); });
@@ -494,5 +556,6 @@
   window.__three = { get state() { return state; }, set state(s) { flush(); state = s; ended = !!s.over; pills = []; render(false); },
     render: function () { render(false); }, settle: flush, busy: function () { return !!finalFn || L.busy(); },
     get ids() { return ids.slice(); }, get base() { return base; }, set base(v) { base = v; }, openHowto: openHowto,
-    get viewing() { return viewing; }, set desk(v) { desk = !!v; chrome(); } };
+    get viewing() { return viewing; }, set desk(v) { desk = !!v; chrome(); },
+    get tier() { return tier; }, get best() { return best; } };
 })();

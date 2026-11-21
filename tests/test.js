@@ -272,8 +272,10 @@ t("R15 (critic S2): a full stock says so; the reward is skipped, not lost silent
   eq(r.milestones, [6]); eq(r.awarded, []); ok(r.full, "result flags the full stock"); eq(r.state.power, full);
   ok(!N.move(board([[5, 5, 0, 0], Z4, Z4, Z4], { top: 5 }), "left").full, "a normal award is not full");
   const gsrc = fs.readFileSync(path.join(__dirname, "..", "two", "game.js"), "utf8");
-  ok(/r\.full\) toast\("New tile " \+ N\.label\(top\) \+ "\. Power-ups full\.", "info"\)/.test(gsrc), "the client toasts it");
-  ok(/r\.marked\) toast\("New tile " \+ N\.label\(top\) \+ "\. Swapped and boosted tiles earn no reward\.", "info"\)/.test(gsrc), "and the marked case");
+  // news is "New tile 128" (a new top tile) or, on Easy and Medium, "Made 64" (a paying join below it; O-12)
+  ok(/var news = top >= N\.AWARD_FROM_LEVEL \? "New tile " \+ N\.label\(top\) : made \? "Made " \+ N\.label\(made\) : "";/.test(gsrc), "the news line");
+  ok(/r\.full\) toast\(news \+ "\. Power-ups full\.", "info"\)/.test(gsrc), "the client toasts it");
+  ok(/r\.marked\) toast\(news \+ "\. Swapped and boosted tiles earn no reward\.", "info"\)/.test(gsrc), "and the marked case");
 });
 // The R2 property (critic's method): the same moves with and without the power-up. After a Boost or a Swap, k = 0 to 5
 // neutral moves (legal in both lines, merging in neither: the dummy swipes that once laundered a reward), then each of
@@ -453,7 +455,7 @@ t("D-Two trophies, progress, how-to and music (REDESIGN.md 8.4, 3.5, 1.3, MUSIC.
   ok(/merges: r\.merges\.length, grid: state\.grid\.slice\(\),\s*moves: state\.moves, stuck: !N\.canMove\(state\), run: run/.test(g), "move fields");
   ok(/run: run \}\);\s*\/\/ the card summary/.test(g) || /store\.save\(\{ state: state, bestScore: best\.score, bestTop: best\.top, bestBefore: bestBefore, run: run \}\)/.test(g), "the run record is saved with the game");
   ok(/NP\.put\("two", \{ best:/.test(g), "progress put on persist");
-  ok(/UI\.howto\("two", \{ title: "Two", steps: STEPS, saved: !!saved \|\| state\.moves > 0 \}\)/.test(g) && !/seenHowto|markHowto/.test(g), "the shared how-to (D8): once, never for a saved player");
+  ok(/UI\.howto\("two", \{ title: "Two", steps: STEPS, saved: !!saved \|\| state\.moves > 0, onOpen: stepThree \}\)/.test(g) && !/seenHowto|markHowto/.test(g), "the shared how-to (D8): once, never for a saved player");
   ok(/<details class="how"><summary>How to play<\/summary>/.test(h) && /<div id="over-pills" class="tro-pills" hidden><\/div>/.test(h), "how-to row and pill row");
   ok(/TR\.pills\(\$\("over-pills"\), endIds\)/.test(g) && /NumbericsMusic\.duck\(on\)/.test(g) && !/music\.js/.test(h), "pills, duck; music.js is never loaded by the page");
 });

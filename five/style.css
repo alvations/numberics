@@ -6,8 +6,12 @@
 .board{ width:min(100%, max(220px, calc(100svh - 351px))); margin-inline:auto; }
 :root[data-text="large"] .board{ width:min(100%, max(220px, calc(100svh - 374px))); }
 .side{ display:flex; flex-direction:column; align-items:center; gap:2.4cqw; }
-.who{ color:var(--mute); font-size:max(12px, 3.4cqw); text-transform:uppercase; letter-spacing:.1em; }
+.who{ color:var(--mute); font-size:max(.75rem, 3.4cqw); text-transform:uppercase; letter-spacing:.1em; } /* S16: rem, so Larger text grows it */
 .side.bottom .who{ color:var(--accent); }
+/* S16 (craft #16, cold #9, all ages): gold on the tan Light board was about 1:1; a deep amber reads 4.97:1 there */
+:root[data-theme="light"] .side.bottom .who{ color:#654200; }
+/* the computer's label reads alike in Light: the grey --mute was 3.57:1 on the tan board; a deep slate reads about 5.9:1 (craft #16) */
+:root[data-theme="light"] .side:not(.bottom) .who{ color:#3a3d52; }
 .pair{ display:grid; grid-template-columns:repeat(2,34cqw); gap:8cqw; }
 .slot{ position:relative; width:34cqw; height:34cqw; border-radius:var(--tile-radius); background:var(--cell); cursor:pointer; }
 .slot .tile{ position:absolute; inset:0; font-size:17cqw; transition:translate var(--anim) ease-out; }

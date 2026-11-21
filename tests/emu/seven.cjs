@@ -530,4 +530,55 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await setup(p, ["e......"], { next: 8, left: 9 });
   ck("after three eggs the hint is the level line again", /^Level \d+ · /.test(await p.textContent("#hint")), await p.textContent("#hint"));
   await ctx.close();
+
+  // 13. two tabs of one browser (TRIAGE5 S13, mechanics #1): a stale tab can neither replay today's Daily nor lower a
+  // saved best; and while the Daily is played there is no Play Classic button under the well (S14)
+  ctx = await newCtx({ viewport: { width: 390, height: 844 } });
+  const pa = await ctx.newPage(), pb = await ctx.newPage(), e13 = [];
+  pa.on("pageerror", e => e13.push(e.message)); pb.on("pageerror", e => e13.push(e.message));
+  await pa.goto(page + "?mode=daily"); await pb.goto(page + "?mode=daily");
+  ck("S14: no Play Classic (no button at all) under the well while today's Daily is played", await pa.evaluate(() => {
+    const b = document.getElementById("new"); return getComputedStyle(b).visibility === "hidden"; }) && !(await pa.isVisible("#new")));
+  ck("S14: the way back to Classic is the mode switch", await pa.isVisible('#modes [data-mode="classic"]'));
+  const raw = (q) => q.evaluate(() => { window.NumbericsKit.flush(); return JSON.parse(localStorage.getItem("numberics_seven_v1")); });
+  const endWell = ["5......", "e......", "e......", "e......", "e......", "e......", "e......"];
+  await setup(pa, endWell, { left: 1, next: 4, score: 900, prev: null, power: { undo: 0, smash: 0, hold: 0, crack: 0 } });
+  await pa.focus("#board"); await pa.keyboard.press("Enter"); await idle(pa);
+  const aDone = await st(pa), r0 = await raw(pa);
+  ck("tab A finished today's Daily", aDone.over && r0.best.daily === aDone.score && aDone.score >= 900, JSON.stringify(r0.best));
+  const bDrops = (await st(pb)).drops;
+  ck("tab B still holds the fresh Daily from its load", bDrops === 0 && !(await st(pb)).over);
+  await pb.focus("#board"); await pb.keyboard.press("Enter"); await idle(pb);
+  let bs = await st(pb);
+  ck("S13: tab B's drop is refused: it reads back today's finished Daily", bs.over && bs.score === aDone.score && bs.drops === aDone.drops, JSON.stringify({ over: bs.over, score: bs.score, drops: bs.drops }));
+  await pb.waitForSelector("#over", { state: "visible", timeout: 2500 });
+  ck("S13: and tab B shows Today's Daily is done", (await pb.textContent("#over-best")) === "Today's Daily is done.");
+  await pb.evaluate(() => { const b = document.getElementById("board"), r = b.getBoundingClientRect();
+    for (let k = 0; k < 3; k++) b.dispatchEvent(new MouseEvent("click", { bubbles: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); });
+  await idle(pb);
+  ck("S13: tab B cannot play it again", (await st(pb)).mode === "daily" && (await st(pb)).drops === aDone.drops && (await st(pb)).over);
+  const r1 = await raw(pb);
+  ck("S13: the stored Daily best and run keep tab A's result", r1.best.daily === aDone.score && r1.runs.daily.over && r1.runs.daily.score === aDone.score, JSON.stringify(r1.best));
+  // a stale tab's other modes: tab B switches to Classic (stale), tab A sets a Classic best of 700, tab B plays Classic
+  await pb.click('#modes [data-mode="classic"]');
+  await pa.click('#modes [data-mode="classic"]');
+  await setup(pa, endWell, { left: 1, next: 4, score: 700, prev: null, power: { undo: 0, smash: 0, hold: 0, crack: 0 } });
+  await pa.focus("#board"); await pa.keyboard.press("Enter"); await idle(pa);
+  const cA = (await raw(pa)).best.classic;
+  ck("tab A's Classic best is saved", cA >= 700, String(cA));
+  await setup(pb, ["e......"], { next: 4, left: 9, score: 10 });
+  await pb.focus("#board"); await pb.keyboard.press("Enter"); await idle(pb);
+  const r2 = await raw(pb);
+  ck("S13: a stale tab's save keeps the higher stored Classic best (max of stored and its own)", r2.best.classic === cA && r2.best.daily === aDone.score, JSON.stringify(r2.best));
+  ck("S13: and keeps today's finished Daily, which tab B is not playing", r2.runs.daily.over && r2.runs.daily.score === aDone.score);
+  await pb.click('#modes [data-mode="daily"]');
+  ck("S13: back in the Daily, tab B shows today's finished run", (await st(pb)).over && (await st(pb)).score === aDone.score);
+  // visibility: a page that loaded before the Daily was finished elsewhere catches up when it becomes visible
+  const pc = await ctx.newPage(); pc.on("pageerror", e => e13.push(e.message));
+  await pc.goto(page + "?mode=daily");
+  await pc.evaluate((x) => { const s = JSON.parse(localStorage.getItem("numberics_seven_v1")); s.runs.daily = x; localStorage.setItem("numberics_seven_v1", JSON.stringify(s)); }, Object.assign({}, aDone, { score: aDone.score + 5 }));
+  await pc.evaluate(() => { /* the save above stands for another tab; this tab still shows its old copy */ document.dispatchEvent(new Event("visibilitychange")); });
+  ck("S13: a tab shown again shows the stored Daily", (await st(pc)).score === aDone.score + 5 && (await st(pc)).over);
+  ck("no page errors in the two-tab run", e13.length === 0, e13.join("|"));
+  await ctx.close();
 };

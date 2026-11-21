@@ -156,7 +156,7 @@ details.how{ margin:6px 0 0; background:var(--panel); border:1px solid var(--lin
 details.how summary{ min-height:var(--tap); display:flex; align-items:center; padding:0 14px; cursor:pointer; font-weight:650; font-size:var(--fs-sm); color:var(--mute); }
 details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 
-/* ===== the games row on each game page (the root shows the cards below; each D package moves its page to them) ===== */
+/* ===== the quiet text row of games (legacy markup; pages now show the cards and the root is the games page, O-9) ===== */
 .games{ display:flex; flex-wrap:wrap; justify-content:center; gap:0 4px; margin:10px 0 4px; font-size:var(--fs-sm); }
 .games a{ color:var(--mute); display:inline-flex; align-items:center; min-height:var(--tap); padding:0 6px; }
 .games a[aria-current="page"]{ color:var(--accent-text); text-decoration:none; }

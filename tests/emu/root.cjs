@@ -58,7 +58,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // playing writes progress (a move updates Two's summary)
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowRight"); await p.waitForTimeout(250);
   const pr = await p.evaluate(() => NumbericsProgress.get("two"));
-  ck("a move on Two writes its card summary to progress", pr && pr.live === true && /^Best /.test(pr.best) && /^Score /.test(pr.liveText), JSON.stringify(pr));
+  ck("a move on Two writes its card summary to progress", pr && pr.live === true && /^Hard best /.test(pr.best) && /^Score /.test(pr.liveText), JSON.stringify(pr));
   await shot(p, "two-phone");
 
   // 3. the root is the games page: Today, the heading, ten cards, the foot line; no board; nothing marked Playing
@@ -71,7 +71,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("root: every card has a CSS preview and its name", cards.every((c, i) => c.pv > 0 && c.name === games[i].name));
   ck("root: nothing is marked Playing", cards.every(c => !c.cur && !c.tags.includes("Playing")) && await p.evaluate(() => !document.querySelector('[aria-current="page"], .tag.go')), JSON.stringify(cards));
   ck("root: Two's card shows the saved best and Continue (a live run)", (() => { const t = cards.find(c => c.id === "two");
-    return t && t.tags.includes("Best 2,400") && t.tags.includes("Continue"); })(), JSON.stringify(cards.find(c => c.id === "two")));
+    return t && t.tags.includes("Hard best 2,400") && t.tags.includes("Continue"); /* an old save plays on Hard (O-12) */ })(), JSON.stringify(cards.find(c => c.id === "two")));
   ck("root: vs-computer tag on Four, Five, Nine and Fifteen only", cards.every(c => c.tags.includes("vs computer") === !!games.find(g => g.id === c.id).vs));
   ck("root: unplayed games say New to you", cards.filter(c => c.id !== "two").every(c => c.tags.includes("New to you")), JSON.stringify(cards.map(c => c.tags)));
   ck("root: card links reach each game, Two at two/", cards.every(c => c.href === games.find(g => g.id === c.id).path) && cards.find(c => c.id === "two").href === "two/", JSON.stringify(cards.map(c => c.href)));
@@ -99,20 +99,20 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("after playing Seven its card shows Continue and the best, not New to you", JSON.stringify(c2) === '["Continue","Best 579"]', JSON.stringify(c2));
   ck("a finished Daily shows Done on its chip", await p.evaluate(() => { const c = document.querySelector('#today .chip[href^="seven/"]'); return c.classList.contains("done") && c.textContent === "Daily SevenBest 1,204"; }));
 
-  // 5. the Games sheet from the root's top bar: Today first, then every game in order, nothing Playing; Esc closes
+  // 5. the Games button on the games page (TRIAGE5 S3): it scrolls to the cards instead of opening a sheet that repeats
+  // the page; the button is the same as on every page (the same label and icon). Game pages still open the sheet (7.)
+  const gb0 = await p.evaluate(() => { const b = document.querySelector('#topbar [data-open="games"]'); return b && { html: b.innerHTML, label: b.getAttribute("aria-label"), cls: b.className }; });
+  await p.evaluate(() => scrollTo(0, 0));
+  const y0 = await p.evaluate(() => document.getElementById("more").getBoundingClientRect().top);
   await p.click('#topbar [data-open="games"]'); await p.waitForTimeout(300);
-  const sh = await p.evaluate(() => { const s = document.getElementById("sh-games"); if (!s || s.hidden) return null;
-    const b = s.querySelector(".sh-body");
-    return { first: b.firstElementChild.className, ids: [...b.querySelectorAll(".card")].map(a => a.dataset.id), pv: [...b.querySelectorAll(".card .pv")].filter(x => x.children.length).length,
-      cur: b.querySelectorAll('[aria-current="page"]').length, two: b.querySelector('.card[data-id="two"]').getAttribute("href"),
-      title: s.querySelector("h2").textContent, open: NumbericsUI.current(), fixed: getComputedStyle(s).position }; });
-  ck("Games sheet opens from the top bar", sh && sh.open === "games" && sh.title === "Games" && sh.fixed === "fixed", JSON.stringify(sh));
-  ck("Games sheet: Today first, then ten cards in games.json order with previews, none Playing, Two at two/", sh && sh.first.indexOf("today") >= 0 &&
-    JSON.stringify(sh.ids) === JSON.stringify(ORDER) && sh.pv === 10 && sh.cur === 0 && sh.two === "two/", JSON.stringify(sh));
-  ck("Games sheet: no horizontal scroll", await noHScroll(p));
-  await shot(p, "sheet-games");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(50);
-  ck("Games sheet: Esc closes it and focus returns to the Games button", await p.evaluate(() => !NumbericsUI.open() && document.activeElement && document.activeElement.getAttribute("data-open") === "games"));
+  const gs = await p.evaluate(() => { const s = document.getElementById("sh-games"), a = document.activeElement;
+    return { sheet: !!(s && !s.hidden), open: NumbericsUI.open(), top: Math.round(document.getElementById("more").getBoundingClientRect().top), sy: Math.round(scrollY),
+      focus: a && a.classList.contains("card") ? a.dataset.id : a && a.tagName }; });
+  ck("root: the Games button opens no sheet, it scrolls to the cards (the heading at the top) and focuses the first card",
+    !gs.sheet && !gs.open && gs.sy > 0 && Math.abs(gs.top) <= 2 && y0 > 2 && gs.focus === ORDER[0], JSON.stringify({ y0, gs }));
+  ck("root: the Games button looks the same (label, icon, class)", gb0 && gb0.label === "Games" && /<svg/.test(gb0.html) && /tb-lbl">Games</.test(gb0.html) && gb0.cls === "tb-btn tb-games", JSON.stringify(gb0));
+  await shot(p, "games-button");
+  await p.evaluate(() => scrollTo(0, 0));
   // the Settings and Trophies sheets and the mute work on the games page
   await p.click('#topbar [data-open="settings"]'); await p.waitForTimeout(200);
   ck("root: Settings opens", await p.evaluate(() => NumbericsUI.current() === "settings"));

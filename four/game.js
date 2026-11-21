@@ -1,11 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * Numberics Four: browser client. four/engine.js owns every rule (and the computer);
- * this file only draws, listens, and remembers.
- * Motion (docs/design/REDESIGN.md 5.5): every disc is a keyed node in a NumbericsMotion layer. A dropped disc (yours
- * or the computer's) falls from one slot above the board with gravity and settles; Pop drops the discs above by one
- * slot; the winning line is drawn through the four centres. A new input finishes the running animation first and is
- * applied at once; sounds sit on their own timeline and follow the family's one rule (shared/motion.js, TRIAGE4 D7):
- * a new input plays the pending ones at once, one of each, never dropped. */
+ * Numberics Four: browser client. four/engine.js owns every rule (and the computer); this file only draws, listens, and
+ * remembers. Motion (REDESIGN.md 5.5) and the sound rule (TRIAGE4 D7): docs/CODE-NOTES.md#fourgamejs */
 (function () {
   "use strict";
   var F = window.NumbericsFour, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
@@ -312,7 +307,7 @@
     layer.sync(tilesOf(), { falls: [{ id: ids[r.cell], rows: rowsTo(r.cell) }] });
     landed(rowsTo(r.cell), r);
     var what = r.earned === "block" ? "Blocked! " : "Ten threat! ";
-    if (r.award) K.toast(what + "+" + NAMES[r.award]);
+    if (r.award) K.toast(what + "+1 " + NAMES[r.award]);
     else if (r.free) K.toast(what + "No reward right after a power-up.", "info"); // R2
     else if (r.full) K.toast(what + "Power-ups full", "info"); // R15
     after(r);

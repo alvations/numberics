@@ -15,6 +15,9 @@
  * highest tile from 55 up (index 9) awards one. The floor was 34 until round 2: with the same bot
  * Fibonacci paid more rewards per game than Endless, so it moved up one step (docs/ROADMAP.md 1, 0a).
  * R2 (a power-up never earns one, including the swipe right after it) lives in ../two/engine.js.
+ * TIERS (O-13, as Two's O-12): newGame(seed, 4, tier). Hard is the rule above exactly (no tier field); Medium and Easy
+ * pay every honest join that makes a tile at least (top - reach) indices high, from 55 up, with RULES.reach below
+ * (measured with tools/sim-fibonacci.js, docs/DESIGN.md "Fibonacci tiers"). Every anti-farm rule is the core's.
  */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(require("../two/engine.js"));
@@ -50,6 +53,9 @@
     value: value,
     label: label,
     awardFrom: AWARD_FROM_INDEX,
+    // tiers (O-13): rungs below the top tile a paying join may make. A Fibonacci rung is 1.618x, not Two's 2x, so it
+    // takes more rungs per tier step: Medium 1 (the top tile or the number below it), Easy 3. Hard is the old rule.
+    reach: { easy: 3, medium: 1, hard: -1 },
   };
 
   var api = Endless.make(RULES);

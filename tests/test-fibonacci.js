@@ -301,9 +301,10 @@ t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move neve
     ok(/var START = "Swipe or use the arrow keys\.";/.test(js) && /!state\.moves \? START/.test(js));
   });
   t("R11: no bare hyphen as an empty stat value", () => ok(!/<b id="\w+"[^>]*>-<\/b>/.test(html) && !/: "-"/.test(js)));
-  t("R5: tray defs, Undo first, each with a sentence description and how to earn it", () => {
-    const ids = [...js.matchAll(/\{ id: "(\w+)", label: "\w+", desc: "([^"]+)", earn: EARN \}/g)];
+  t("R5: tray defs, Undo first, each with a sentence description and how to earn it (the tier's earn line, O-13)", () => {
+    const ids = [...js.matchAll(/\{ id: "(\w+)", label: "\w+", desc: "([^"]+)" \}/g)];
     eq(ids.map(m => m[1]), ["undo", "smash", "swap", "boost"]); ids.forEach(m => ok(/^[A-Z].*\.$/.test(m[2]), m[2]));
+    ok(/earn: earn\(\),/.test(js), "the tray gets the tier's earn line");
     ok(/onInfo:/.test(js), "tray onInfo wired");
   });
   t("R8: the end card has a 'New best.' line", () => ok(/id="over-best" class="best" hidden>New best\.</.test(html)));
@@ -376,7 +377,7 @@ t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move neve
   });
   t("D: the games list on the page is the cards (NumbericsNav)", () => ok(/<div id="games" class="cards" data-root="\.\.\/" data-current="fibonacci">/.test(html)));
   t("round 2: the help line, the tray and the engine agree on the 55 floor", () => {
-    ok(/new highest tile from 55 up/.test(html) && /new top tile from 55\./.test(js));
+    ok(/from 55 up: on Hard, each new highest tile earns one/.test(html.replace(/\s+/g, " ")) && /new top tile from 55\./.test(js) && /\(55 up\)/.test(js));
     ok(!/from 34/.test(html) && !/from 34/.test(js)); eq(F.value(F.AWARD_FROM_INDEX), 55);
   });
 }

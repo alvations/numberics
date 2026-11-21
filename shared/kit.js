@@ -20,15 +20,8 @@
   // date seed for Daily modes: same for everyone on the same local date
   function daySeed(d) { d = d || new Date(); return (d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()) >>> 0; }
 
-  // storage: always try/catch, degrade to memory (sandboxes throw).
-  // Writes are batched (TRIAGE4 D6): save() keeps the text at once (every store of the same key reads it back) and
-  // one idle callback writes every pending key together, so a move costs no localStorage write. Nothing is lost on
-  // leaving: pagehide and a hidden tab flush at once, and a save made while the page is going away writes at once.
-  // Memory (shared/settings.js) calls freeze() before it writes a loaded save or erases, then reloads: from then on
-  // saves stay in memory and pending ones are dropped, so no page's own pagehide save can undo it (TRIAGE4 B1).
-  // Without page lifecycle events (Node tests, odd hosts) a flush on leaving cannot be promised, so saves write at once.
-  // BASE holds what storage held when a key joined the batch: if anything else (Memory, another tab, a script) wrote
-  // the key since, the flush drops ours, so a queued save never overwrites a newer value it did not see.
+  // storage: always try/catch, degrade to memory. Writes are batched into one idle write, flushed on leaving; freeze()
+  // is for Memory (TRIAGE4 D6, B1). Keep it this way: docs/CODE-NOTES.md#sharedkitjs
   var PEND = {}, BASE = {}, pendN = 0, idleT = null, frozen = false, leaving = true;
   function hasWin() { return typeof window !== "undefined" && window; }
   function writeNow(key, text) { try { window.localStorage.setItem(key, text); } catch (e) { /* in-memory only */ } }
@@ -79,28 +72,40 @@
     try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); } catch (e) { return false; }
   }
   var toastT = null;
-  // toast(msg) is a reward (gold); toast(msg, "bad") is a warning or loss (neutral, red edge);
-  // toast(msg, "info") is a plain explanation (neutral).
-  // An element may still be passed as the second or third argument.
+  // toast(msg): a reward (gold); kind "bad": a warning (red edge); "info": a plain note. An element may be passed too.
   function toast(msg, kind, el) {
     if (kind && typeof kind === "object") { el = kind; kind = null; }
     el = el || document.getElementById("toast"); if (!el) return;
-    if (overlayUp()) { el.classList.remove("on"); return; } // never on an end screen
+    if (overlayUp() || sheetUp()) { el.classList.remove("on"); return; } // never on an end screen, never over a sheet (TRIAGE5 S1)
     el.textContent = msg; el.classList.toggle("bad", kind === "bad"); el.classList.toggle("info", kind === "info"); el.classList.toggle("trophy", kind === "trophy");
-    // Sit just above the board, over the hint line (round 2: inside the board it hid the top row;
-    // at the top of the screen it hid the title). Fall back to inside the board when there is no room.
+    place(el); el.classList.add("on");
+    clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
+    shownAt = Date.now(); watchOverlay(el); watchHint(el);
+  }
+  // sit just above the board, over the hint line while it is empty; never over the hint's text (TRIAGE5 S1)
+  function place(el) {
     try {
       var b = document.querySelector("#board, .board"), r = b && b.getBoundingClientRect();
       if (r && r.height) {
-        // centre on the hint line when there is one (it sits between the tray and the board), else just above
         var h = el.offsetHeight || 34, hint = document.getElementById("hint"), hr = hint && hint.getBoundingClientRect();
-        var top = (hr && hr.height && hr.bottom <= r.top + 2) ? hr.top + hr.height / 2 - h / 2 : r.top - h - 6;
+        var lane = hr && hr.height && hr.bottom <= r.top + 2, txt = hintText(hint);
+        var top = lane && !txt ? hr.top + hr.height / 2 - h / 2 : lane ? r.top + 8 : r.top - h - 6;
         if (top < 12) top = r.top + 8;
-        el.style.top = Math.max(12, Math.min(window.innerHeight - h - 12, top)) + "px";
+        var tries = [top, r.top + 8, hr ? hr.bottom + 6 : top, hr ? hr.top - h - 6 : top], i, t = null;
+        for (i = 0; i < tries.length; i++) {
+          var c = Math.max(12, Math.min(window.innerHeight - h - 12, tries[i]));
+          if (!txt || !hr || c + h <= hr.top || c >= hr.bottom) { t = c; break; }
+        }
+        el.style.top = (t == null ? Math.max(12, Math.min(window.innerHeight - h - 12, top)) : t) + "px";
       }
-    } catch (e) { /* keep the CSS position */ } el.classList.add("on");
-    clearTimeout(toastT); toastT = setTimeout(function () { el.classList.remove("on"); }, 2200);
-    shownAt = Date.now(); watchOverlay(el); watchHint(el);
+    } catch (e) { /* keep the CSS position */ }
+  }
+  // the hint line shows text (a visible #hint with anything but blanks)
+  function hintText(hint) { return !!(hint && hint.offsetParent !== null && /\S/.test(hint.textContent || "")); }
+  // a sheet (Games, Trophies, Settings, How to play) is open: no toast shows over it (TRIAGE5 S1, craft #14)
+  function sheetUp() {
+    try { if (window.NumbericsUI && typeof window.NumbericsUI.open === "function") return !!window.NumbericsUI.open(); } catch (e) { /* no ui */ }
+    return false;
   }
   // A toast never sits on an end screen: while one shows, any visible .over overlay hides it at once.
   var watchT = null;
@@ -113,11 +118,10 @@
     clearInterval(watchT);
     watchT = setInterval(function () {
       if (!el.classList.contains("on")) { clearInterval(watchT); return; }
-      if (overlayUp()) { el.classList.remove("on"); clearInterval(watchT); }
+      if (overlayUp() || sheetUp()) { el.classList.remove("on"); clearInterval(watchT); }
     }, 60);
   }
-  // The status line always wins: when the hint text changes (targeting instructions, "thinking", a result), any toast
-  // over it clears at once (round 3 craft #1: the two were drawn over each other).
+  // the status line always wins: a change of the hint text clears a toast over it (round 3 craft #1)
   var hintObs = null, shownAt = 0;
   function watchHint(el) {
     if (hintObs || typeof MutationObserver === "undefined") return;
@@ -125,8 +129,11 @@
     var last = hint.textContent;
     hintObs = new MutationObserver(function () {
       var now = hint.textContent; if (now === last) return; last = now;
-      // the same tick that raised the toast often redraws the hint: only a later change hides it
-      if (Date.now() - shownAt > 150) el.classList.remove("on");
+      // the same tick: move off the new text; a later change: hide it, only when it sits on the line
+      if (!el.classList.contains("on")) return;
+      if (Date.now() - shownAt <= 150) { place(el); return; } // the same tick: move off the new text
+      var a = el.getBoundingClientRect(), b = hint.getBoundingClientRect();
+      if (!(a.bottom <= b.top || a.top >= b.bottom) && hintText(hint)) el.classList.remove("on");
     });
     hintObs.observe(hint, { childList: true, characterData: true, subtree: true });
   }
@@ -147,8 +154,7 @@
   function swipe(el, cb) {
     var sx = 0, sy = 0, on = false;
     el.addEventListener("touchstart", function (e) { var t = e.changedTouches[0]; sx = t.clientX; sy = t.clientY; on = true; }, { passive: true });
-    // cancel the browser's own gesture while a swipe is in progress, otherwise it can swallow the next tap
-    // (round 3: the first tap on a just-earned power-up was lost)
+    // cancel the browser's gesture during a swipe, or it can swallow the next tap (round 3)
     el.addEventListener("touchmove", function (e) { if (on && e.cancelable) e.preventDefault(); }, { passive: false });
     el.addEventListener("touchend", function (e) {
       if (!on) return; on = false;

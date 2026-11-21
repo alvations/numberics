@@ -46,6 +46,9 @@
   if (games.daily !== saved.daily) runs.daily = { used: 0, streak: 0 };
   if (games.climb !== saved.climb) runs.climb = { used: 0, streak: 0 };
   var cursor = 0, anchor = -1, bracketMode = false, drag = null, kbd = false; // kbd: show the cursor only for keyboard play
+  // S19: a touch screen (no hover, coarse pointer) starts without the "(Enter)" hint; a keyboard or mouse device keeps it
+  var keyHint = true;
+  try { keyHint = !(window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches); } catch (e) { /* no media queries */ }
   var viewing = false, cardUp = false; // "See the board" hides the end card; cardUp: the card showed at the last draw
   var note = ""; // a one-off hint line message (a power-up explaining itself, a confirm), cleared by the next action
 
@@ -264,7 +267,7 @@
 
     var h = "";
     if (note) h = note;
-    else if (state.done && !state.over) h = state.gave ? "One answer, shown. Next line (Enter)." : "Made " + L.g + ". Next line (Enter).";
+    else if (state.done && !state.over) h = (state.gave ? "One answer, shown." : "Made " + L.g + ".") + " Next line" + (keyHint ? " (Enter)." : ".");
     else if (bracketMode) h = anchor < 0 ? "Tap the first number to group (Esc cancels)." : "Now tap the last number of the group.";
     else if (anchor >= 0) h = "Bracket opened at number " + (anchor + 1) + ". Move and press ) to close.";
     else if (state.peeks.length) h = "Peek: " + state.peeks.map(function (p) { return L.n.slice(p.i, p.j + 1).join(" ") + " make " + p.v; }).join(" · ");
@@ -334,9 +337,10 @@
     state = r.state; note = ""; disarmReveal();
     if (!played) { played = true; report("move", {}); } // the game counts as played from its first edit (8.1)
     // a made line is said once, in the hint line (R7); only a reward gets the toast
-    if (r.award) { toast("Three clean lines: +" + NAME[r.award]); snd("power"); }
+    if (r.award) { toast("Three clean lines: +1 " + NAME[r.award]); snd("power"); }
     else if (r.full) toast("Three clean lines. Power-ups full", "info"); // R15: a skipped reward is said
     if (r.solved) runs[mode].streak = state.helped ? 0 : runs[mode].streak + 1;
+    if (r.solved && state.mode === "daily") { try { if (PG && PG.dailyPart) PG.dailyPart("six", state.solved + " of 6"); } catch (e) { /* no card line */ } }
     persist(); render();
     if (r.solved) { // trophies (REDESIGN.md 8.4); the made line is the moment, so a trophy toast follows it
       var L = E.line(state), n = signs(state.cur);
@@ -420,6 +424,10 @@
   // 5.11: every input first ends the running animation (end state now, pending steps run, pending sounds dropped),
   // then is applied at once. Capture phase, so it runs before any handler below.
   ["pointerdown", "keydown"].forEach(function (t) { window.addEventListener(t, hush, true); });
+  // S19 (craft #31): "(Enter)" is for keyboards: a key shows it, a touch or pen tap hides it (a mouse keeps it)
+  function setKeyHint(on) { if (keyHint !== on) { keyHint = on; if (state.done && !state.over) render(); } }
+  window.addEventListener("keydown", function () { setKeyHint(true); }, true);
+  window.addEventListener("pointerdown", function (e) { if (e.pointerType === "touch" || e.pointerType === "pen") setKeyHint(false); }, true);
   // seeing the board after the end: a tap anywhere on it brings the summary back
   boardEl.addEventListener("click", function (e) { if (viewing && !(e.target.closest && e.target.closest(".over"))) showCard(); });
   $("over-view").addEventListener("click", function (e) { e.stopPropagation(); seeBoard(); });

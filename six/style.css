@@ -53,6 +53,8 @@
 .val small{ font-size:.75rem; font-weight:400; }
 .six.gold .num{ background:var(--accent); }
 .six.gold .expr,.six.gold .val{ color:var(--accent); }
+/* S16 (craft #15, cold #9): gold on the tan Light board was about 1:1; a deep amber reads 4.97:1 there */
+:root[data-theme="light"] .six.gold .expr,:root[data-theme="light"] .six.gold .val{ color:#654200; }
 .six .tools{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; } /* wraps only when it must (320 px, Larger text: B3) */
 .six .tools .btn{ padding:7px 14px; font-size:.85rem; white-space:nowrap; }
 @media (max-width:400px){ .six .tools{ gap:6px; } .six .tools .btn{ padding:7px 10px; } }

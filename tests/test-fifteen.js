@@ -293,23 +293,27 @@ t("Hard: a round after a DRAWN round starts you with an Erase (topped up, not st
   const draw = () => { const s = at(B([1, 2, 4, 7], [3, 5, 6, 9]), 1, "hard"); return must(F.claim(s, 8)); };
   let d = draw(); eq(d.result.winner, 0, "fixture: a draw"); d.power.erase = 0;
   eq(F.nextRound(d).power.erase, 1, "after a draw: a fresh one");
+  // S10: once per match: the second draw of the match hands out nothing
+  let n = F.nextRound(d); ok(n.drawErase, "marked"); n.power.erase = 0; n.owner = B([1, 2, 4, 7], [3, 5, 6, 9]); n.turn = 1;
+  n = must(F.claim(n, 8)); eq(n.result.winner, 0, "fixture: a second draw"); eq(F.nextRound(n).power.erase, 0, "the second draw: no Erase");
+  eq(F.newMatch(3, "hard").drawErase, false, "a new match hands one out again");
   d.power.erase = 3; eq(F.nextRound(d).power.erase, 3, "earned ones are kept, nothing is added on top");
   let w = must(F.claim(at(B([2, 6], [1, 3]), 1, "hard"), 7)); w.power.erase = 0; eq(F.nextRound(w).power.erase, 0, "after a win: none");
   let l = F.cpuTurn(at(B([3, 4], [8, 1]), 2, "hard")).state; eq(l.result.winner, 2); l.power.erase = 0; eq(F.nextRound(l).power.erase, 0, "after a loss: none");
   let m = at(B([1, 2, 4, 7], [3, 5, 6, 9]), 1, "medium"); m = must(F.claim(m, 8)); eq(F.nextRound(m).power.erase, 0, "Medium never hands one out");
 });
-t("R4 + R2: perfect play wins every Hard match (draw, then win with the Erase), and no Erase round pays (60 seeds, both starters)", () => {
+t("R4 + R2 + S10: perfect play wins every Hard match (draw, win with the one Erase, then draws), and no Erase round pays (60 seeds, both starters)", () => {
   for (let seed = 1; seed <= 60; seed++) {
     let s = F.newMatch(seed, "hard"); if (seed % 2) { s.starter = 2; s.turn = 2; }
     while (!s.match) {
       if (s.result) {
         ok(s.result.winner !== 2, "seed " + seed + ": perfect play lost round " + s.round);
-        eq(s.result.winner, s.round % 2 ? 0 : 1, "seed " + seed + " round " + s.round + ": draw, then win with the Erase");
+        eq(s.result.winner, s.round === 2 ? 1 : 0, "seed " + seed + " round " + s.round + ": draw, win with the Erase, then draws");
         eq(s.result.earned, null, "a Hard round paid"); s = F.nextRound(s); continue;
       }
       s = s.turn === 2 ? F.cpuTurn(s).state : perfectTurn(s);
     }
-    eq(s.match.winner, 1, "seed " + seed); eq(s.wins, [2, 2, 0], "seed " + seed + ": 2-0 with two draws, decided after round 4"); eq(s.rounds.length, 4);
+    eq(s.match.winner, 1, "seed " + seed); eq(s.wins, [4, 1, 0], "seed " + seed + ": 1-0 with four draws (one after-draw Erase per match)"); eq(s.rounds.length, 5);
   }
 });
 t("Hard plays against the Erase you hold: imperfect play still loses most matches (random player, 200 seeds)", () => {
@@ -366,6 +370,42 @@ t("R2 property: random play mixing power-ups and claims never raises a side's st
     }
   }
   ok(checked > 2000 && paid > 100, "coverage: powered steps " + checked + ", paid rounds " + paid);
+});
+// ---- S9 (round 5, mechanics #2): one Undo rule for the round games, as Five ----
+t("S9: a round won after an Undo pays nothing (why undo); the same moves without it pay; the mark survives a second Undo; a new round clears it", () => {
+  const play = (undo) => {
+    let s = F.newMatch(5, "easy"); s.power = { undo: 2, erase: 0, peek: 0, double: 0 };
+    s = must(F.claim(s, 2)); s = must(F.claim(s, 1));                  // the computer's reply, by hand
+    if (undo) { s = must(F.use(s, "undo")); eq(s.undone, true); eq(s.owner.join(), "0,0,0,0,0,0,0,0,0"); s = must(F.claim(s, 2)); s = must(F.claim(s, 1)); }
+    s = must(F.claim(s, 6)); s = must(F.claim(s, 3)); return must(F.claim(s, 7));   // you 2 6 7
+  };
+  const plain = play(false); eq(plain.result.winner, 1); ok(plain.result.earned, "fixture pays"); eq(plain.result.why, null);
+  const u = play(true); eq(u.result.winner, 1); eq(u.result.earned, null); eq(u.result.why, "undo"); eq(u.power.undo, 1, "the Undo is spent, nothing comes back");
+  let d = F.newMatch(5, "easy"); d.power = { undo: 2, erase: 0, peek: 0, double: 0 };
+  d = must(F.claim(d, 2)); d = must(F.claim(d, 1)); d = must(F.use(d, "undo"));
+  d = must(F.claim(d, 4)); d = must(F.claim(d, 1)); d = must(F.use(d, "undo")); eq(d.undone, true, "still marked after two rewinds");
+  const n = F.nextRound(u); eq(n.undone, false, "a fresh round starts clean");
+  const c = must(F.claim(at(B([2, 6], [1, 3]), 1, "medium", { undone: false }), 7)); ok(c.result.earned, "an Undo in an earlier round costs nothing now");
+});
+t("S9 property: over many random matches, nothing is earned by you in a round after an Undo in it (every level, 1,500 matches)", () => {
+  let undoneWins = 0, paid = 0;
+  for (let seed = 1; seed <= 1500; seed++) {
+    let s = F.newMatch(seed * 2654435761 >>> 0, F.DIFFS[seed % 3]), r = seed * 40503, used = false, after = 0, guard = 0;
+    s.power = { undo: 4, erase: 0, peek: 0, double: 0 };
+    const rnd = (n) => { r = (r * 1103515245 + 12345) >>> 0; return (r >>> 8) % n; };
+    while (!s.match && guard++ < 600) {
+      if (s.result) {
+        if (s.result.winner === 1 && used) { undoneWins++; eq(s.result.earned, null, "seed " + seed + ": paid after Undo"); ok(/^(undo|match)$/.test(s.result.why), "why " + s.result.why); ok(total(s.power) <= after, "stock rose after Undo"); }
+        else if (s.result.winner === 1 && s.result.earned) paid++;
+        s = F.nextRound(s); used = false; continue;
+      }
+      if (s.turn === 2) { s = F.cpuTurn(s).state; continue; }
+      if (rnd(4) === 0 && F.canUse(s, "undo", 1)) { s = must(F.use(s, "undo")); used = true; after = total(s.power); continue; }
+      const me = F.threats(s.owner, 1), f = F.free(s.owner);
+      s = must(F.claim(s, me.length && rnd(3) ? me[0] : f[rnd(f.length)]));
+    }
+  }
+  ok(undoneWins > 300 && paid > 300, "coverage: won after Undo " + undoneWins + ", paid clean wins " + paid);
 });
 // ---- Peek counts as help (TRIAGE3, mechanics #5) ----
 t("Peek is help: a round won after Peek earns nothing (why peeked); the same round without it pays", () => {
@@ -437,8 +477,34 @@ t("measured: with Peek counted as help, a sensible player still finds Hard harde
     while (!s.match) { if (s.result) { if (s.result.why === "peeked") peekedWins++; s = F.nextRound(s); continue; } s = s.turn === 2 ? F.cpuTurn(s).state : sensibleTurn(s, rnd); }
     if (s.match.winner === 1) won++; } return { w: won / 200, peekedWins }; };
   const e = rate("easy"), m = rate("medium"), hd = rate("hard");
-  ok(e.w > 0.9, "Easy " + e.w); ok(m.w >= 0.35 && m.w <= 0.6, "Medium " + m.w); ok(hd.w >= 0.1 && hd.w <= 0.35, "Hard " + hd.w);
+  // S10: one after-draw Erase per match, so this player (Erase only out of a fork) wins few Hard matches (round 4: 0.1-0.35)
+  ok(e.w > 0.9, "Easy " + e.w); ok(m.w >= 0.35 && m.w <= 0.6, "Medium " + m.w); ok(hd.w >= 0.02 && hd.w <= 0.2, "Hard " + hd.w);
   ok(hd.w < m.w && m.w < e.w, "order " + [e.w, m.w, hd.w]); ok(e.peekedWins + m.peekedWins > 0, "the Peek rule was exercised");
+});
+// S10 (round 5, mechanics #3): the skilled sensible player also spends an Erase wherever the solver says the Erase
+// wins (an upper bound on a good Erase user). With one after-draw Erase per match Hard stays well under Medium.
+function skilledTurn(s, rnd) {
+  if (F.canUse(s, "erase", 1) && !F.threats(s.owner, 1).length) for (const x of F.held(s.owner, 2)) for (const n of F.free(s.owner)) {
+    const t = F.claim(must(F.use(s, "erase", x)), n); if (!t.ok) continue;
+    const st = t.state, v = st.result ? (st.result.winner === 1 ? 1 : 0) : -F.solve(st.owner, 2, st.power.erase);
+    if (v > 0) return st;
+  }
+  return sensibleTurn(s, rnd);
+}
+function skilledRate(diff, n) {
+  const out = [0, 0, 0];
+  for (let seed = 1; seed <= n; seed++) {
+    let s = F.newMatch(seed * 97 + 5, diff), r = seed * 2246822519 >>> 0; const rnd = (k) => { r = (r * 1103515245 + 12345) >>> 0; return (r >>> 8) % k; };
+    while (!s.match) { if (s.result) { s = F.nextRound(s); continue; } s = s.turn === 2 ? F.cpuTurn(s).state : skilledTurn(s, rnd); }
+    out[s.match.winner]++;
+  }
+  return { w: out[1] / n, wld: out[1] + "-" + out[2] + "-" + out[0] };
+}
+t("S10 measured: a player who spends the after-draw Erase well finds Hard clearly harder than Medium (200 matches each)", () => {
+  const m = skilledRate("medium", 200), hd = skilledRate("hard", 200);
+  if (process.env.FIFTEEN_REPORT) console.log("skilled sensible W-L-D: Medium " + m.wld + ", Hard " + hd.wld);
+  ok(m.w >= 0.35 && m.w <= 0.65, "Medium " + m.wld); ok(hd.w <= 0.35, "Hard " + hd.wld + " (round 4: about 48%)");
+  ok(hd.w < m.w - 0.1, "Hard " + hd.w + " must sit clearly under Medium " + m.w);
 });
 t("the round that decides the match pays nothing (a new match starts a fresh stock)", () => {
   let s = F.newMatch(1, "medium"); s.wins = [0, 2, 0]; s.rounds = [1, 1]; s.round = 3; s.owner = B([2, 6], [1, 3]);

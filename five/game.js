@@ -76,11 +76,13 @@
 
   var PW_LEVEL = { easy: "Easy", medium: "Medium", hard: "Hard" };
   var PW = { undo: "Undo", split: "Split", shield: "Shield", nudge: "Nudge" };
-  var DESC = { undo: "Take back your turn and the computer's reply.", split: "Move one point from your tile onto your other tile.",
+  // S12 (mechanics #7): Undo says its cost before it is paid, in its info line and in the first tap's ask
+  var UNDO_COST = "No rewards for the rest of this round.";
+  var DESC = { undo: "Take back your turn and the computer's reply. " + UNDO_COST, split: "Move one point from your tile onto your other tile.",
     shield: "Your tile cannot be hit on the computer's next turn. You still move.", nudge: "Add 1 to a computer tile or take 1 off yours." };
   var DEFS = N.POWERS.map(function (p) { return { id: p, label: PW[p], desc: DESC[p] }; });
   var EARN = "Burst a computer tile to earn one. Only you have power-ups.";
-  var PW_HINT = { split: "Tap the tile to take 1 from.",
+  var PW_HINT = { undo: "Tap Undo again: no more rewards this round.", split: "Tap the tile to take 1 from.",
     shield: "Tap your tile to shield it, then move.",
     nudge: "Tap a tile: theirs +1, yours -1." };
 
@@ -150,7 +152,7 @@
         onInfo: function (id, text) { $("hint").textContent = text; },
       });
     }
-    boardEl.classList.toggle("targeting", !!armed);
+    boardEl.classList.toggle("targeting", !!armed && armed !== "undo"); // an Undo ask aims at no tile
     var hint = "";
     if (armed) hint = PW_HINT[armed] + (keys ? " (Esc cancels)" : "");
     else if (levelArm) hint = "Tap " + PW_LEVEL[levelArm] + " again: it counts as a loss.";
@@ -166,13 +168,14 @@
     // one end-card pattern (round 3): while the card shows, the lower New game is hidden and keeps its space
     $("new").style.visibility = over.hidden ? "" : "hidden";
     if (state.roundOver && !busy) {
-      // R8: a white one-line headline, one summary line, the gold primary button.
-      // Round 3 wording: "You win round N" / "The computer wins round N" / "Draw in round N"; a match reads
-      // "You win" / "The computer wins". Sublines are "<detail> · <score>".
+      // R8: a white one-line headline, one summary line, the gold primary button (round 3 wording)
       var m = state.matchOver, rw = state.roundOver, n = " round " + state.round;
       ttl.textContent = m ? (m === "p" ? "You win" : "The computer wins")
         : rw === "draw" ? "Draw in" + n : rw === "p" ? "You win" + n : "The computer wins" + n;
-      var got = (state.earned || []).map(function (id) { return PW[id]; });
+      // S17 (cold #7): each power-up once, with its count ("earned 2 Split, Nudge"), in the order first earned
+      var got = [], cnt = {};
+      (state.earned || []).forEach(function (id) { if (!cnt[id]) { cnt[id] = 0; got.push(id); } cnt[id]++; });
+      got = got.map(function (id) { return (cnt[id] > 1 ? cnt[id] + "\u00a0" : "") + PW[id]; });
       // cold #22: a line never starts with the dot (it is glued to the part before it); R2: a round won after Undo says
       // why it paid nothing
       var D = "\u00a0\u00b7 ", nb = function (t) { return t.replace(/ /g, "\u00a0"); };
@@ -248,8 +251,7 @@
     var t = slots[i].firstElementChild; if (!t) return;
     keep(M.play(t, POP, { duration: M.T.pop, easing: M.E.pop }, [{ opacity: 0.55 }, { opacity: 1 }]));
   }
-  // 8 shards (craft #3: clearly visible): 12% squares in the tile's own hue made bright, every other one gold, with a
-  // glow; out 45 to 70% of the tile, turning 90 to 180 degrees (a fixed table)
+  // 8 shards (craft #3): bright squares in the tile's hue, every other one gold, out 45 to 70%, turning 90 to 180 degrees
   var SHARD_D = [0.48, 0.64, 0.56, 0.70, 0.52, 0.66, 0.60, 0.46], SHARD_R = [90, 150, 120, 180, 105, 165, 135, 95];
   function shards(r, v) {
     if (M.reduced()) return; // no flying shards under reduced motion (5.12)
@@ -287,9 +289,7 @@
     keep(M.play(slots[last.to], [{ opacity: 0 }, { opacity: 0, offset: OUT_MS / (OUT_MS + OUTLINE_MS) }, { opacity: 1 }],
       { duration: OUT_MS + OUTLINE_MS, pseudoElement: "::after" }, [{ opacity: 0 }, { opacity: 1 }]));
   }
-  // craft #3: where the flying copy must be gone. The copy fades from 10% overlap with the target to 45% (before it would
-  // reach the target's number at half); the landing is at 45%. Offsets are in the flight's eased progress (WAAPI keyframe
-  // offsets follow the effect easing); t is the landing as a share of the flight time, from the --e-fly curve.
+  // craft #3: the copy fades from 10% overlap with the target to 45%, where it lands (eased offsets from --e-fly)
   var FLY_C = (String(M.E.fly).match(/-?\d*\.?\d+/g) || []).map(Number);
   if (FLY_C.length !== 4 || FLY_C.some(isNaN)) FLY_C = [0.3, 0.7, 0.2, 1];
   function overlapAt(p, dx, dy, w, h) { return Math.max(0, 1 - (1 - p) * Math.abs(dx) / w) * Math.max(0, 1 - (1 - p) * Math.abs(dy) / h); }
@@ -315,10 +315,7 @@
       var from = rectIn(slots[last.from], b), f = tileEl(prev[last.from]);
       fly = M.ms("fly");
       if (fly) {
-        // the copy reads "+3", not a second "3" (craft nit). Craft #3 (round 4): it fades out as it reaches the target,
-        // gone before it covers half of it, and the number changes at that landing instant (land), so "+3" never sits
-        // on the target and the target never waits under it. Its own (unanimated) opacity is 0, so a dropped fill
-        // can never flash the copy back on its source.
+        // the copy reads "+3" and is gone before it covers half the target, which changes at that instant (craft #3)
         f.classList.add("fly"); f.textContent = "+" + prev[last.from]; place(f, from); f.style.opacity = "0"; fxEl.appendChild(f);
         var dx = to.x - from.x, dy = to.y - from.y, fade = flightFade(dx, dy, to.w, to.h);
         land = Math.round(fly * fade.t);
@@ -363,7 +360,7 @@
     if (state.roundOver && !wasOver) roundEnded();
     // R7: a reward is a toast; a round result is the overlay alone (no "Burst!" note on the round-ending burst)
     // a reward on the round-ending burst is said on the card ("earned Shield"), never in a toast over the hold's hint
-    if (res.awarded && !state.roundOver) K.toast("Burst! +" + PW[res.awarded]);
+    if (res.awarded && !state.roundOver) K.toast("Burst! +1 " + PW[res.awarded]);
     else if (res.unpaid && !state.roundOver) K.toast(res.unpaid === "undo" ? "Burst! No reward after Undo this round." : "Burst! No reward after Shield.", "info"); // R2
     else if (res.burst && who === "p" && !state.roundOver) K.toast("Burst!");
     animate(before, state.last, afterTurn);
@@ -412,6 +409,7 @@
     catchUp();
     if (!myTurn()) return;
     var v = state.tiles[i];
+    if (armed === "undo") { clearTimeout(undoT); armed = null; } // a tile tap drops the Undo ask and plays on
     if (armed) {
       var name = armed, res = N.use(state, name, i);
       if (!res.ok) { K.toast("Pick a valid tile", "bad"); sfx("bad"); return; }
@@ -426,9 +424,18 @@
     if (!r.ok) { if (state.shield && state.shield.idx === i) { K.toast("That tile is shielded this turn", "bad"); sfx("bad"); } return; }
     sel = -1; commit(r, "p");
   }
+  var undoT = null;
   function activate(name) {
     if (name === "undo") {
       if (!N.canUse(state, "undo")) return; // R1: never across a decided round
+      // S12: the Undo that starts the unpaid rest of the round asks first (two-step "Sure?", 3 s); then Undo is free
+      if (!state.undone && armed !== "undo") {
+        catchUp(); if (!myTurn()) return;
+        clearTimeout(undoT); disarmLevels(); armed = "undo"; sel = -1; sfx("tick"); // one "Sure?" at a time
+        undoT = setTimeout(function () { undoT = null; if (armed === "undo") { armed = null; render(); } }, 3000);
+        return render();
+      }
+      clearTimeout(undoT); undoT = null;
       flush(); armed = null; sel = -1; levelArm = null; run.used++; sfx("tick");
       state = N.use(state, "undo").state; persist(); K.toast("Took back your turn"); return render();
     }
