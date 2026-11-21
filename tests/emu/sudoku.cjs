@@ -481,7 +481,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.evaluate(() => { const r = NumbericsTrophies.report; NumbericsTrophies.report = function (g, ev, data, o) { window.__rep(JSON.stringify([g, ev, data])); return r.apply(this, arguments); }; });
   const e3 = await empties(p); await p.locator("#board .c").nth(e3[0]).click(); await p.keyboard.press(String((await st(p)).solution[e3[0]]));
   await solveNow(p);
-  const pills = async () => p.evaluate(() => [...document.querySelectorAll("#win-pills [data-trophy]")].map(x => x.dataset.trophy).sort().join(","));
+  // Night owl (a secret) is earned by a solve between midnight and 4 local time: leave it out, so the check holds at any hour
+  const pills = async () => p.evaluate(() => [...document.querySelectorAll("#win-pills [data-trophy]")].map(x => x.dataset.trophy).filter(x => x !== "fam_night").sort().join(","));
   ck("Easy, quick, pure, clean, no notes: First grid, Quick pencil, Not one slip and Hello, numbers as pills on the card",
     await pills() === "fam_first,sdk_clean,sdk_first,sdk_quick" && await p.isVisible("#win-pills"), await pills());
   await shot(p, "card-trophies");

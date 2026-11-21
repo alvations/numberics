@@ -379,8 +379,8 @@ details.how p .btn{ margin-top:2px; }
 .tb-mute.muted .tb-on{ display:none; } .tb-mute.muted .tb-off{ display:inline; }
 .tb-mute.muted{ color:var(--mute); }
 /* B3: the power-up tray and the stat row fit at 320 px with Larger text (labels wrap instead of pushing out) */
-.tray{ grid-template-columns:repeat(4,minmax(0,1fr)); }
-.pw{ min-width:0; }
+:root[data-text="large"] .tray{ grid-template-columns:repeat(4,minmax(0,1fr)); }
+:root[data-text="large"] .pw{ min-width:0; }
 @media (max-width:400px){ :root[data-text="large"] .pw{ white-space:normal; line-height:1.15; padding:4px 2px; font-size:.78rem; }
   :root[data-text="large"] .pw i{ margin-left:2px; padding:0 4px; } }
 @media (max-width:360px){ :root[data-text="large"] .stat{ min-width:0; padding-left:7px; padding-right:7px; } }

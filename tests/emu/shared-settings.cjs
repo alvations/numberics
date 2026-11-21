@@ -28,7 +28,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(FIB); await settle(p);
   ck("closed at load: NumbericsUI.open() is false", await p.evaluate(() => NumbericsUI.open() === false && !document.querySelector(".scrim:not([hidden])")));
-  const ev = p.evaluate(() => new Promise(r => addEventListener("numberics:sheet", e => r(e.detail), { once: true })));
+  // the listener is in place (awaited) before the click, so a loaded machine can never let the event slip past it
+  await p.evaluate(() => { window.__ev = new Promise(r => addEventListener("numberics:sheet", e => r(e.detail), { once: true })); });
+  const ev = p.evaluate(() => window.__ev);
   await openSettings(p);
   ck("numberics:sheet fires on open with { id, open }", JSON.stringify(await ev) === '{"id":"settings","open":true}');
   ck("open() is true and current() names the sheet", await p.evaluate(() => NumbericsUI.open() === true && NumbericsUI.current() === "settings"));
@@ -36,7 +38,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
     const d = document.querySelector("#sh-settings .sheet"); return d.getAttribute("role") === "dialog" && d.getAttribute("aria-modal") === "true" &&
       document.getElementById(d.getAttribute("aria-labelledby")).textContent === "Settings"; }));
   ck("focus moves to the close button", await p.evaluate(() => document.activeElement.classList.contains("sh-x")));
-  ck("the close button is at least 44 x 44", await p.evaluate(() => { const r = document.querySelector("#sh-settings .sh-x").getBoundingClientRect(); return r.width >= 44 && r.height >= 44; }));
+  const xr = await p.evaluate(() => { const r = document.querySelector("#sh-settings .sh-x").getBoundingClientRect(); return { w: r.width, h: r.height, cur: NumbericsUI.current() }; });
+  ck("the close button is at least 44 x 44", Math.round(xr.w) >= 44 && Math.round(xr.h) >= 44, JSON.stringify(xr)); // sub-pixel while the sheet slides in
   ck("the page behind does not scroll", await p.evaluate(() => getComputedStyle(document.documentElement).overflow === "hidden"));
   ck("the sections are Sound and feel, Seeing, Memory, in order", (await p.$$eval("#sh-settings .sec", s => s.map(x => x.textContent))).join("|") === "Sound and feel|Seeing|Memory");
   ck("switches are button[role=switch][aria-checked], 52 x 32", await p.evaluate(() => [...document.querySelectorAll("#sh-settings .sw")].filter(b => b.offsetParent).every(b => {
@@ -85,7 +88,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("no game key reaches the board while a sheet is open", await p.evaluate(() => JSON.stringify(window.__fibonacci.state.grid)) === grid0);
   await p.keyboard.press("Tab");
   ck("Tab from outside the sheet comes back into it", await inside());
-  const evc = p.evaluate(() => new Promise(r => addEventListener("numberics:sheet", e => r(e.detail), { once: true })));
+  await p.evaluate(() => { window.__evc = new Promise(r => addEventListener("numberics:sheet", e => r(e.detail), { once: true })); });
+  const evc = p.evaluate(() => window.__evc);
   await p.keyboard.press("Escape");
   ck("Esc closes it, and fires numberics:sheet open:false", !(await p.isVisible("#sh-settings")) && JSON.stringify(await evc) === '{"id":"settings","open":false}');
   ck("focus returns to the Settings button", await p.evaluate(() => document.activeElement.getAttribute("data-open") === "settings"));
@@ -174,13 +178,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
     numberics_trophies_v1: JSON.stringify({ got: { fam_first: 1 } }), numberics_fibonacci_v1: JSON.stringify({ moves: 9 }),
     numberics_progress_v1: HOWTO,
     [KEY]: JSON.stringify({ v: 1, sound: true, volume: 0.4, haptics: true, motion: "auto", theme: "light", text: "normal", contrast: "high",
-      music: false, musicVolume: 0.3, musicStyle: "quest" }), other_site_key: "x" };
+      music: false, musicVolume: 0.3, musicStyle: "quest", unmute: "both" }), other_site_key: "x" };
   ctx = await newCtx({ viewport: { width: 375, height: 812 }, acceptDownloads: true });
   p = await ctx.newPage(); const errs3 = []; p.on("pageerror", e => errs3.push(e.message));
   await p.goto(url + "seven/");
   await p.evaluate(s => { localStorage.clear(); for (const k in s) localStorage.setItem(k, s[k]); }, SEED);
   await p.reload();
-  const before = await nmKeys(p);
+  // the page's own saves are batched (TRIAGE4 D6): flush them so `before` is what Save will see
+  const before = await p.evaluate(() => { NumbericsKit.flush(); return true; }).then(() => nmKeys(p));
   await p.evaluate(() => { window.__rep = []; const r = NumbericsTrophies.report; NumbericsTrophies.report = function (g, e) { window.__rep.push(g + ":" + e); return r.apply(this, arguments); }; });
   await openSettings(p);
   const dl = p.waitForEvent("download"); await p.click('#sh-settings [data-mem="save"]'); const d = await dl;

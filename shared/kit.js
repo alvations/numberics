@@ -27,14 +27,17 @@
   // Memory (shared/settings.js) calls freeze() before it writes a loaded save or erases, then reloads: from then on
   // saves stay in memory and pending ones are dropped, so no page's own pagehide save can undo it (TRIAGE4 B1).
   // Without page lifecycle events (Node tests, odd hosts) a flush on leaving cannot be promised, so saves write at once.
-  var PEND = {}, pendN = 0, idleT = null, frozen = false, leaving = true;
+  // BASE holds what storage held when a key joined the batch: if anything else (Memory, another tab, a script) wrote
+  // the key since, the flush drops ours, so a queued save never overwrites a newer value it did not see.
+  var PEND = {}, BASE = {}, pendN = 0, idleT = null, frozen = false, leaving = true;
   function hasWin() { return typeof window !== "undefined" && window; }
   function writeNow(key, text) { try { window.localStorage.setItem(key, text); } catch (e) { /* in-memory only */ } }
+  function peek(key) { try { return window.localStorage.getItem(key); } catch (e) { return null; } }
   function flush() {
     if (idleT !== null) { try { (window.cancelIdleCallback || clearTimeout)(idleT); } catch (e) { /* gone */ } idleT = null; }
     if (frozen || !pendN) return;
-    var all = PEND; PEND = {}; pendN = 0;
-    for (var k in all) writeNow(k, all[k]);
+    var all = PEND, base = BASE; PEND = {}; BASE = {}; pendN = 0;
+    for (var k in all) if (peek(k) === base[k]) writeNow(k, all[k]);
   }
   function schedule() {
     if (idleT !== null || !hasWin()) return;
@@ -53,7 +56,7 @@
       }, true);
     } catch (e) { leaving = true; /* no events: every save is written at once */ }
   }
-  function freeze() { frozen = true; PEND = {}; pendN = 0; }
+  function freeze() { frozen = true; PEND = {}; BASE = {}; pendN = 0; }
   function thaw() { frozen = false; }
   function store(key) {
     var mem = null;
@@ -66,8 +69,8 @@
       save: function (obj) {
         mem = JSON.stringify(obj);
         if (frozen) return;                                // Memory is reloading the page: nothing may overwrite it
-        if (leaving) { if (Object.prototype.hasOwnProperty.call(PEND, key)) { delete PEND[key]; pendN--; } writeNow(key, mem); return; }
-        if (!Object.prototype.hasOwnProperty.call(PEND, key)) pendN++;
+        if (leaving) { if (Object.prototype.hasOwnProperty.call(PEND, key)) { delete PEND[key]; delete BASE[key]; pendN--; } writeNow(key, mem); return; }
+        if (!Object.prototype.hasOwnProperty.call(PEND, key)) { pendN++; BASE[key] = peek(key); }
         PEND[key] = mem; schedule();
       },
     };

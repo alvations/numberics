@@ -59,8 +59,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("phone 390: two card columns", await p.evaluate(() => getComputedStyle(document.getElementById("games")).gridTemplateColumns.split(" ").length === 2));
   const td = await p.evaluate(() => { const t = document.getElementById("today");
     return { when: t.querySelector(".when").textContent, h: t.querySelector("h3").textContent, chips: [...t.querySelectorAll(".chip")].map(c => [c.getAttribute("href"), c.textContent]) }; });
-  ck("Today card: date line, title and three Daily chips (Not yet)", /^Today · \S/.test(td.when) && td.h === "Three dailies, the same for everyone" &&
-    JSON.stringify(td.chips) === JSON.stringify([["seven/?mode=daily", "SevenNot yet"], ["six/?mode=daily", "SixNot yet"], ["sudoku/?mode=daily", "SudokuNot yet"]]), JSON.stringify(td));
+  // TRIAGE4 D4/D9: the streak line always shows, chips say "Daily", the Sudoku chip carries its level
+  const lvl = await p.evaluate(() => { const l = NumbericsProgress.dailyLevel(); return l.charAt(0).toUpperCase() + l.slice(1); });
+  ck("Today card: date line with 'Start a streak today', title and three Daily chips (Not yet; Sudoku's level)", /^Today · \S.*Start a streak today$/.test(td.when) && td.h === "Three dailies, the same for everyone" &&
+    JSON.stringify(td.chips) === JSON.stringify([["seven/?mode=daily", "Daily SevenNot yet"], ["six/?mode=daily", "Daily SixNot yet"], ["sudoku/?mode=daily", "Daily Sudoku" + lvl + "Not yet"]]), JSON.stringify(td));
   ck("phone 390: no horizontal scroll", await noHScroll(p));
   await p.evaluate(() => document.getElementById("today").scrollIntoView()); await p.waitForTimeout(100);
   await shot(p, "phone-scrolled");
@@ -74,7 +76,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.reload();
   const c2 = await p.evaluate(() => { const a = document.querySelector('#games .card[data-id="seven"]'); return [...a.querySelectorAll(".tag")].map(t => t.textContent); });
   ck("after playing Seven its card shows Continue and the best, not New to you", JSON.stringify(c2) === '["Continue","Best 579"]', JSON.stringify(c2));
-  ck("a finished Daily shows Done on its chip", await p.evaluate(() => { const c = document.querySelector('#today .chip[href^="seven/"]'); return c.classList.contains("done") && c.textContent === "SevenDone · 1,204"; }));
+  ck("a finished Daily shows Done on its chip", await p.evaluate(() => { const c = document.querySelector('#today .chip[href^="seven/"]'); return c.classList.contains("done") && c.textContent === "Daily SevenBest 1,204"; }));
 
   // 4. the Games sheet from the top bar: Today first, then every game in order; Esc closes and focus returns
   await p.click('#topbar [data-open="games"]'); await p.waitForTimeout(300);

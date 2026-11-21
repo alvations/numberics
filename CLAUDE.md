@@ -104,3 +104,8 @@ same commit as any visible change. `npm test` fails if a live game has no screen
 - Only a 4x4 board is wired in the UI; the engine already accepts other `size` values.
 - **Deploy:** GitHub Pages at https://alvations.github.io/numberics/ serves the `gh-pages` branch, which
   `.github/workflows/pages.yml` rebuilds from `main` after `node tests/run.js` passes. Never edit `gh-pages` by hand.
+- **Beta at /numberics/beta/ (same origin as the stable site): it never reads or writes the stable site's storage.**
+  `shared/boot.js` (first script on every page) shims `localStorage` under any path containing `/beta/`: every
+  `numberics_*` key is stored as `numberics_beta_*`, and `key()`, `length` and `clear()` see only those, so every module,
+  Memory Save, Load and Erase included, works unchanged. Off `/beta/` nothing changes. Tests: `tests/test-beta.js`,
+  `tests/emu/shared-beta.cjs` (serves the repo under `/numberics/beta/`).

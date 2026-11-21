@@ -478,13 +478,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("six_ten: not at five lines in a row", !(await has(p, "six_ten")));
   for (let i = 0; i < 5; i++) await solveL(p, "3 3 3");
   ck("six_ten: ten lines in a row without help", await has(p, "six_ten"));
-  ck("the run record is saved with the game", await p.evaluate(() => JSON.parse(localStorage.getItem("numberics_six_v1")).runs.climb.streak === 10));
+  ck("the run record is saved with the game", await p.evaluate(() => { NumbericsKit.flush(); return JSON.parse(localStorage.getItem("numberics_six_v1")).runs.climb.streak === 10; }));
   ck("progress: the card summary is written on persist", await p.evaluate(() => { const g = window.NumbericsProgress.get("six"); return g && g.live === true && /^Round 10 · line 1\/6$/.test(g.liveText); }));
   // a helped line resets the streak and never pays the secrets
   await setL(p, "8 8 8", { almost: true });
   await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.helped = true; window.__six.state = s; });
   for (let g = 0; g < 8 && !(await p.evaluate(() => window.__six.state.done)); g++) await p.locator('.gp[data-g="0"]').click();
-  ck("a helped line resets the run streak", await p.evaluate(() => JSON.parse(localStorage.getItem("numberics_six_v1")).runs.climb.streak === 0));
+  ck("a helped line resets the run streak", await p.evaluate(() => { NumbericsKit.flush(); return JSON.parse(localStorage.getItem("numberics_six_v1")).runs.climb.streak === 0; }));
   // the Daily: its end card shows the trophy as a pill (no toast over the card), and the Today line is written
   await p.click('#modes button[data-mode="daily"]');
   await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__six.state)); s.idx = 5; s.cur = JSON.parse(JSON.stringify(s.lines[5].sol)); s.done = true; s.solved = 4; window.__six.state = s; });

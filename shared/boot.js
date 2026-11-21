@@ -3,7 +3,33 @@
  * paints in the right theme at once: reads numberics_settings_v1 (try/catch: sandboxes throw) and sets
  * <html data-theme data-text data-contrast data-motion> and meta[name=theme-color]. Unknown or malformed fields fall
  * back to the default one by one. Motion and theme "auto" follow the device, and keep following it while the page is open.
- * settings.js re-runs NumbericsBoot.apply() after a change. */
+ * settings.js re-runs NumbericsBoot.apply() after a change.
+ *
+ * The beta namespace (owner: build/v2 is deployed at /numberics/beta/, same origin as the stable site): under a path
+ * with "/beta/", the shim below stores every localStorage key "numberics_*" as "numberics_beta_*", and key(), length
+ * and clear() see only those, so every module (Memory Save, Load and Erase included) works unchanged and never reads
+ * or writes the stable site's keys. Keys of other names pass through. Nothing changes anywhere else. */
+(function (w) {
+  "use strict";
+  var S = null, LS = null;
+  try { if (!/\/beta\//.test(w.location.pathname)) return; S = w.Storage.prototype; LS = w.localStorage; } catch (e) { return; }
+  if (!S || !LS || S.__nmBeta) return;
+  var P = "numberics_", B = "numberics_beta_", get = S.getItem, set = S.setItem, del = S.removeItem, key = S.key, clr = S.clear;
+  var len = Object.getOwnPropertyDescriptor(S, "length");
+  function to(k) { k = String(k); return k.indexOf(P) === 0 ? B + k.slice(P.length) : k; }
+  function mine() { // the real beta keys, as the page sees them
+    var out = [], n = len.get.call(LS), i, k;
+    for (i = 0; i < n; i++) { k = key.call(LS, i); if (k && k.indexOf(B) === 0) out.push(P + k.slice(B.length)); }
+    return out;
+  }
+  S.__nmBeta = true;
+  S.getItem = function (k) { return get.call(this, this === LS ? to(k) : k); };
+  S.setItem = function (k, v) { return set.call(this, this === LS ? to(k) : k, v); };
+  S.removeItem = function (k) { return del.call(this, this === LS ? to(k) : k); };
+  S.key = function (i) { return this === LS ? (mine()[i] === undefined ? null : mine()[i]) : key.call(this, i); };
+  S.clear = function () { if (this !== LS) return clr.call(this); var t = this; mine().forEach(function (k) { del.call(t, to(k)); }); };
+  Object.defineProperty(S, "length", { configurable: true, enumerable: len.enumerable, get: function () { return this === LS ? mine().length : len.get.call(this); } });
+})(typeof window !== "undefined" ? window : this);
 (function (w) {
   "use strict";
   var KEY = "numberics_settings_v1", DEF = { motion: "auto", theme: "auto", text: "normal", contrast: "normal" }; // theme: the device (TRIAGE4 D5)

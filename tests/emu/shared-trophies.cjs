@@ -81,7 +81,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 4. the end card is up: no toast over it; the card shows pills instead
   await p.evaluate(() => { NumbericsKit.clearToast(); document.getElementById("over").hidden = false; });
   const ids = await p.evaluate(() => NumbericsTrophies.report("two", "end", { top: 12, score: 20000 }));
-  ck("end-card path: the event earns", ids.indexOf("two_4096") >= 0 && ids.indexOf("two_score") >= 0 && ids.indexOf("fam_first") >= 0, JSON.stringify(ids));
+  // fam_first was earned by the Night owl step above (a finished game now earns that secret, TRIAGE4)
+  ck("end-card path: the event earns", ids.indexOf("two_4096") >= 0 && ids.indexOf("two_score") >= 0 && await p.evaluate(() => NumbericsTrophies.has("fam_first")), JSON.stringify(ids));
   ck("end-card path: no toast over the card", await p.evaluate(() => !document.getElementById("toast").classList.contains("on")));
   ck("end-card path: the dot still marks them unseen", await dotOn(p));
   await p.evaluate(ids => NumbericsTrophies.pills(document.getElementById("pills"), ids), ids);
@@ -144,9 +145,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const tState = () => p.evaluate(() => { const t = document.getElementById("toast"); return t.classList.contains("on") ? [...t.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("") : ""; });
   const q = await p.evaluate(() => NumbericsTrophies.report("two", "end", { top: 3, score: 10 }, { quiet: true }));
   ck("quiet: earns, no toast, and the cup's unseen dot shows", q.indexOf("fam_first") >= 0 && (await tState()) === "" && await dotOn(p), JSON.stringify(q));
-  await p.evaluate(() => { ["fibonacci", "three", "four", "five"].forEach(g => NumbericsTrophies.report(g, "x", {}, { quiet: true })); window.__fr = NumbericsTrophies.report("two", "move", { top: 7 }); });
-  ck("mid-play: the game's trophy toasts at once, the family one (High five, the fifth game) is held back", JSON.stringify(await p.evaluate(() => window.__fr.slice().sort())) === '["fam_five","two_128"]' &&
-    (await tState()) === "Trophy: Warming up", await tState());
+  // Two is already played (the quiet end above): three more games, then Three's first swipe is the fifth game
+  await p.evaluate(() => { ["fibonacci", "four", "five"].forEach(g => NumbericsTrophies.report(g, "x", {}, { quiet: true })); window.__fr = NumbericsTrophies.report("three", "swipe", { flushes: 1 }); });
+  ck("mid-play: the game's trophy toasts at once, the family one (High five, the fifth game) is held back", JSON.stringify(await p.evaluate(() => window.__fr.slice().sort())) === '["fam_five","thr_flush"]' &&
+    (await tState()) === "Trophy: First flush", await tState());
   await p.evaluate(() => NumbericsKit.clearToast());
   let shown = false;
   for (let k = 0; k < 10; k++) { await p.keyboard.press("Shift"); await p.waitForTimeout(250); if (/High five/.test(await tState())) shown = true; }

@@ -228,6 +228,14 @@ t("kit store: pagehide flushes the batch, and a save made while leaving writes a
   (c.listeners.pageshow || []).forEach(f => f({ type: "pageshow" }));
   a.save({ n: 3 }); ok(c.localStorage.getItem("numberics_a_v1") === '{"n":2}', "back on the page: batched again");
 });
+t("kit store: a value written by anything else after the batch was queued is never overwritten by the flush", () => {
+  const c = load(), K = c.NumbericsKit, a = K.store("numberics_a_v1");
+  a.save({ n: 1 }); c.localStorage.setItem("numberics_a_v1", '{"other":1}');
+  K.flush(); ok(c.localStorage.getItem("numberics_a_v1") === '{"other":1}', "the newer outside value wins");
+  (c.listeners.pagehide || []).forEach(f => f({ type: "pagehide" })); ok(c.localStorage.getItem("numberics_a_v1") === '{"other":1}', "nor on pagehide");
+  (c.listeners.pageshow || []).forEach(f => f({ type: "pageshow" }));
+  a.save({ n: 2 }); K.flush(); ok(c.localStorage.getItem("numberics_a_v1") === '{"n":2}', "a save queued after it writes as usual");
+});
 t("Memory freezes the store: pending saves are dropped and no later save (pagehide included) overwrites a Load or an Erase", () => {
   const c = load({ stored: SAVES }), K = c.NumbericsKit, M = c.NumbericsSettings.memory, text = M.pack();
   const two = K.store("numberics_endless_v1"); two.save({ dirty: 1 });

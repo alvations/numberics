@@ -139,7 +139,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.querySelector("#over h2"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
   await shot(p, "over-best");
   await p.click("#again");
-  await p.evaluate(() => { NumbericsKit.flush(); localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 1000, bestTop: 8, bestBefore: 1000, state: window.__numberics.state })); });
+  await p.evaluate(() => { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 1000, bestTop: 8, bestBefore: 1000, state: window.__numberics.state })); });
   await p.reload();
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.score = 900; s.over = true; window.__numberics.state = s; });
   ck("a run below the saved best does not claim one", await card(p) && !(await p.isVisible("#over-best")));

@@ -109,7 +109,9 @@
     });
     try {
       w.addEventListener("storage", function (e) {
-        if (e.key !== KEY) return;
+        // under /beta/ the boot shim stores our key as numberics_beta_*; a storage event names the real key
+        var beta = !!(w.Storage && w.Storage.prototype && w.Storage.prototype.__nmBeta);
+        if (e.key !== (beta ? "numberics_beta_" + KEY.slice(10) : KEY)) return;
         var before = current(), next; try { next = normalize(JSON.parse(e.newValue)); } catch (x) { next = normalize(null); }
         var changed = FIELDS.filter(function (k) { return next[k] !== before[k]; });
         cur = next; mem = JSON.stringify(cur); applyNow(); if (changed.length) emit(changed);
