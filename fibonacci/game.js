@@ -144,7 +144,7 @@
       holding = true; viewing = false; clearTimeout(holdT);
       var gen = state.moves;
       holdT = setTimeout(function () { holdT = null; if (holding && state.over && state.moves === gen) { holding = false; fx.finish(); render(); } }, HOLD);
-      endTro = endTro.concat(trophy("end", { score: state.score, value: N.value(state.top), run: { used: run.used } }));
+      endTro = endTro.concat(trophy("end", { score: state.score, value: N.value(state.top), tier: N.tierOf(state), run: { used: run.used } }));
       persist();
     }
     if (!state.over) { holding = false; viewing = false; clearTimeout(holdT); holdT = null; }
@@ -329,7 +329,7 @@
     if (paid) fx.sound(after + 140, function () { sfx("power"); });
     if (state.over) fx.sound(after, function () { sfx("lose"); buzz("lose"); });
     // the move's trophy check runs at the pop, so its toast and chime land with what it names (8.4)
-    var data = { value: N.value(state.top), merges: r.merges.length, grid: state.grid.map(N.value), moves: state.moves, run: { used: run.used } };
+    var data = { value: N.value(state.top), merges: r.merges.length, grid: state.grid.map(N.value), moves: state.moves, tier: N.tierOf(state), run: { used: run.used } };
     var ended = state.over;
     fx.at(after, function () {
       var got = trophy("move", data);

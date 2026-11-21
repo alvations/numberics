@@ -31,6 +31,7 @@ docs/DESIGN.md     design principles register + how the power-ups are tuned
 npm test                                             # always, before every commit (every game)
 NODE_PATH=$(npm root -g) npm run test:browser       # after any UI change (SHOTS=<dir> saves screenshots)
 NODE_PATH=$(npm root -g) node tools/shots.cjs        # after any visible change, and for every new game
+NODE_PATH=$(npm root -g) node tests/emu/run.cjs devices  # the device matrix (O-16: iPhone Mini to Pro Max, Pixel, iPad Mini, desktop; docs/reviews/PERSONAS.md)
 ```
 Show a green test and a screenshot in the same turn you say "done". Serve tests on 8070+ (never 5060).
 

@@ -25,6 +25,12 @@ t("the R4 shared block (top bar at 320 px, mute, end cards, trophy goals, Today,
   const r = get(CSS[0]); CSS.slice(1).forEach(f => ok(get(f) === r, f + " differs from shared/theme.css"));
   ok(/\.tb-btn\{ min-width:var\(--tap\); flex:none; \}/.test(r) && /\.tb-word\{ display:none; \}/.test(r), "the top bar never shrinks a button");
 });
+t("the R6 fit block (O-14, O-15, O-16: density on short and small screens) is byte-identical in all three", () => {
+  const A = "/* ===== R6 fit (O-14", Z = "/* ===== end R6 fit ===== */";
+  const get = f => { const s = read(f), a = s.indexOf(A), b = s.indexOf(Z); ok(a >= 0 && b > a, f + ": R6 markers"); return s.slice(a, b + Z.length); };
+  const r = get(CSS[0]); CSS.slice(1).forEach(f => ok(get(f) === r, f + " differs from shared/theme.css"));
+  ok(/header \.sub\{ display:none; \}/.test(r) && /min-height:1\.45em/.test(r) && /--fit-chrome/.test(r), "folds the tagline, one-line hint, board fit");
+});
 t("the top bar: four 44 px buttons (Games, Sound, Trophies, Settings), the Settings icon a gear, the words hideable", () => {
   const u = read("shared/ui.js");
   ok(/data-open="games"[\s\S]*data-open="mute"[\s\S]*data-open="trophies"[\s\S]*data-open="settings"/.test(u), "order");

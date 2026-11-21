@@ -38,7 +38,9 @@ const CASES = {
   fib_chain: ["fibonacci", "move", { merges: 2 }, { merges: 3 }],
   fib_run: ["fibonacci", "move", { grid: [3, 5, 8, 13].concat(g16(0).slice(4)) }, { grid: [21, 13, 8, 5].concat(g16(0).slice(4)) }],
   fib_long: ["fibonacci", "move", { moves: 499 }, { moves: 500 }],
+  fib_hard: ["fibonacci", "end", { value: 987, tier: "hard" }, { value: 1597, tier: "hard" }],
   two_128: ["two", "move", { top: 6 }, { top: 7 }], two_2048: ["two", "move", { top: 10 }, { top: 11 }],
+  two_hard: ["two", "move", { top: 10, tier: "hard" }, { top: 11, tier: "hard" }],
   two_4096: ["two", "end", { top: 11 }, { top: 12 }], two_8192: ["two", "move", { top: 12 }, { top: 13 }],
   two_pure: ["two", "move", { top: 9, run: { used: 0 } }, { top: 10, run: { used: 0 } }],
   two_score: ["two", "end", { score: 19999 }, { score: 20000 }], two_chain: ["two", "move", { merges: 3 }, { merges: 4 }],
@@ -49,6 +51,7 @@ const CASES = {
   thr_double: ["three", "swipe", { flushes: 1 }, { flushes: 2 }],
   thr_mono: ["three", "swipe", { grid: g16(3).map((v, i) => i === 9 ? 2 : v) }, { grid: g16(3) }],
   thr_long: ["three", "swipe", { moves: 299 }, { moves: 300 }],
+  thr_hard: ["three", "swipe", { tier: "hard", run: { flushes: 9 } }, { tier: "hard", run: { flushes: 10 } }],
   four_win: ["four", "end", { won: false, level: "easy" }, { won: true, level: "easy", how: "colour" }],
   four_ten: ["four", "end", { won: true, how: "colour" }, { won: true, how: "ten" }],
   four_colour: ["four", "end", { won: true, how: "ten" }, { won: true, how: "colour" }],
@@ -97,12 +100,12 @@ const CASES = {
   sdk_clean: ["sudoku", "solve", { clean: false }, { clean: true }]
 };
 
-t("registry: 84 trophies, unique ids, the spec's per-game counts, two secrets per game and two family-wide", () => {
-  ok(T.REG.length === 84, "count " + T.REG.length);
-  const ids = new Set(T.REG.map(x => x.id)); ok(ids.size === 84, "unique ids");
+t("registry: 87 trophies, unique ids, the spec's per-game counts, two secrets per game and two family-wide", () => {
+  ok(T.REG.length === 87, "count " + T.REG.length);
+  const ids = new Set(T.REG.map(x => x.id)); ok(ids.size === 87, "unique ids");
   const per = {}, sec = {}; T.REG.forEach(x => { per[x.game] = (per[x.game] || 0) + 1; sec[x.game] = (sec[x.game] || 0) + (x.secret ? 1 : 0); });
   ok(per.fam === 7 && sec.fam === 2, "family");
-  T.GAMES.forEach(g => { ok(per[g] >= 7 && per[g] <= 9, g + " has " + per[g]); ok(sec[g] === 2, g + " secrets " + sec[g]); });
+  T.GAMES.forEach(g => { ok(per[g] >= 7 && per[g] <= 10, g + " has " + per[g]); ok(sec[g] === 2, g + " secrets " + sec[g]); });
   ok(Object.keys(per).length === 11, "only known games");
 });
 t("registry: every entry has name, description <= 60 chars, an existing glyph, events and a test", () => T.REG.forEach(x => {
@@ -123,6 +126,26 @@ t("registry: secrets' descriptions never spoil the feat (reviewed word list)", (
   ok(SPOIL[x.id], "no review row for " + x.id);
   SPOIL[x.id].forEach(w => ok(!(new RegExp("(^|\\W)" + w.replace(/[.*+?^${}()|[\]\\!]/g, "\\$&") + "($|\\W)", "i")).test(x.desc), x.id + " spoils '" + w + "'"));
 }));
+// The Hard tier trophies (docs/reviews/TROPHY-TIERS.md, O-13): pay on Hard only and fail closed on a missing or unknown
+// tier; the old tile trophies beside them stay ungated, so they still pay on every tier.
+const TIERED = { two_hard: ["two", "move", { top: 11 }], fib_hard: ["fibonacci", "move", { value: 1597 }],
+  thr_hard: ["three", "swipe", { run: { flushes: 10 } }] };
+t("tier trophies pay on Hard only: never on Medium, Easy, a missing or an unknown tier", () => Object.keys(TIERED).forEach(id => {
+  const [g, ev, d] = TIERED[id];
+  [{ tier: "medium" }, { tier: "easy" }, {}, { tier: "HARD" }, { tier: null }, { tier: 3 }].forEach(x => {
+    fresh(); const r = T.report(g, ev, Object.assign({}, d, x), { quiet: true });
+    ok(r.indexOf(id) < 0 && !T.has(id), id + " paid on " + JSON.stringify(x));
+  });
+  fresh(); ok(T.report(g, ev, Object.assign({ tier: "hard" }, d), { quiet: true }).indexOf(id) >= 0 && T.has(id), id + " not paid on Hard");
+}));
+t("the old tile trophies are not gated: two_2048, fib_2584 and thr_five pay on every tier", () => {
+  const OLD = { two_2048: ["two", "move", { top: 11 }], fib_2584: ["fibonacci", "move", { value: 2584 }],
+    thr_five: ["three", "swipe", { run: { flushes: 5 } }] };
+  Object.keys(OLD).forEach(id => ["hard", "medium", "easy", undefined].forEach(tier => {
+    const [g, ev, d] = OLD[id]; fresh();
+    ok(T.report(g, ev, Object.assign({ tier: tier }, d), { quiet: true }).indexOf(id) >= 0, id + " not paid on " + tier);
+  }));
+});
 t("every trophy has a boundary case (the test table covers the whole registry)", () => T.REG.forEach(x => ok(x.id in CASES, x.id)));
 
 T.REG.forEach(x => {
@@ -227,6 +250,9 @@ t("earned() lists ids in registry order; unseen keeps order of earning", () => {
 const sect = h => { const a = h.indexOf('<div class="sec">Earned</div>'), b = h.indexOf('<div class="sec">Still to find</div>');
   return { earned: a < 0 ? "" : h.slice(a, b < 0 ? h.length : b), todo: b < 0 ? "" : h.slice(b) }; };
 const plain = T.REG.filter(x => !x.secret).length;
+t("sheet total: 87 trophies, 65 of them non-secret, so a new player sees 0 of 65", () => {
+  ok(plain === 65, "non-secret " + plain); fresh(); ok(T.html().indexOf(">0 of 65 trophies<") > 0, "0 of 65");
+});
 t("sheet: nothing earned says so, shows 0 of N (N = every non-secret trophy) and lists every non-secret goal, dimmed", () => {
   fresh(); const h = T.html(), s = sect(h);
   ok(/Nothing yet\. Play any game to begin\./.test(h), "the empty line");

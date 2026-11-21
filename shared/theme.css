@@ -383,3 +383,35 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .memst[hidden]{ display:none; }
 .memst .mem2{ display:flex; gap:8px; }
 /* ===== end R4 shared ===== */
+
+/* ===== R6 fit (O-14, O-15, O-16: no crowding on small phones; every device of the matrix in docs/reviews/PERSONAS.md;
+   copied byte for byte into two/style.css and sudoku/style.css, tests/test-theme.js, checked by tests/emu/devices.cjs) =====
+   Density only: nothing is removed, recoloured or re-ordered. On phones, and on any screen up to 860 px tall, the rhythm
+   is tighter and the hint keeps one line of room (a rarer, longer line may wrap; the copy that is always there fits one
+   line). On short phones the tagline under the title folds away (How to play says the same), the title is smaller and
+   the stat pills slimmer. Tall tablets and desktops keep their look. Where the board would still push a control needed
+   to play below the screen, the board shrinks to fit (a game sets --fit-chrome, the height of everything else that must
+   stay in view, and --fit-ratio, its width over its height). */
+.tb-home{ min-width:var(--tap); justify-content:center; } /* the home mark stays a 44 px target when its word hides */
+@media (max-width:520px),(max-height:860px){
+  #app > .hint{ min-height:1.45em; line-height:1.45; margin:0 0 8px; text-wrap:balance; } /* 8: a toast centred on the empty lane clears the board */
+  .seg,.levels{ margin-bottom:6px; }
+  .tray{ margin-bottom:6px; }
+}
+@media (max-width:520px) and (max-height:860px){
+  .topbar{ min-height:var(--tap); margin-bottom:6px; }
+  header{ align-items:center; column-gap:10px; row-gap:6px; margin-bottom:8px; }
+  header .sub{ display:none; }
+  h1{ font-size:var(--fs-xl); }
+  .stat{ padding-top:3px; padding-bottom:4px; }
+  #app > .row{ margin-top:8px; }
+}
+@media (max-width:420px){ :root[data-text="large"] .stats:has(> .stat:nth-child(4)){ gap:6px; }
+  :root[data-text="large"] .stats:has(> .stat:nth-child(4)) > .stat{ min-width:0; padding-left:6px; padding-right:6px; }
+  :root[data-text="large"] .stats:has(> .stat:nth-child(4)) > .stat > span{ letter-spacing:.02em; } }
+:root[data-text="large"] .pw{ white-space:normal; line-height:1.15; } /* Larger text: a long label wraps in its slot, */
+:root[data-text="large"] .pw i{ display:inline-block; } /* its count under it when the two do not share a line */
+@media (max-height:860px){
+  .board{ max-width:max(var(--fit-min,240px), calc((100svh - var(--fit-chrome,0px)) * var(--fit-ratio,1))); margin-inline:auto; }
+}
+/* ===== end R6 fit ===== */

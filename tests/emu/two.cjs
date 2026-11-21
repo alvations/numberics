@@ -144,4 +144,25 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await shot(p, "score-pop");
   ck("no page errors (O-14, S20)", e6.length === 0, e6.join(" | "));
   await ctx.close();
+
+  // 7. the Hard trophy (O-13, docs/reviews/TROPHY-TIERS.md): the client sends the tier. A forged board one join short of
+  // 2048 earns "The old way" on Hard; the same board on Medium earns "The old finish line" but not the Hard trophy
+  for (const tier of ["hard", "medium"]) {
+    const seenT = (c, g) => c.addInitScript((id) => { try { const k = "numberics_progress_v1";
+      const o = JSON.parse(localStorage.getItem(k) || "null") || { v: 1, games: {}, howto: {}, daily: {} };
+      o.howto = o.howto || {}; o.howto[id] = true; localStorage.setItem(k, JSON.stringify(o)); } catch (e) { /* storage blocked */ } }, g);
+    const c7 = await browser.newContext({ viewport: { width: 375, height: 812 } }); await seenT(c7, "two");
+    const p7 = await c7.newPage(), e7 = []; p7.on("pageerror", e => e7.push(e.message));
+    await p7.goto(page);
+    await p7.evaluate((t) => { const s = window.__numberics.state; if (t === "hard") delete s.tier; else s.tier = t;
+      s.grid = new Array(16).fill(0); s.grid[0] = 10; s.grid[1] = 10; s.grid[15] = 2; s.top = 10; s.power = { undo: 0, smash: 0, swap: 0, boost: 0 };
+      s.prev = null; s.free = false; s.marks = new Array(16).fill(0); s.over = false; window.__numberics.state = s; }, tier);
+    await p7.keyboard.press("ArrowLeft"); await p7.waitForTimeout(400);
+    const r7 = await p7.evaluate(() => ({ top: window.__numberics.state.top, hard: window.NumbericsTrophies.has("two_hard"), old: window.NumbericsTrophies.has("two_2048") }));
+    ck("Hard trophy (" + tier + "): the join made 2048", r7.top === 11, JSON.stringify(r7));
+    ck("Hard trophy (" + tier + "): The old finish line pays on every tier", r7.old === true, JSON.stringify(r7));
+    ck("Hard trophy (" + tier + "): The old way " + (tier === "hard" ? "is earned" : "is not earned"), r7.hard === (tier === "hard"), JSON.stringify(r7));
+    ck("Hard trophy (" + tier + "): no page errors", e7.length === 0, e7.join(" | "));
+    await c7.close();
+  }
 };

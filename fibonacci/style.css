@@ -48,3 +48,8 @@ details.how .btn{ min-height:var(--tap); }
 .howto .pv .mg.slide{ grid-template-columns:repeat(4,22px); gap:4px 2px; }
 .howto .pv .mg.slide .mt{ width:22px; height:22px; font-size:12px; border-radius:6px; }
 .howto .pv .mg.slide .mt.cell{ background:var(--cell); box-shadow:inset 0 0 0 1px var(--line); color:var(--mute); font-size:14px; }
+/* R6 fit (O-15): the height of everything that stays in view with the board on a screen up to 860 px tall (the top bar,
+   the rows above it and the controls under it), measured on the device matrix (tests/emu/devices.cjs); the board
+   shrinks only when the screen is shorter than it plus this (shared/theme.css "R6 fit") */
+:root{ --fit-chrome:345px; } :root[data-text="large"]{ --fit-chrome:390px; }
+@media (max-width:520px){ :root{ --fit-chrome:291px; } :root[data-text="large"]{ --fit-chrome:309px; } }

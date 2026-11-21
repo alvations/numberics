@@ -349,3 +349,52 @@ section.more{ margin:22px 0 8px; }
 section.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
 /* cold #41: Undo's infinity badge read as "oo" at the badge's text size; the sign is drawn larger in the same badge */
 #pw-undo i{ font-size:1.1em; line-height:1.27; }
+
+/* ===== R6 fit (O-14, O-15, O-16: no crowding on small phones; every device of the matrix in docs/reviews/PERSONAS.md;
+   copied byte for byte into two/style.css and sudoku/style.css, tests/test-theme.js, checked by tests/emu/devices.cjs) =====
+   Density only: nothing is removed, recoloured or re-ordered. On phones, and on any screen up to 860 px tall, the rhythm
+   is tighter and the hint keeps one line of room (a rarer, longer line may wrap; the copy that is always there fits one
+   line). On short phones the tagline under the title folds away (How to play says the same), the title is smaller and
+   the stat pills slimmer. Tall tablets and desktops keep their look. Where the board would still push a control needed
+   to play below the screen, the board shrinks to fit (a game sets --fit-chrome, the height of everything else that must
+   stay in view, and --fit-ratio, its width over its height). */
+.tb-home{ min-width:var(--tap); justify-content:center; } /* the home mark stays a 44 px target when its word hides */
+@media (max-width:520px),(max-height:860px){
+  #app > .hint{ min-height:1.45em; line-height:1.45; margin:0 0 8px; text-wrap:balance; } /* 8: a toast centred on the empty lane clears the board */
+  .seg,.levels{ margin-bottom:6px; }
+  .tray{ margin-bottom:6px; }
+}
+@media (max-width:520px) and (max-height:860px){
+  .topbar{ min-height:var(--tap); margin-bottom:6px; }
+  header{ align-items:center; column-gap:10px; row-gap:6px; margin-bottom:8px; }
+  header .sub{ display:none; }
+  h1{ font-size:var(--fs-xl); }
+  .stat{ padding-top:3px; padding-bottom:4px; }
+  #app > .row{ margin-top:8px; }
+}
+@media (max-width:420px){ :root[data-text="large"] .stats:has(> .stat:nth-child(4)){ gap:6px; }
+  :root[data-text="large"] .stats:has(> .stat:nth-child(4)) > .stat{ min-width:0; padding-left:6px; padding-right:6px; }
+  :root[data-text="large"] .stats:has(> .stat:nth-child(4)) > .stat > span{ letter-spacing:.02em; } }
+:root[data-text="large"] .pw{ white-space:normal; line-height:1.15; } /* Larger text: a long label wraps in its slot, */
+:root[data-text="large"] .pw i{ display:inline-block; } /* its count under it when the two do not share a line */
+@media (max-height:860px){
+  .board{ max-width:max(var(--fit-min,240px), calc((100svh - var(--fit-chrome,0px)) * var(--fit-ratio,1))); margin-inline:auto; }
+}
+/* ===== end R6 fit ===== */
+/* R6 fit (O-14): on short phones the controls under the board keep 44 px keys with a tighter rhythm, and the board (with
+   its end card in .wrap) shrinks only as far as needed for the pad to stay in view */
+@media (max-width:520px) and (max-height:860px){
+  .tray{ margin:6px 0; } .tools{ margin-bottom:6px; }
+  .pad button{ padding:6px 0 8px; }
+  :root[data-text="large"] .tray{ grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; } /* one row: label over count */
+  :root[data-text="large"] .pw{ font-size:.72rem; padding:3px 1px; white-space:normal; line-height:1.15; }
+  :root[data-text="large"] .pw i{ display:inline-block; margin-left:2px; }
+}
+.wrap{ max-width:max(var(--fit-min,240px), calc((100svh - var(--fit-chrome,0px)) * var(--fit-ratio,1))); margin-inline:auto; }
+@media (min-height:861px){ .wrap{ max-width:none; } }
+/* R6 fit (O-15): the height of everything that stays in view with the board on a screen up to 860 px tall (the top bar,
+   the rows above it and the controls under it), measured on the device matrix (tests/emu/devices.cjs); the board
+   shrinks only when the screen is shorter than it plus this (shared/theme.css "R6 fit") */
+:root{ --fit-chrome:378px; } :root[data-text="large"]{ --fit-chrome:424px; }
+@media (max-width:520px){ :root{ --fit-chrome:376px; } :root[data-text="large"]{ --fit-chrome:388px; } }
+@media (max-width:359px){ :root{ --fit-chrome:418px; } :root[data-text="large"]{ --fit-chrome:394px; } }

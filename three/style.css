@@ -82,3 +82,8 @@ details.how .btn{ min-height:var(--tap); }
 /* A1 (REDESIGN.md 1.1: status copy is 14px): the hint band keeps room for two lines, as Four and Nine do, so a longer
    keyboard targeting line never moves the board */
 .hint{ min-height:2.9em; line-height:1.45; display:flex; align-items:center; justify-content:center; text-wrap:balance; }
+/* R6 fit (O-15): the height of everything that stays in view with the board on a screen up to 860 px tall (the top bar,
+   the rows above it and the controls under it), measured on the device matrix (tests/emu/devices.cjs); the board
+   shrinks only when the screen is shorter than it plus this (shared/theme.css "R6 fit") */
+:root{ --fit-chrome:274px; } :root[data-text="large"]{ --fit-chrome:320px; }
+@media (max-width:520px){ :root{ --fit-chrome:259px; } :root[data-text="large"]{ --fit-chrome:271px; } }

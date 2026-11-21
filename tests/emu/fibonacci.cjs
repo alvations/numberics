@@ -478,4 +478,25 @@ module.exports = async function ({ browser, url, ck, shot }) {
     popBoard: async (p) => { await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[0] = 1; s.grid[1] = 1; s.top = 1;
       s.prev = null; s.over = false; window.__fibonacci.state = s; }); await p.keyboard.press("ArrowLeft"); }
   });
+
+  // the Hard trophy (O-13, docs/reviews/TROPHY-TIERS.md): the client sends the tier. A forged board one join short of
+  // 1597 (610 + 987) earns "Steep spiral" on Hard; the same board on Medium does not
+  for (const tier of ["hard", "medium"]) {
+    const seenT = (c, g) => c.addInitScript((id) => { try { const k = "numberics_progress_v1";
+      const o = JSON.parse(localStorage.getItem(k) || "null") || { v: 1, games: {}, howto: {}, daily: {} };
+      o.howto = o.howto || {}; o.howto[id] = true; localStorage.setItem(k, JSON.stringify(o)); } catch (e) { /* storage blocked */ } }, g);
+    const c8 = await browser.newContext({ viewport: { width: 375, height: 812 } }); await seenT(c8, "fibonacci");
+    const p8 = await c8.newPage(), e8 = []; p8.on("pageerror", e => e8.push(e.message));
+    await p8.goto(page);
+    await p8.evaluate((t) => { const s = window.__fibonacci.state; if (t === "hard") delete s.tier; else s.tier = t;
+      s.grid = new Array(16).fill(0); s.grid[0] = 14; s.grid[1] = 15; s.grid[15] = 1; s.top = 15;
+      s.power = { undo: 0, smash: 0, swap: 0, boost: 0 }; s.prev = null; s.free = false; s.marks = new Array(16).fill(0); s.over = false;
+      window.__fibonacci.state = s; }, tier);
+    await p8.keyboard.press("ArrowLeft"); await p8.waitForTimeout(900);
+    const r8 = await p8.evaluate(() => ({ top: window.__fibonacci.state.top, hard: window.NumbericsTrophies.has("fib_hard") }));
+    ck("Hard trophy (" + tier + "): the join made 1597", r8.top === 16, JSON.stringify(r8));
+    ck("Hard trophy (" + tier + "): Steep spiral " + (tier === "hard" ? "is earned" : "is not earned"), r8.hard === (tier === "hard"), JSON.stringify(r8));
+    ck("Hard trophy (" + tier + "): no page errors", e8.length === 0, e8.join(" | "));
+    await c8.close();
+  }
 };

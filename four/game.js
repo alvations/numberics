@@ -15,7 +15,7 @@
     { id: "hold", label: "Hold", desc: "Put your next disc aside, or swap it back." },
     { id: "tune", label: "Tune", desc: "Choose your next disc's number." },
   ];
-  var RULE = "Four of yours in a row, or four that make ten with two of yours."; // the hint band holds two lines
+  var RULE = "Four in a row, or four that make ten."; // one line on every phone (O-14); How to play has the rest
   // round 3 (cold blocker, critic #1): what a drop would open, said in the hint line for the aimed column
   var MARK = { above: "Dropping here lets the computer win on top of it.", any: "Dropping here lets the computer win.",
                some: "Red dashed ring: dropping there lets the computer win.", two: "Two blue rings: the computer can win in two places." };

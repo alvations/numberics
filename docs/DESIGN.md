@@ -121,8 +121,11 @@ the tile it makes is at least (top tile - reach) rungs high, and at least the ga
   `tests/emu/two.cjs` (the row, Sure? mid-run, the saved choice, an old save loads as Hard, Easy pays sooner).
 - Saves: an old save (no tier) loads as Hard and keeps its best on Hard (`bestScore`, `bestTop`); Easy and Medium keep
   their own best (`bests`). A first visit starts on Medium. The card on other pages says the tier's best ("Medium best").
-  Trophies are unchanged: a power-up-free run ("No help needed") plays the same board on every tier, so it stays honest;
-  the tile and score trophies can be helped by more power-ups on Easy (to be decided with the panel, O-13).
+  Trophies: a power-up-free run ("No help needed") has the same odds on every tier, because an unused power-up changes
+  nothing, so it stays honest. Its tiles can fork after a reward one tier pays and another does not, since the reward
+  draw uses the game's seed. The tile and score trophies can be helped by more power-ups on Easy. Decided with the
+  panel (O-13, `docs/reviews/TROPHY-TIERS.md`): three Hard trophies are added beside the old ones (Two "The old way",
+  Three "Colour storm", Fibonacci "Steep spiral"), and no existing trophy is gated to a tier.
 
 ### The tier recipe for the other tile games (O-13: done for Fibonacci and Three, below)
 Express each tier relative to the game's own current award rule, never as a new mechanic: Hard = the current rule;

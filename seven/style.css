@@ -71,3 +71,8 @@ details.how .row{ margin:0 14px 12px; }
 #games.cards{ margin:10px 0 4px; }
 /* one heading over the cards, as on every game page (TRIAGE4 Family); section.more, never the card's .over.more */
 section.more{ margin:14px 0 4px; } section.more h2{ margin:0; font-size:var(--fs-lg); }
+/* R6 fit (O-15): the height of everything that stays in view with the board on a screen up to 860 px tall (the top bar,
+   the rows above it and the controls under it), measured on the device matrix (tests/emu/devices.cjs); the board
+   shrinks only when the screen is shorter than it plus this (shared/theme.css "R6 fit") */
+:root{ --fit-chrome:274px; } :root[data-text="large"]{ --fit-chrome:320px; }
+@media (max-width:520px){ :root{ --fit-chrome:259px; } :root[data-text="large"]{ --fit-chrome:309px; } }

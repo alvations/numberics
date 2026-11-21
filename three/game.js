@@ -277,7 +277,7 @@
   function reportEnd() {
     if (!state.over || ended) return;
     ended = true;
-    pills = pills.concat(report("end", { score: state.score, flushes: state.flushes, run: run() }));
+    pills = pills.concat(report("end", { score: state.score, flushes: state.flushes, tier: E.tierOf(state), run: run() }));
     if (T && !$("over").hidden) T.pills($("over-pills"), pills);
   }
 
@@ -364,7 +364,7 @@
     if (fl.length) { var bt = beat(STEP, fl, shown, map); end = bt.t; map = bt.map; }
     ids = map;
     if (!same(ids.map(Boolean), state.grid.map(Boolean))) rekey(); // never expected: the board is the truth
-    begin(settle(newBest, { flushes: fl.length, top: state.top, grid: state.grid.slice(), moves: state.moves, run: run() }));
+    begin(settle(newBest, { flushes: fl.length, top: state.top, grid: state.grid.slice(), moves: state.moves, tier: E.tierOf(state), run: run() }));
     tl.at(end, done);
 
     var joins = r.joins || []; // Easy and Medium only

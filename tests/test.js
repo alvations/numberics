@@ -452,7 +452,7 @@ t("D-Two motion (REDESIGN.md 5.3, 5.11, 5.12): a keyed layer, never a rebuilt bo
 t("D-Two trophies, progress, how-to and music (REDESIGN.md 8.4, 3.5, 1.3, MUSIC.md)", () => {
   const g = src["game.js"], h = src["index.html"];
   ["move", "power", "end"].forEach(ev => ok(new RegExp('trophy\\("' + ev + '", \\{').test(g), "reports " + ev));
-  ok(/merges: r\.merges\.length, grid: state\.grid\.slice\(\),\s*moves: state\.moves, stuck: !N\.canMove\(state\), run: run/.test(g), "move fields");
+  ok(/merges: r\.merges\.length, grid: state\.grid\.slice\(\),\s*moves: state\.moves, stuck: !N\.canMove\(state\), tier: N\.tierOf\(state\), run: run/.test(g), "move fields (O-13: with the tier)");
   ok(/run: run \}\);\s*\/\/ the card summary/.test(g) || /store\.save\(\{ state: state, bestScore: best\.score, bestTop: best\.top, bestBefore: bestBefore, run: run \}\)/.test(g), "the run record is saved with the game");
   ok(/NP\.put\("two", \{ best:/.test(g), "progress put on persist");
   ok(/UI\.howto\("two", \{ title: "Two", steps: STEPS, saved: !!saved \|\| state\.moves > 0, onOpen: stepThree \}\)/.test(g) && !/seenHowto|markHowto/.test(g), "the shared how-to (D8): once, never for a saved player");

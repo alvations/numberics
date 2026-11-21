@@ -615,4 +615,23 @@ module.exports = async function ({ browser, url, ck, shot }) {
         flushes: 2, best: 54, used: 0, seed: 99, over: false, free: false, power: { undo: 1, smash: 0, swap: 0, third: 0 }, prev: null } },
     oldSwipe: "ArrowLeft", oldBest: "5,000", pop: false
   });
+
+  // the Hard trophy (O-13, docs/reviews/TROPHY-TIERS.md): the client sends the tier. A forged run of 9 flushes plus a
+  // board one swipe from its tenth earns "Colour storm" on Hard; the same state on Medium does not
+  for (const tier of ["hard", "medium"]) {
+    const seenT = (c, g) => c.addInitScript((id) => { try { const k = "numberics_progress_v1";
+      const o = JSON.parse(localStorage.getItem(k) || "null") || { v: 1, games: {}, howto: {}, daily: {} };
+      o.howto = o.howto || {}; o.howto[id] = true; localStorage.setItem(k, JSON.stringify(o)); } catch (e) { /* storage blocked */ } }, g);
+    const c9 = await browser.newContext({ viewport: { width: 375, height: 812 } }); await seenT(c9, "three");
+    const p9 = await c9.newPage(), e9 = []; p9.on("pageerror", e => e9.push(e.message));
+    await p9.goto(page);
+    await set(p9, FLUSH, { flushes: 9, score: 0, power: { undo: 0, smash: 0, swap: 0, third: 0 }, free: false });
+    await p9.evaluate((t) => { const s = window.__three.state; if (t === "hard") delete s.tier; else s.tier = t; window.__three.state = s; }, tier);
+    await p9.keyboard.press("ArrowLeft"); await p9.waitForTimeout(1200);
+    const r9 = await p9.evaluate(() => ({ flushes: window.__three.state.flushes, hard: window.NumbericsTrophies.has("thr_hard") }));
+    ck("Hard trophy (" + tier + "): the swipe made the tenth flush", r9.flushes === 10, JSON.stringify(r9));
+    ck("Hard trophy (" + tier + "): Colour storm " + (tier === "hard" ? "is earned" : "is not earned"), r9.hard === (tier === "hard"), JSON.stringify(r9));
+    ck("Hard trophy (" + tier + "): no page errors", e9.length === 0, e9.join(" | "));
+    await c9.close();
+  }
 };

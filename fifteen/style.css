@@ -77,3 +77,10 @@ section.more{ margin:22px 0 8px; } section.more h2{ margin:0 0 10px; font-size:v
 /* reduced motion (Settings "Less", or the device): html[data-motion] drives it, so the in-app setting wins (5.12) */
 :root[data-motion="reduced"] .ft.win{ animation:none; }
 :root[data-motion="reduced"] .ft.claiming::after{ clip-path:none; animation:ft-in 160ms linear; } /* opacity is not motion */
+/* R6 fit (O-15): the height of everything that stays in view with the board on a screen up to 860 px tall (the top bar,
+   the rows above it and the controls under it), measured on the device matrix (tests/emu/devices.cjs); the board
+   shrinks only when the screen is shorter than it plus this (shared/theme.css "R6 fit") */
+:root{ --fit-chrome:332px; } :root[data-text="large"]{ --fit-chrome:428px; }
+@media (max-width:520px){ :root{ --fit-chrome:316px; } :root[data-text="large"]{ --fit-chrome:362px; } }
+.board{ --fit-min:268px; } /* five tiles a row stay 44 px wide */
+@media (max-width:374px){ :root{ --fit-chrome:348px; } :root[data-text="large"]{ --fit-chrome:388px; } }

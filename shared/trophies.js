@@ -117,32 +117,37 @@
   // Night owl needs real play: tested only when a game, round, match or puzzle ends (TRIAGE4)
   T("fam_night", "fam", "Night owl", "Played well past bedtime.", "moon", 1, ["end", "round", "match", "solve"], function (d, x) { return x.hour < 4; });
   T("fam_keep", "fam", "Keepsake", "Kept a copy of everything.", "key", 1, ["saved"], function () { return true; });
-  // Fibonacci: move {value, merges, grid, moves}, end {score, value}; run {used}
+  // Fibonacci: move {value, merges, grid, moves, tier}, end {score, value, tier}; run {used}
   T("fib_89", "fibonacci", "Golden start", "Make an 89.", "sq:89", 0, MOVE_END, function (d) { return num(d.value) >= 89; });
   T("fib_610", "fibonacci", "Unfolding", "Make a 610.", "sq:610", 0, MOVE_END, function (d) { return num(d.value) >= 610; });
   T("fib_2584", "fibonacci", "The old goal", "Make 2584, then keep going.", "line", 0, MOVE_END, function (d) { return num(d.value) >= 2584; });
   T("fib_10946", "fibonacci", "Golden ratio", "Make 10946.", "spiral", 0, MOVE_END, function (d) { return num(d.value) >= 10946; });
   T("fib_pure", "fibonacci", "Unaided", "Make a 987 without power-ups.", "leaf", 0, MOVE_END, function (d) { return num(d.value) >= 987 && run(d).used === 0; });
+  T("fib_hard", "fibonacci", "Steep spiral", "Make 1597 on Hard.", "crown", 0, MOVE_END, function (d) { return d.tier === "hard" && num(d.value) >= 1597; });
   T("fib_chain", "fibonacci", "Domino", "Three joins in one move.", "bolt", 0, ["move"], function (d) { return num(d.merges) >= 3; });
   T("fib_run", "fibonacci", "In sequence", "Four neighbours in the run.", "rain", 1, ["move"], function (d) { return fibRun(d.grid); });
   T("fib_long", "fibonacci", "Patient spiral", "A very long game.", "hourglass", 1, ["move"], function (d) { return num(d.moves) >= 500; });
-  // Two: move {top, score, merges, grid:[levels], moves, stuck}, power {name, stuck}, end {score, top}; run {used, stuckUse}
+  // Two: move {top, score, merges, grid:[levels], moves, stuck, tier}, power {name, stuck}, end {score, top, tier}; run {used, stuckUse}
   T("two_128", "two", "Warming up", "Make a 128 tile.", "sq:128", 0, MOVE_END, function (d) { return num(d.top) >= 7; });
   T("two_2048", "two", "The old finish line", "Make 2048, then keep going.", "line", 0, MOVE_END, function (d) { return num(d.top) >= 11; });
   T("two_4096", "two", "Past the line", "Make 4096.", "sq:4096", 0, MOVE_END, function (d) { return num(d.top) >= 12; });
   T("two_8192", "two", "Far beyond", "Make 8192.", "crown", 0, MOVE_END, function (d) { return num(d.top) >= 13; });
   T("two_pure", "two", "No help needed", "Make 1024 without power-ups.", "leaf", 0, MOVE_END, function (d) { return num(d.top) >= 10 && run(d).used === 0; });
   T("two_score", "two", "Big number", "Score 20,000 in one game.", "target", 0, MOVE_END, function (d) { return num(d.score) >= 20000; });
+  T("two_hard", "two", "The old way", "Make 2048 on Hard.", "sq:2048", 0, MOVE_END, function (d) { return d.tier === "hard" && num(d.top) >= 11; });
   T("two_chain", "two", "Chain reaction", "Four joins in one move.", "bolt", 0, ["move"], function (d) { return num(d.merges) >= 4; });
   T("two_comeback", "two", "Second wind", "Got unstuck and kept going.", "heart", 1, ["move"], function (d) {
     var s = run(d).stuckUse; return typeof s === "number" && num(d.moves) - s >= 50; });
   T("two_row", "two", "Staircase", "A row that halves all the way.", "fork", 1, ["move"], function (d) { return stair(d.grid); });
-  // Three: swipe {flushes, top, grid, moves}, end {score, flushes}; run {used, flushes}
+  // Three: swipe {flushes, top, grid, moves, tier}, end {score, flushes, tier}; run {used, flushes}
+  // tier (O-13, docs/reviews/TROPHY-TIERS.md): the engine's tierOf(state), fixed for the whole game; a Hard trophy
+  // tests d.tier === "hard", so a missing or unknown tier never pays
   T("thr_flush", "three", "First flush", "Make a rainbow flush.", "rain", 0, ["swipe"], function (d) { return num(d.flushes) >= 1; });
   T("thr_96", "three", "Ninety-six", "Make a 96.", "sq:96", 0, ["swipe"], function (d) { return num(d.top) >= 96; });
   T("thr_384", "three", "Big three", "Make a 384.", "sq:384", 0, ["swipe"], function (d) { return num(d.top) >= 384; });
   T("thr_five", "three", "Rainbow run", "Five flushes in one game.", "star", 0, ["swipe", "end"], function (d) { return num(run(d).flushes) >= 5; });
   T("thr_double", "three", "Double rainbow", "Two flushes from one swipe.", "waves", 0, ["swipe"], function (d) { return num(d.flushes) >= 2; });
+  T("thr_hard", "three", "Colour storm", "Ten flushes in one game on Hard.", "crown", 0, ["swipe", "end"], function (d) { return d.tier === "hard" && num(run(d).flushes) >= 10; });
   T("thr_mono", "three", "All grown up", "A full board with no 1s or 2s.", "grid", 1, ["swipe"], function (d) { return grownUp(d.grid); });
   T("thr_long", "three", "Unhurried", "A very long game.", "hourglass", 1, ["swipe"], function (d) { return num(d.moves) >= 300; });
   // Four: end {won, level, how:"colour"|"ten"|"both", lastSlot, used}

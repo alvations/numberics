@@ -79,3 +79,9 @@ section.more{ margin:22px 0 8px; } section.more h2{ margin:0 0 10px; font-size:v
   :root[data-text="large"] .stat{ min-width:0; flex:1 1 auto; padding:6px 6px; }
   :root[data-text="large"] .stat > span{ letter-spacing:.03em; line-height:1.1; }
 }
+/* R6 fit (O-15): the height of everything that stays in view with the board on a screen up to 860 px tall (the top bar,
+   the rows above it and the controls under it), measured on the device matrix (tests/emu/devices.cjs); the board
+   shrinks only when the screen is shorter than it plus this (shared/theme.css "R6 fit") */
+:root{ --fit-chrome:346px; } :root[data-text="large"]{ --fit-chrome:392px; }
+@media (max-width:520px){ :root{ --fit-chrome:293px; } :root[data-text="large"]{ --fit-chrome:326px; } }
+.board.four{ --fit-ratio:calc(7 / 6); }

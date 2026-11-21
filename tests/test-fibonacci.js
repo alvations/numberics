@@ -360,8 +360,8 @@ t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move neve
     ok(/fx\.sound\(slide, function \(\) \{ sfx\("merge", k\)/.test(js), "merge at the end of the slide (a sound step, D7)");
   });
   t("D: trophy events and fields exactly as 8.4", () => {
-    ok(/trophy\("move", data\)/.test(js) && /value: N\.value\(state\.top\), merges: r\.merges\.length, grid: state\.grid\.map\(N\.value\), moves: state\.moves, run:/.test(js));
-    ok(/trophy\("end", \{ score: state\.score, value: N\.value\(state\.top\), run:/.test(js));
+    ok(/trophy\("move", data\)/.test(js) && /value: N\.value\(state\.top\), merges: r\.merges\.length, grid: state\.grid\.map\(N\.value\), moves: state\.moves, tier: N\.tierOf\(state\), run:/.test(js), "move fields (O-13: with the tier)");
+    ok(/trophy\("end", \{ score: state\.score, value: N\.value\(state\.top\), tier: N\.tierOf\(state\), run:/.test(js), "end fields (O-13: with the tier)");
     ok(/id="over-tro" class="tro-pills" hidden/.test(html) && /T\.pills\(\$\("over-tro"\), endTro\)/.test(js), "end-card pills");
   });
   t("D: progress put on every persist; music ducks with the end card", () => {

@@ -241,7 +241,7 @@
 
   // the run just ended on this action: report it and keep the trophies for the card's pills
   function ended(ids0) {
-    endIds = (ids0 || []).concat(trophy("end", { score: state.score, top: state.top, run: run }));
+    endIds = (ids0 || []).concat(trophy("end", { score: state.score, top: state.top, tier: N.tierOf(state), run: run }));
     snd.sound(M.ms("slide") + M.ms("pop"), function () { A("lose"); buzz("lose"); });
   }
 
@@ -291,7 +291,7 @@
       if (!(top >= N.AWARD_FROM_LEVEL)) snd.sound(slide, function () { A("best"); });
     }
     var got = trophy("move", { top: state.top, score: state.score, merges: r.merges.length, grid: state.grid.slice(),
-      moves: state.moves, stuck: !N.canMove(state), run: run });
+      moves: state.moves, stuck: !N.canMove(state), tier: N.tierOf(state), run: run });
     if (state.over) ended(got);
   }
 

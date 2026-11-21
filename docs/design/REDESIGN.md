@@ -658,7 +658,7 @@ Glyphs are composed from these paths; a trophy names one (`glyph:"bolt"`) or a n
 | fam_night (S) | Night owl | Played well past bedtime. | a game, round, match or puzzle ends with `ctx.hour < 4` (never on a page load or a first tap, TRIAGE4) |
 | fam_keep (S) | Keepsake | Kept a copy of everything. | Settings Save completed (`report("fam","saved")`) |
 
-**Fibonacci** (events: `move {value, merges, grid:[values], moves}`, `end {score, value}`; run `{used}`)
+**Fibonacci** (events: `move {value, merges, grid:[values], moves, tier}`, `end {score, value, tier}`; run `{used}`)
 | id | name | description | test |
 |---|---|---|---|
 | fib_89 | Golden start | Make an 89. | `move.value >= 89` (value of the top tile) |
@@ -666,11 +666,12 @@ Glyphs are composed from these paths; a trophy names one (`glyph:"bolt"`) or a n
 | fib_2584 | The old goal | Make 2584, then keep going. | `value >= 2584` |
 | fib_10946 | Golden ratio | Make 10946. | `value >= 10946` |
 | fib_pure | Unaided | Make a 987 without power-ups. | `value >= 987 && run.used === 0` |
+| fib_hard | Steep spiral | Make 1597 on Hard. | `tier === "hard" && value >= 1597` (O-13) |
 | fib_chain | Domino | Three joins in one move. | `merges >= 3` |
 | fib_run (S) | In sequence | Four neighbours in the run. | a full row or column whose four values are consecutive Fibonacci numbers in order (either direction), smallest at least 5 |
 | fib_long (S) | Patient spiral | A very long game. | `moves >= 500` in one run |
 
-**Two** (events: `move {top, score, merges, grid:[levels], moves, stuck}`, `power {name, stuck}`, `end {score, top}`;
+**Two** (events: `move {top, score, merges, grid:[levels], moves, stuck, tier}`, `power {name, stuck}`, `end {score, top, tier}`;
 run `{used, stuckUse}`: `stuckUse` = the move count when a power-up was used while no move was possible)
 | id | name | description | test |
 |---|---|---|---|
@@ -680,11 +681,12 @@ run `{used, stuckUse}`: `stuckUse` = the move count when a power-up was used whi
 | two_8192 | Far beyond | Make 8192. | `top >= 13` |
 | two_pure | No help needed | Make 1024 without power-ups. | `top >= 10 && run.used === 0` |
 | two_score | Big number | Score 20,000 in one game. | `score >= 20000` |
+| two_hard | The old way | Make 2048 on Hard. | `tier === "hard" && top >= 11` (O-13) |
 | two_chain | Chain reaction | Four joins in one move. | `merges >= 4` |
 | two_comeback (S) | Second wind | Got unstuck and kept going. | `run.stuckUse != null && moves - run.stuckUse >= 50` |
 | two_row (S) | Staircase | A row that halves all the way. | a row or column of levels l, l-1, l-2, l-3 in order (either direction) with l-3 >= 3 |
 
-**Three** (events: `swipe {flushes, top, grid, moves}`, `end {score, flushes}`; run `{used, flushes}`)
+**Three** (events: `swipe {flushes, top, grid, moves, tier}`, `end {score, flushes, tier}`; run `{used, flushes}`)
 | id | name | description | test |
 |---|---|---|---|
 | thr_flush | First flush | Make a rainbow flush. | `swipe.flushes >= 1` |
@@ -692,6 +694,7 @@ run `{used, stuckUse}`: `stuckUse` = the move count when a power-up was used whi
 | thr_384 | Big three | Make a 384. | `top >= 384` |
 | thr_five | Rainbow run | Five flushes in one game. | `run.flushes >= 5` |
 | thr_double | Double rainbow | Two flushes from one swipe. | `swipe.flushes >= 2` |
+| thr_hard | Colour storm | Ten flushes in one game on Hard. | `tier === "hard" && run.flushes >= 10` (O-13) |
 | thr_mono (S) | All grown up | A full board with no 1s or 2s. | all 16 cells filled and every value >= 3 |
 | thr_long (S) | Unhurried | A very long game. | `moves >= 300` |
 
@@ -780,7 +783,9 @@ run `{notes:false, clean:true}`: `notes` set by any pencil note, `clean` cleared
 | sdk_nonotes (S) | In your head | No notes needed. | `difficulty !== "easy" && !notes` |
 | sdk_clean (S) | Not one slip | A spotless solve. | `clean` |
 
-Totals: 7 family + 77 game trophies = 84; every game has 7 to 9, with 2 secret each, and 2 secret family-wide.
+Totals: 7 family + 80 game trophies = 87; every game has 7 to 10, with 2 secret each, and 2 secret family-wide.
+The cap rose from 9 to 10 for Two's Hard trophy (O-13, `docs/reviews/TROPHY-TIERS.md`). Every move, swipe and end
+event of Two, Fibonacci and Three carries `tier` (the engine's `tierOf(state)`); a missing or unknown tier never pays.
 
 ### 8.5 Replay hooks
 - **Dailies**: Seven Daily and Six Daily (exist), Sudoku Daily (new, 9.10). The Today card (3.4) and the Daily streak
