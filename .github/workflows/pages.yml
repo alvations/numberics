@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
-# Publish Numberics to GitHub Pages on every push to main, after the engine tests pass.
-# Pages serves the gh-pages branch; this job rebuilds that branch from main (static site, no build step).
-# Commits on gh-pages carry the owner's identity (CLAUDE.md: authorship is the owner's only).
+# Publish Numberics to GitHub Pages: the stable site from main at the root, and the redesign beta from
+# build/v2 at /beta/ (owner, 21 Nov). Runs on a push to either branch; each branch's unit tests must pass.
+# Pages serves the gh-pages branch, rebuilt here from both. Commits carry the owner's identity (CLAUDE.md).
+# The beta keeps its own storage namespace (shared/boot.js), so it never touches stable players' progress.
 name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, build/v2]
   workflow_dispatch:
 
 permissions:
@@ -20,25 +21,49 @@ jobs:
   test-and-publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out main (stable)
+        uses: actions/checkout@v4
         with:
+          ref: main
+          path: stable
+          fetch-depth: 0
+      - name: Check out build/v2 (beta)
+        uses: actions/checkout@v4
+        with:
+          ref: build/v2
+          path: beta
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Unit tests (every game)
-        run: node tests/run.js
-      - name: Assemble the site (only what the pages load; live games from games.json)
+      - name: Unit tests, stable
+        run: cd stable && node tests/run.js
+      - name: Unit tests and storage guard, beta (a failing beta never blocks stable; it is just not published)
+        id: beta
+        continue-on-error: true
         run: |
-          mkdir -p _site
-          cp -r index.html engine.js game.js style.css games.json .nojekyll shared screenshots LICENSE NOTICE _site/
-          for p in $(node -e 'require("./games.json").filter(g => g.status === "live" && g.path).forEach(g => console.log(g.path))'); do
-            cp -r "$p" _site/
-          done
+          cd beta
+          grep -q "numberics_beta_" shared/boot.js || { echo "beta has no storage namespace yet: not publishing it"; exit 1; }
+          node tests/run.js
+      - name: Assemble the site (stable at /, beta at /beta/; only what the pages load)
+        run: |
+          assemble () {
+            src="$1"; out="$2"; mkdir -p "$out"
+            for f in index.html engine.js game.js style.css games.json .nojekyll LICENSE NOTICE; do
+              [ -e "$src/$f" ] && cp -r "$src/$f" "$out/"
+            done
+            cp -r "$src/shared" "$src/screenshots" "$out/"
+            [ -d "$src/two" ] && cp -r "$src/two" "$out/"
+            for p in $(cd "$src" && node -e 'require("./games.json").filter(g => g.status === "live" && g.path).forEach(g => console.log(g.path))'); do
+              cp -r "$src/$p" "$out/"
+            done
+          }
+          assemble stable _site
+          if [ "${{ steps.beta.outcome }}" = "success" ]; then assemble beta _site/beta; else echo "beta skipped"; fi
       - name: Publish to gh-pages
         run: |
           cd _site
           git init -q -b gh-pages
           git add -A
-          git -c user.name=alvations -c user.email=alvations@gmail.com commit -q -m "Publish Numberics (site from main ${GITHUB_SHA::7})"
+          git -c user.name=alvations -c user.email=alvations@gmail.com commit -q -m "Publish Numberics: stable from main ${GITHUB_SHA::7}, beta from build/v2"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" gh-pages
