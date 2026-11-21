@@ -53,6 +53,7 @@
       <p id="over-text"></p>
       <p id="over-answer" class="answer" hidden></p>
       <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-pills" class="tro-pills" hidden></div>
       <div class="row">
         <button id="over-view" class="btn" type="button">See the board</button>
         <button id="again" class="btn primary" type="button">Next round</button>
@@ -61,9 +62,14 @@
   </div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Tap a gap for + &minus; &times; &divide;, a number for &radic; or !. Drag across numbers (or use ( ) Brackets) to group
+  <details class="how"><summary>How to play</summary>
+    <p>Tap a gap for + &minus; &times; &divide;, a number for &radic; or !. Drag across numbers (or use ( ) Brackets) to group
      them, then tap the bar under a group to give it a sign. Every step must be a whole number or a fraction. Three lines in a row without help earn a power-up.</p>
-  <nav id="games" class="games" data-root="../" data-current="six" aria-label="Numberics games"></nav>
+    <p>Keys: arrows move, Space or Up and Down cycle, + &minus; x / set a sign (j and . join digits from Tier 4), r and ! add a sign to a number, ( and ) place
+     brackets, b gives a bracket a sign, c clears, Enter goes to the next line, 1 to 4 use power-ups.</p>
+    <p><button id="howto-open" class="btn" type="button">See the three steps</button></p>
+  </details>
+  <div id="games" class="cards" data-root="../" data-current="six" aria-label="Numberics games"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

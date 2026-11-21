@@ -10,8 +10,9 @@
  *
  * Graph: note -> style bus (level-match gain, fades) -> mix (musicVolume * SCALE, 0 when Music is off) -> duck ->
  * destination. The style bus also feeds a shared reverb (convolver, seeded impulse) and an optional feedback echo.
- * The music has its own AudioContext, created and resumed only inside a user gesture (as shared/audio.js does). If
- * NumbericsAudio ever exposes `musicBus()` -> { context, input } the music plugs into that instead (MUSIC.md, One context).
+ * One AudioContext (MUSIC.md, One context): with shared/audio.js on the page the music calls NumbericsAudio.unlock()
+ * then musicBus() -> { context, input } and plays into that; without it, it owns a context made inside a gesture.
+ * Pages do not load this file: shared/audio.js injects it after the first gesture when Music is on (MUSIC.md, Loading).
  * Pauses while the tab is hidden; duck(true) lowers it under an end card. Settings: `music`, `musicVolume`,
  * `musicStyle` from NumbericsSettings (missing fields keep the defaults below) and the `numberics:settings` event.
  * Also require()-able (Node tests): module.exports = { STYLES, GAMES, MODES, TPB, compile, tickTime, ... }. */
@@ -25,7 +26,7 @@
   // Levels (MUSIC.md, Levels). Every style is matched by its `level` to TARGET_LUFS at unity (mix = 1), measured by
   // tools/render-music.cjs. Shipped level = unity * musicVolume * SCALE, which keeps the music peak at least 6 dB
   // under the SFX peak at default sliders (the render report checks it).
-  var TARGET_LUFS = -20, SCALE = 0.016;
+  var TARGET_LUFS = -20, SCALE = 0.07;
   var DEF = { music: true, musicVolume: 0.5, musicStyle: "auto" };
   var FADE_IN = 2.5, XFADE = 2.0, STOP_FADE = 0.8, DUCK = 0.35, LOOKAHEAD = 0.35, TICK_MS = 50;
 

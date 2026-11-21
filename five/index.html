@@ -44,6 +44,7 @@
     <div id="over" class="over" hidden>
       <h2 id="over-title"></h2>
       <p id="over-text"></p>
+      <div id="over-pills" class="tro-pills" hidden></div>
       <div class="row">
         <button id="over-view" class="btn" type="button">See the board</button>
         <button id="again" class="btn primary" type="button">Next round</button>
@@ -52,10 +53,14 @@
   </div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Tap your tile, then any tile to add it onto (or arrows, Enter). A tile at 5 or more bursts.
+  <details class="how"><summary>How to play</summary>
+    <p>Tap your tile, then any tile to add it onto (or arrows, Enter). A tile at 5 or more bursts.
      Burst both computer tiles to win a round; first to 3 wins. Bursting theirs earns power-ups.
      The computer goes first; you can always win.</p>
-  <nav id="games" class="games" data-root="../" data-current="five" aria-label="Numberics games"></nav>
+    <p>Keys: arrows move, Enter picks, 1 to 4 (or U for Undo) use power-ups, Esc cancels.</p>
+    <p><button id="howto-open" class="btn" type="button">Show the three steps</button></p>
+  </details>
+  <div id="games" class="cards" data-root="../" data-current="five" aria-label="Numberics games"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

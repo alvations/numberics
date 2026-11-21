@@ -4,13 +4,22 @@
  * field by field (a bad field falls back to its default alone), and apply live through NumbericsBoot.apply().
  * Every change fires `numberics:settings` on window (detail: the full settings) and calls the on("change") listeners
  * with (settings, changedKeys). Loaded right after kit.js; it makes NumbericsKit.reducedMotion() follow the in-app
- * Motion setting, which beats the OS (Motion "Full" plays motion even when the device asks for less). */
+ * Motion setting, which beats the OS (Motion "Full" plays motion even when the device asks for less).
+ * Music (docs/design/MUSIC.md, Settings fields): music, musicVolume, musicStyle ("auto" or a style id). The style list
+ * lives here, not in music.js, which loads later (after a gesture). */
 (function (w) {
   "use strict";
   var KEY = "numberics_settings_v1", PREFIX = "numberics_";
-  var DEF = { v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "dark", text: "normal", contrast: "normal" };
-  var OK = { motion: ["auto", "reduced", "full"], theme: ["dark", "light", "auto"], text: ["normal", "large"], contrast: ["normal", "high"] };
-  var FIELDS = ["sound", "volume", "haptics", "motion", "theme", "text", "contrast"];
+  var DEF = { v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "dark", text: "normal", contrast: "normal",
+    music: true, musicVolume: 0.5, musicStyle: "auto" };
+  // the music styles in menu order: [id, name, blurb] (keep in step with ORDER and STYLES in music.js; a test checks it)
+  var STY = [["chill", "Chill", "Slow warm keys and a lazy beat."], ["drift", "Drift", "Soft bells and a slow pad, no drums."],
+    ["pocket", "Pocket", "A bright little town tune on a pocket console."], ["quest", "Quest", "A march over open country, bound for somewhere far."],
+    ["blocks", "Blocks", "A quick folk dance on an old handheld chip."], ["pulse", "Pulse", "Four on the floor, a pumping pad and a bright hook."],
+    ["epic", "Epic", "Big drums, brass and a long climb."]];
+  var OK = { motion: ["auto", "reduced", "full"], theme: ["dark", "light", "auto"], text: ["normal", "large"], contrast: ["normal", "high"],
+    musicStyle: ["auto"].concat(STY.map(function (x) { return x[0]; })) };
+  var FIELDS = ["sound", "volume", "haptics", "motion", "theme", "text", "contrast", "music", "musicVolume", "musicStyle"];
 
   // ---- the data: normalise field by field ----
   function normalize(raw) {
@@ -18,7 +27,10 @@
     if (!raw || typeof raw !== "object") return s;
     if (typeof raw.sound === "boolean") s.sound = raw.sound;
     if (typeof raw.haptics === "boolean") s.haptics = raw.haptics;
-    if (typeof raw.volume === "number" && isFinite(raw.volume)) s.volume = Math.round(Math.max(0, Math.min(1, raw.volume)) * 100) / 100;
+    if (typeof raw.music === "boolean") s.music = raw.music;
+    ["volume", "musicVolume"].forEach(function (k) {
+      if (typeof raw[k] === "number" && isFinite(raw[k])) s[k] = Math.round(Math.max(0, Math.min(1, raw[k])) * 100) / 100;
+    });
     for (k in OK) if (OK[k].indexOf(raw[k]) >= 0) s[k] = raw[k];
     return s;
   }
@@ -194,12 +206,21 @@
       opts.map(function (o) { return '<button type="button" aria-pressed="false" data-seg="' + field + '" data-v="' + o[0] + '">' + o[1] + "</button>"; }).join("") +
       "</div></div>";
   }
-  var SWITCH = { sound: [true, false], haptics: [true, false], text: ["large", "normal"], contrast: ["high", "normal"] };
+  var SWITCH = { sound: [true, false], music: [true, false], haptics: [true, false], text: ["large", "normal"], contrast: ["high", "normal"] };
+  function range(attr, name) {
+    return '<div class="set"><div class="lbl" style="flex:1"><b>' + name + '</b><input class="vol" type="range" min="0" max="100" step="5" aria-label="' + name + '" ' + attr + "></div></div>";
+  }
   function build(el) {
     el.innerHTML =
       '<div class="sec">Sound and feel</div>' +
       sw("sound", "Sound", "Soft clicks and chimes") +
-      '<div class="set"><div class="lbl" style="flex:1"><b>Volume</b><input class="vol" type="range" min="0" max="100" step="5" aria-label="Volume" data-vol></div></div>' +
+      range("data-vol", "Volume") +
+      sw("music", "Music", "Quiet tunes while you play") + range("data-mvol", "Music volume") +
+      '<div class="set" data-mstyle style="flex-direction:column;align-items:stretch"><div class="lbl"><b>Style</b></div>' +
+      '<div class="seg3" role="group" aria-label="Music style" style="grid-auto-flow:row;grid-template-columns:repeat(4,1fr)">' +
+      [["auto", "Auto (per\u00a0game)", "Each game picks its own"]].concat(STY).map(function (o) {
+        return '<button type="button" aria-pressed="false" data-seg="musicStyle" data-v="' + o[0] + '" title="' + o[2] + '" style="padding:0 4px">' + o[1] + "</button>";
+      }).join("") + "</div></div>" +
       sw("haptics", "Vibration", "On phones that support it", hasVibrate()) +
       '<div class="sec">Seeing</div>' +
       seg("motion", "Motion", [["auto", "Device"], ["reduced", "Less"], ["full", "Full"]]) +
@@ -222,6 +243,8 @@
     });
     var vol = el.querySelector("[data-vol]");
     vol.addEventListener("input", function () { set({ volume: +vol.value / 100 }); tick(); });
+    var mv = el.querySelector("[data-mvol]"); // no preview tick: the music itself is the preview
+    mv.addEventListener("input", function () { set({ musicVolume: +mv.value / 100 }); });
     var file = el.querySelector("[data-file]");
     file.addEventListener("change", function () { loadFile(file.files && file.files[0]); file.value = ""; });
     el.querySelector('[data-mem="save"]').addEventListener("click", function () { tick(); saveFile(); });
@@ -241,8 +264,13 @@
     Array.prototype.forEach.call(X.querySelectorAll("[data-seg]"), function (b) {
       b.setAttribute("aria-pressed", String(s[b.getAttribute("data-seg")] === b.getAttribute("data-v")));
     });
-    var vol = X.querySelector("[data-vol]"), v = String(Math.round(s.volume * 100));
-    if (vol && vol.value !== v) vol.value = v;
+    [["[data-vol]", s.volume], ["[data-mvol]", s.musicVolume]].forEach(function (r) {
+      var el = X.querySelector(r[0]), v = String(Math.round(r[1] * 100));
+      if (el && el.value !== v) el.value = v;
+    });
+    var mv = X.querySelector("[data-mvol]"), ms = X.querySelector("[data-mstyle]");
+    if (mv) mv.disabled = !s.music;
+    if (ms) ms.style.display = s.music ? "" : "none"; // not [hidden]: .set sets display
   }
   function open() {
     if (!w.NumbericsUI || !w.NumbericsUI.sheet) return null;
@@ -251,7 +279,7 @@
 
   watch();
   w.NumbericsSettings = {
-    KEY: KEY, DEFAULTS: DEF, get: get, set: set, on: on, off: off, reducedMotion: reducedMotion, open: open, normalize: normalize,
+    KEY: KEY, DEFAULTS: DEF, STYLES: STY.map(function (x) { return { id: x[0], name: x[1], blurb: x[2] }; }), get: get, set: set, on: on, off: off, reducedMotion: reducedMotion, open: open, normalize: normalize,
     memory: { pack: pack, unpack: unpack, snapshot: snapshot, restore: restore, loadText: loadText, save: saveFile, erase: erase, wipe: wipe,
       enc: enc, dec: dec, BAD_FILE: BAD_FILE }
   };

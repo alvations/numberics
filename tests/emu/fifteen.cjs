@@ -12,11 +12,48 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const S = (p) => p.evaluate(() => window.__fifteen.state);
   const tile = (p, n) => p.locator('.ft[data-n="' + n + '"]');
   const card = (p) => p.waitForSelector("#over:not([hidden])", { timeout: 4000 });   // R13: after the hold
+  // the how-to sheet opens by itself on a first visit (REDESIGN.md 1.3): most sections start with it already seen
+  const seenHow = (c) => c.addInitScript(() => { try { if (!localStorage.getItem("numberics_progress_v1")) localStorage.setItem("numberics_progress_v1", JSON.stringify({ v: 1, games: {}, howto: { fifteen: true }, daily: {} })); } catch (e) { /* blocked */ } });
+  const closeHow = async (p) => { if (await p.locator("#sh-howto:not([hidden])").count()) await p.click("#sh-howto [data-play]"); };
+
+  // 0. first visit: Easy, and the how-to sheet once, with the three steps of REDESIGN.md 9.9
+  {
+    const c0 = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+    const p0 = await c0.newPage(); const e0 = []; p0.on("pageerror", e => e0.push(e.message));
+    await p0.goto(page);
+    await p0.waitForSelector("#sh-howto:not([hidden])", { timeout: 3000 }).catch(() => {});
+    ck("first visit: the how-to sheet opens by itself", await p0.locator("#sh-howto:not([hidden])").count() === 1);
+    ck("first visit starts on Easy", (await S(p0)).diff === "easy" && await p0.locator('#diff button[data-d="easy"][aria-pressed="true"]').count() === 1);
+    const steps = await p0.locator("#sh-howto .step p").allTextContents();
+    ck("how-to: the three steps, word for word", steps.join("|") === "Pick a number from 1 to 9.|The computer picks too.|Hold three numbers that add up to fifteen to win.", steps.join("|"));
+    ck("how-to: every step has a drawn picture", await p0.locator("#sh-howto .step .pv .mt").count() >= 3);
+    await shot(p0, "howto");
+    await p0.keyboard.press("5");
+    ck("no key reaches the game while the sheet is open", (await S(p0)).owner.every(o => !o) && (await S(p0)).power.erase === 0);
+    await p0.click("#sh-howto [data-play]");
+    ck("Play closes the sheet", await p0.locator("#sh-howto:not([hidden])").count() === 0);
+    ck("the How to play row is a collapsed details", await p0.evaluate(() => { const d = document.getElementById("how"); return d.tagName === "DETAILS" && !d.open && /How to play/.test(d.querySelector("summary").textContent); }));
+    const sum = await p0.locator("#how summary").boundingBox();
+    ck("the How to play row is 44 px or taller", sum.height >= 44, JSON.stringify(sum));
+    await p0.click("#how summary"); await p0.click("#how-steps");
+    ck("the steps open again from the row", await p0.locator("#sh-howto:not([hidden])").count() === 1);
+    await p0.click("#sh-howto [data-play]");
+    await p0.click('#diff button[data-d="hard"]');
+    await p0.reload();
+    ck("the sheet opens only once", await p0.locator("#sh-howto:not([hidden])").count() === 0);
+    ck("a saved choice is kept (Hard after reload)", (await S(p0)).diff === "hard");
+    const seg = await p0.locator(".views button").evaluateAll(b => b.map(x => x.getBoundingClientRect().height));
+    ck("the Numbers/Grid switch is 44 px tall", seg.every(h => h >= 44), JSON.stringify(seg));
+    ck("the games list is the cards, this game marked", await p0.locator("#games.cards a.card").count() === 10 && await p0.locator('#games a.card[aria-current="page"][data-id="fifteen"]').count() === 1);
+    ck("no page errors (first visit)", e0.length === 0, e0.join("|"));
+    await c0.close();
+  }
 
   // 1. loads, plays a real turn by click and by keyboard, the computer replies
-  let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 }); await seenHow(ctx);
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(page);
+  await p.click('#diff button[data-d="medium"]');   // the checks below were written against Medium
   ck("nine tiles", await p.locator(".ft").count() === 9);
   ck("difficulty row under the header", await p.locator("#diff button").count() === 3);
   ck("tray has four power-ups", await p.locator("#tray .pw").count() === 4);
@@ -282,7 +319,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await ctx.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
   p = await ctx.newPage(); const errs2 = []; p.on("pageerror", e => errs2.push(e.message));
-  await p.goto(page);
+  await p.goto(page); await p.waitForTimeout(50); await closeHow(p);
   ck("the game fits 390x844 without scrolling (craft nit 4; top bar to the last control)", (await p.evaluate(playFit)).fits, JSON.stringify(await p.evaluate(playFit)));
   await tile(p, 5).click();
   ck("plays with storage blocked", (await S(p)).owner[4] === 1);
@@ -292,7 +329,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 6. reduced motion: views switch instantly, play continues
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
   p = await ctx.newPage(); const errs3 = []; p.on("pageerror", e => errs3.push(e.message));
-  await p.goto(page);
+  await p.goto(page); await p.waitForTimeout(50); await closeHow(p);
   ck("no slide transition under reduced motion", !/transform/.test(await tile(p, 1).evaluate(e => getComputedStyle(e).transitionProperty)));
   await p.click("#v-grid");
   const at0 = await tile(p, 8).boundingBox();
@@ -304,7 +341,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
 
   // 7. round 3 (TRIAGE3)
-  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 }); await seenHow(ctx);
   p = await ctx.newPage(); const errs4 = []; p.on("pageerror", e => errs4.push(e.message));
   await p.goto(page);
   // cold #28: the Numbers view is 1-5 over 6-9 (the short row offset), never a 3 x 3; Grid keeps the magic square
@@ -396,4 +433,130 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("view toggle is a segment, New game is a button", await p.locator(".views.seg").count() === 1 && await p.locator(".views .btn").count() === 0 && await p.locator("#new.btn").count() === 1);
   ck("no page errors (round 3)", errs4.length === 0, errs4.join("|"));
   await ctx.close();
+
+  // 8. D-Fifteen motion, sound beats, trophies (REDESIGN.md 5.8, 5.11, 5.12, 8.4, 10)
+  const anims = (p, n) => p.evaluate((n) => document.querySelector('.ft[data-n="' + n + '"]').getAnimations({ subtree: true })
+    .map(a => ({ name: a.animationName || "", props: a.effect && a.effect.getKeyframes ? Object.keys(a.effect.getKeyframes()[0] || {}) : [], ps: a.effect && a.effect.pseudoElement || "" })), n);
+  // click a tile and read its animations in the same task, so a slow runner cannot miss a 240 ms fill
+  const clickAnims = (p, n) => p.evaluate((n) => { const t = document.querySelector('.ft[data-n="' + n + '"]'); t.click();
+    return { cls: t.className, list: t.getAnimations({ subtree: true }).map(a => ({ name: a.animationName || "", props: [] })) }; }, n);
+  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } }); await seenHow(ctx);
+  // log every duck call, on the stub audio.js sets and on the real music module that replaces it after a gesture
+  await ctx.addInitScript(() => { window.__duck = []; let m; Object.defineProperty(window, "NumbericsMusic", { configurable: true, get() { return m; },
+    set(v) { if (v && typeof v.duck === "function") { const o = v.duck; v.duck = function (on) { window.__duck.push(on); return o.call(this, on); }; } m = v; } }); });
+  p = await ctx.newPage(); const errs5 = []; p.on("pageerror", e => errs5.push(e.message));
+  await p.goto(page);
+  // the claim fill: an ::after in the owner colour, clip-path circle from the centre, the number darkens at 120 ms
+  await forge(p, { diff: "easy", owner: B([], []), turn: 1 });
+  const c5 = await clickAnims(p, 5), a5 = c5.list;
+  ck("claim: the tile fills from its centre (clip-path on ::after)", a5.some(a => a.name === "ft-claim") && /claiming/.test(c5.cls), JSON.stringify(c5));
+  ck("claim: the fill is the owner colour", await tile(p, 5).evaluate(e => getComputedStyle(e, "::after").backgroundColor === getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || /rgb/.test(getComputedStyle(e, "::after").backgroundColor)));
+  await p.waitForTimeout(320);
+  ck("claim: after 240 ms the tile rests gold, no ghost class", await tile(p, 5).evaluate(e => !e.classList.contains("claiming") && e.classList.contains("mine")));
+  await p.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
+  const cpuN = (await S(p)).owner.findIndex(o => o === 2) + 1;
+  ck("the computer's claim fills in its cool colour", cpuN > 0 && await tile(p, cpuN).evaluate(e => e.classList.contains("theirs")));
+  // input during an animation: Double, two picks inside one claim fill, gives two claims at once
+  await forge(p, { diff: "easy", owner: B([], []), turn: 1, power: { undo: 0, erase: 0, peek: 0, double: 1 } });
+  await p.keyboard.press("4");
+  await p.evaluate(() => { document.querySelector('.ft[data-n="2"]').click(); document.querySelector('.ft[data-n="4"]').click(); });
+  let s8 = await S(p);
+  ck("two quick picks during a claim fill give two claims", s8.owner[1] === 1 && s8.owner[3] === 1 && s8.moves === 2, JSON.stringify(s8.owner));
+  ck("the first fill was finished at once by the second pick", await tile(p, 2).evaluate(e => !e.classList.contains("claiming")) && await tile(p, 4).evaluate(e => e.classList.contains("claiming")));
+  await p.waitForFunction(() => window.__fifteen.state.turn === 1 || !!window.__fifteen.state.result, null, { timeout: 3000 });
+  // the view switch is a FLIP: translate + scale, never width or height
+  await forge(p, { diff: "easy", owner: B([2], [5]), turn: 1 });
+  const tp = await tile(p, 1).evaluate(e => getComputedStyle(e).transitionProperty);
+  ck("no width, height or transform transition on a tile", !/width|height|transform|all/.test(tp), tp);
+  let a1 = await p.evaluate(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "v", bubbles: true }));
+    return document.querySelector('.ft[data-n="1"]').getAnimations().map(a => ({ name: a.animationName || "", props: Object.keys(a.effect.getKeyframes()[0] || {}) })); });
+  ck("view switch: each tile animates translate + scale (FLIP)", a1.some(a => a.props.includes("translate") && a.props.includes("scale")), JSON.stringify(a1));
+  ck("view switch: no width or height in any animation", a1.every(a => !a.props.includes("width") && !a.props.includes("height")));
+  const mid = await tile(p, 8).boundingBox();
+  await p.waitForTimeout(450);
+  const end = await tile(p, 8).boundingBox();
+  ck("view switch: mid-flight the tile is between its two places", Math.abs(mid.x - end.x) > 2 || Math.abs(mid.y - end.y) > 2, JSON.stringify([mid, end]));
+  ck("view switch: done after 380 ms", (await anims(p, 8)).length === 0);
+  // two quick view switches during the FLIP give two switches
+  await p.keyboard.press("v"); await p.keyboard.press("v");
+  ck("two quick V presses give two switches", await p.evaluate(() => window.__fifteen.view === "grid"));
+  await p.waitForTimeout(450);
+  // the winning triple: the pulse, then in Grid view a line drawn through the three (stroke-dashoffset)
+  await forge(p, { diff: "easy", owner: B([], []), turn: 1 });
+  await tile(p, 5).click();                                   // your first claim this round is 5 (fif_mid)
+  await p.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
+  ck("run record: first claim is 5", (await p.evaluate(() => window.__fifteen.run.first)) === 5);
+  await p.evaluate(() => { const s = JSON.parse(JSON.stringify(window.__fifteen.state)); s.owner = [1, 2, 2, 0, 1, 0, 0, 0, 0]; s.turn = 1; s.acted = false; s.claimsLeft = 1; s.usedPower = false; s.blocked = 0;
+    const t = window.__fifteen; const r = t.run; t.state = s; r.first = 5; });
+  await tile(p, 9).click();                                   // 1 + 5 + 9 = 15, the middle column of the magic square
+  await p.waitForTimeout(300);
+  const wl = await p.evaluate(() => { const l = document.querySelector("#wl line"), sv = document.getElementById("wl"); return { shown: !sv.hidden, x1: +l.getAttribute("x1"), y1: +l.getAttribute("y1"), x2: +l.getAttribute("x2"), y2: +l.getAttribute("y2"), anim: l.getAnimations().map(a => Object.keys(a.effect.getKeyframes()[0])) }; });
+  ck("Grid win: a line is drawn through the three", wl.shown && Math.abs(wl.x1 - wl.x2) < 2 && Math.abs(wl.y1 - wl.y2) > 50, JSON.stringify(wl));
+  ck("Grid win: the line draws by stroke-dashoffset", wl.anim.some(k => k.includes("strokeDashoffset")), JSON.stringify(wl.anim));
+  ck("Grid win: the winning three pulse", await p.locator(".ft.win").count() === 3);
+  await shot(p, "win-line");
+  await card(p);
+  const ids = await p.evaluate(() => window.__fifteen.cardIds);
+  ck("trophies: a round won in Grid view, started on 5", ["fif_round", "fif_grid", "fif_mid"].every(i => ids.includes(i)), ids.join());
+  ck("end card shows the trophy pills", await p.locator("#pills:not([hidden]) .trophy").count() === ids.length && ids.length >= 3);
+  ck("music ducks while the card is up", await p.evaluate(() => window.__duck[window.__duck.length - 1] === true));
+  await shot(p, "over-trophy");
+  await p.click("#next");
+  ck("music comes back when the card closes", await p.evaluate(() => window.__duck[window.__duck.length - 1] === false));
+  await p.keyboard.press("v");                                 // back to Numbers
+  // fif_fork: one claim, two open threats
+  await forge(p, { diff: "easy", owner: B([8, 6], [7, 9]), turn: 1 });
+  await tile(p, 4).click();
+  ck("trophy: Two ways (forks >= 2)", await p.evaluate(() => window.NumbericsTrophies.has("fif_fork")));
+  // fif_match + fif_medium, then fif_hard
+  for (const d of ["medium", "hard"]) {
+    await forge(p, { diff: d, owner: B([2, 6], [1, 3]), turn: 1, wins: [0, 2, 0], rounds: [1, 1], round: 3 });
+    await tile(p, 7).click(); await card(p);
+    const mi = await p.evaluate(() => window.__fifteen.cardIds);
+    ck("trophies: match won on " + d, mi.includes("fif_" + d) && (d !== "medium" || mi.includes("fif_match")), mi.join());
+    await p.click("#again");
+  }
+  ck("the card's level record feeds the progress card", await p.evaluate(() => { const g = window.NumbericsProgress.get("fifteen"); return !!g && /^Hard: won 1, lost 0$/.test(g.best); }), JSON.stringify(await p.evaluate(() => window.NumbericsProgress.get("fifteen"))));
+  await tile(p, 5).click();
+  ck("progress: a live match says so", await p.evaluate(() => { const g = window.NumbericsProgress.get("fifteen"); return g.live === true && /^Round 1/.test(g.liveText); }));
+  // frame and node budgets over a scripted 30-move session (REDESIGN.md 10): claims, computer replies, view switches
+  const nodes0 = await p.evaluate(() => document.getElementsByTagName("*").length);
+  await p.evaluate(() => { window.__fr = []; window.__on = true; let last = performance.now(); const f = (t) => { window.__fr.push(t - last); last = t; if (window.__on) requestAnimationFrame(f); }; requestAnimationFrame(f); });
+  for (let i = 0; i < 30; i++) {
+    const st = await S(p);
+    if (st.result) { if (st.match) await p.evaluate(() => window.__fifteen.state = window.NumbericsFifteen.newMatch(7, "easy")); else await p.evaluate(() => { window.__fifteen.state = window.NumbericsFifteen.nextRound(window.__fifteen.state); }); continue; }
+    if (i % 5 === 4) { await p.keyboard.press("v"); await p.waitForTimeout(120); continue; }
+    if (st.turn !== 1) { await p.waitForTimeout(150); continue; }
+    const fl = st.owner.map((o, k) => o ? 0 : k + 1).filter(Boolean);
+    await p.evaluate((n) => document.querySelector('.ft[data-n="' + n + '"]').click(), fl[i % fl.length]);
+    await p.waitForTimeout(120);
+  }
+  const frs = await p.evaluate(() => { window.__on = false; return window.__fr.slice(2); });
+  const slow = frs.filter(x => x > 17.5).length, worst = Math.max(...frs);
+  // 17.5 ms: vsync jitter in headless (d-notes B2); dropped frames <= 5%
+  ck("frames: at most 5% over 17.5 ms in a 30-move session", slow / frs.length <= 0.05, slow + "/" + frs.length + " worst " + worst.toFixed(1));
+  const nodes1 = await p.evaluate(() => document.getElementsByTagName("*").length);
+  ck("nodes: the board never grows (nine tiles, one line)", await p.locator(".ft").count() === 9 && await p.locator("#wl line").count() === 1 && nodes1 <= nodes0 * 1.05, nodes0 + " -> " + nodes1);
+  ck("no page errors (motion and trophies)", errs5.length === 0, errs5.join("|"));
+  await ctx.close();
+
+  // 9. reduced motion: by the OS, by the setting, and the setting "Full" beats the OS (REDESIGN.md 5.12)
+  for (const mode of [{ os: "reduce", set: null, red: true, tag: "OS" }, { os: "no-preference", set: "reduced", red: true, tag: "setting Less" },
+    { os: "reduce", set: "full", red: false, tag: "setting Full over the OS" }]) {
+    const c = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: mode.os }); await seenHow(c);
+    if (mode.set) await c.addInitScript((m) => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, motion: m })); } catch (e) {} }, mode.set);
+    const q = await c.newPage(); const e9 = []; q.on("pageerror", e => e9.push(e.message));
+    await q.goto(page);
+    await forge(q, { diff: "easy", owner: B([], []), turn: 1 });
+    const ca = (await clickAnims(q, 5)).list;
+    if (mode.red) ck("reduced (" + mode.tag + "): the claim is an opacity fade, no clip-path", ca.every(a => a.name !== "ft-claim") && ca.some(a => a.name === "ft-in"), JSON.stringify(ca));
+    else ck("full (" + mode.tag + "): the claim fills from the centre", ca.some(a => a.name === "ft-claim"), JSON.stringify(ca));
+    await q.waitForFunction(() => window.__fifteen.state.turn === 1, null, { timeout: 3000 });
+    const va = await q.evaluate(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "v", bubbles: true }));
+      return document.querySelector('.ft[data-n="1"]').getAnimations().map(a => ({ name: a.animationName || "", props: Object.keys(a.effect.getKeyframes()[0] || {}) })); });
+    if (mode.red) ck("reduced (" + mode.tag + "): the view switch is instant", va.length === 0, JSON.stringify(va));
+    else ck("full (" + mode.tag + "): the view switch moves", va.some(a => a.props.includes("translate")), JSON.stringify(va));
+    ck("no page errors (" + mode.tag + ")", e9.length === 0, e9.join("|"));
+    await c.close();
+  }
 };

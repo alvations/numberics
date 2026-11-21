@@ -61,3 +61,22 @@
 .six .over .answer{ color:var(--ink); font-weight:700; font-variant-numeric:tabular-nums; }
 /* Show answer ends a Climb run: it looks like the run-ender it is, not a harmless helper (round 2) */
 .six .tools .btn.ender{ border-color:var(--bad); color:var(--bad); }
+/* ===== the redesign (REDESIGN.md 5.9, 9.6) ===== */
+/* a gap's tap area is at least 44 x 44 px: a transparent hit box around the visible chip */
+.gp{ position:relative; }
+.gp::before{ content:""; position:absolute; left:50%; top:50%; width:max(100%,var(--tap)); height:max(100%,var(--tap)); translate:-50% -50%; }
+/* the old sign flips out on top of the new one, then removes itself */
+.gp b.old{ position:absolute; pointer-events:none; }
+.num .sg.old{ z-index:1; }
+/* a bracket bar grows from its left end */
+.bar{ transform-origin:left center; }
+/* the gold sheen that sweeps a made line (positioned over the line by game.js) */
+.sheen{ position:absolute; left:0; top:0; width:0; height:0; overflow:hidden; pointer-events:none; opacity:0; border-radius:var(--r-sm); z-index:1; }
+.sheen i{ position:absolute; inset:0; background:linear-gradient(100deg, transparent 25%, rgba(255,246,214,.6) 50%, transparent 75%); }
+/* how to play: the pictures */
+.howto .pv .hg{ width:26px; height:26px; border-radius:99px; display:grid; place-items:center; border:2px dashed var(--accent); color:var(--accent); font-weight:850; }
+.howto .pv .mt.gold{ background:var(--accent); color:var(--accent-ink); }
+details.how p .btn{ padding:0 14px; }
+/* the tiles sit above the gaps' hit boxes, so a tap on a tile's edge is the tile's */
+.num{ z-index:1; }
+.sheen{ z-index:2; }

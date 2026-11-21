@@ -37,6 +37,7 @@
       <h2>No moves left</h2>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-pills" class="tro-pills" hidden></div>
       <div class="row">
         <button id="over-view" class="btn" type="button">See the board</button>
         <button id="again" class="btn primary" type="button">New game</button>
@@ -47,29 +48,24 @@
   <div class="row">
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Swipe or use the arrow keys: every tile moves one step. 1 and 2 make 3; from 3 up equal tiles merge,
-     and so do 3 and 6 (they make 9). Line up 3, 6, 9 in a row or column to flush it away for points and a power-up.
-     <a href="#help" id="help-open">How it works</a></p>
-  <nav id="games" class="games" data-root="../" data-current="three" aria-label="Numberics games"></nav>
-  <div id="help" class="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden>
-    <div class="card" id="help-card" tabindex="-1">
-      <h2 id="help-title">How Three works</h2>
-      <p class="lead">Swipe or use the arrow keys: every tile moves one step.</p>
-      <ul>
-        <li><span class="ex"><b data-v="1"></b>+<b data-v="2"></b>=<b data-v="3"></b></span>
-          <span>1 and 2 (the small grey halves) make 3. Two 1s or two 2s never merge.</span></li>
-        <li><span class="ex"><b data-v="3"></b>+<b data-v="3"></b>=<b data-v="6"></b></span>
-          <span>From 3 up, equal tiles merge.</span></li>
-        <li><span class="ex"><b data-v="3"></b>+<b data-v="6"></b>=<b data-v="9"></b></span>
-          <span>3 and 6 make 9 too. 1&nbsp;+&nbsp;2 and 3&nbsp;+&nbsp;6 are the only unequal pairs.</span></li>
-        <li><span class="ex"><b data-v="3"></b><b data-v="6"></b><b data-v="9"></b>&rarr;<b class="gone"></b></span>
-          <span><strong>Flush:</strong> line up 3, 6, 9 (or 6, 9, 12) in a row or column for big points and a power-up. A flush uses only 3, 6, 9 and 12.</span></li>
-        <li><span class="ex"><b data-v="24"></b><b data-v="48"></b><b data-v="96"></b></span>
-          <span>Big tiles grow by doubling (12, 24, 48 and 9, 18, 36). Every value has its own colour; past 384 they repeat with a ring.</span></li>
-      </ul>
-      <button id="help-play" class="btn primary" type="button">Play</button>
-    </div>
-  </div>
+  <details class="how" id="how"><summary>How to play</summary>
+    <p>Swipe or use the arrow keys: every tile moves one step. 1 and 2 make 3; from 3 up equal tiles merge,
+       and so do 3 and 6 (they make 9). Line up 3, 6, 9 in a row or column to flush it away for points and a power-up.</p>
+    <ul class="rules">
+      <li>1 and 2 (the small grey halves) make 3. Two 1s or two 2s never merge.</li>
+      <li>From 3 up, equal tiles merge.</li>
+      <li>3 and 6 make 9 too. 1&nbsp;+&nbsp;2 and 3&nbsp;+&nbsp;6 are the only unequal pairs.</li>
+      <li><strong>Flush:</strong> line up 3, 6, 9 (or 6, 9, 12) in a row or column for big points and a power-up. A flush uses only 3, 6, 9 and 12.</li>
+      <li>Big tiles grow by doubling (12, 24, 48 and 9, 18, 36). Every value has its own colour; past 384 they repeat with a ring.</li>
+      <li>A flush that a power-up lines up scores but earns no power-up, and neither does the swipe right after Smash, Swap or Third.</li>
+    </ul>
+    <p class="keys">Keys: arrows move. 1 to 4 (or U for Undo) use the power-ups. Arrows and Enter aim them; Esc cancels.</p>
+    <p><button id="howto-open" class="btn" type="button">Show the three steps</button></p>
+  </details>
+  <section class="more" aria-labelledby="more">
+    <h2 id="more">Ten number games</h2>
+    <div id="games" class="cards" data-root="../" data-current="three" aria-label="Numberics games"></div>
+  </section>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

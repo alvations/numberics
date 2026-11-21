@@ -445,6 +445,30 @@ t("engine is pure: no DOM, storage or clock", () => {
   ok(!/document\.|window\.|localStorage|Date\.now|Math\.random|new Date/.test(src));
 });
 
+// the redesign (REDESIGN.md 5.9, 8.4, 9.6): the client reports the trophy events with the fields of 8.4, writes the
+// card summary, opens the how-to once, ducks the music under the end card and animates only transform and opacity
+t("client wiring for the redesign", () => {
+  const src = fs.readFileSync(path.join(__dirname, "../six/game.js"), "utf8"), html = fs.readFileSync(path.join(__dirname, "../six/index.html"), "utf8");
+  ok(/report\("solve", \{ tier: L\.t, helped: !!state\.helped, sqrt: n\.sqrt, fact: n\.fact, mode: state\.mode, round: state\.round,\s+streak: runs\[mode\]\.streak/.test(src), "solve fields");
+  ok(/report\("end", \{ mode: state\.mode, solved: state\.solved, round: state\.round/.test(src), "end fields");
+  ok(/PG\.put\("six"/.test(src) && /PG\.daily\("six"/.test(src) && /seenHowto\("six"\)/.test(src) && /markHowto\("six"\)/.test(src), "progress");
+  ok(/NumbericsMusic\.duck\(on\)/.test(src) && /TR\.pills\(\$\("over-pills"\)/.test(src), "duck and pills");
+  ok(/<details class="how"><summary>How to play<\/summary>/.test(html) && /id="over-pills" class="tro-pills"/.test(html) && /id="games" class="cards"/.test(html), "page parts");
+  ok(!/<p class="how">/.test(html), "the how-to paragraph moved into the row");
+  ["Tap a gap to put a sign there.", "Make the line equal six.", "Use brackets, roots and ! when you need them."].forEach(x => ok(src.includes(x), x));
+  // only transform and opacity animate (5.13): every keyframe property in the client is one of them
+  const props = (src.match(/\{ (\w+): "[^"]*"(?:, (\w+): [^}]*)?\}/g) || []).join(" ");
+  ok(!/width:|height:|left:|top:|margin|filter|box-shadow/.test((src.match(/play\([^;]*\[\{[^;]*\]/g) || []).join(" ")), "play() frames: transform and opacity only " + props.length);
+  ok(!/ANIM\s*=\s*K\.reducedMotion/.test(src), "reduced motion is read at animation time");
+});
+t("the run record counts roots and factorials the way the trophies mean them", () => {
+  // the sign codes of SIGN in game.js: 1 root, 2 !, 3 two roots, 4 (root)!
+  const ROOTS = [0, 1, 0, 2, 1], FACTS = [0, 0, 1, 0, 1];
+  const src = fs.readFileSync(path.join(__dirname, "../six/game.js"), "utf8");
+  ok(src.includes("var ROOTS = [" + ROOTS.join(", ") + "], FACTS = [" + FACTS.join(", ") + "]"), "tables");
+  ok(src.includes('var SIGN = ["", "√", "!", "√√", "(√)!"]'), "sign codes unchanged");
+});
+
 require("./conventions")(t, ok, ["six/engine.js", "six/game.js", "six/index.html", "six/style.css", "six/bank.js", "six/make-bank.js"]);
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

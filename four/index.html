@@ -39,9 +39,12 @@
 
   <div id="board" class="board four" tabindex="0" aria-label="Game board, 7 columns. Left and right arrows pick a column, Enter or Down drops your disc.">
     <div id="grid" class="grid"></div>
+    <div id="discs" class="discs"></div>
+    <svg id="winline" class="winline" aria-hidden="true" preserveAspectRatio="none" hidden></svg>
     <div id="over" class="over" hidden>
       <h2 id="over-title">You win</h2>
       <p id="over-text"></p>
+      <div id="tro" class="tro-pills" hidden></div>
       <div class="row">
         <button id="over-view" class="btn" type="button">See the board</button>
         <button id="again" class="btn primary" type="button">New game</button>
@@ -50,11 +53,16 @@
   </div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Tap a column (or arrows and Enter) to drop your next disc. Win with four of yours in a row, or four
+  <details class="how">
+    <summary>How to play</summary>
+    <p>Tap a column (or arrows and Enter) to drop your next disc. Win with four of yours in a row, or four
      of any colours that make ten, two of them yours. Half the discs are 1s. On Easy and Medium a blue ring is where
      the computer can win next, a red dashed ring a drop that lets it. Block a three or set up a ten to earn
      power-ups; on Hard the computer uses them too.</p>
-  <nav id="games" class="games" data-root="../" data-current="four" aria-label="Numberics games"></nav>
+    <p>Keys: Left and Right pick a column, Enter or Down drops. 1 to 4 use a power-up (U is Undo), Esc cancels.</p>
+    <p><button id="howto-open" class="btn" type="button">Show the three steps</button></p>
+  </details>
+  <div id="games" class="cards foot-cards" data-root="../" data-current="four" aria-label="Numberics games"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

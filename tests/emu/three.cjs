@@ -14,43 +14,46 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(page);
-  // 0. the first-run explainer: shown once, blocks play while open, remembered, re-openable
-  ck("first visit shows the explainer", await p.isVisible("#help"));
-  ck("explainer teaches 1+2, equal, step, flush and rings", await p.locator("#help li").count() === 5 &&
-    /1 and 2/.test(await p.textContent("#help")) && /equal tiles merge/.test(await p.textContent("#help")) &&
-    /3 and 6 make 9/.test(await p.textContent("#help")) && /Flush/.test(await p.textContent("#help")) && /ring/.test(await p.textContent("#help")));
-  ck("cold #17: the help copy is exact (1 + 2 and 3 + 6 are the unequal pairs; 1s and 2s never pair; flush uses 3, 6, 9, 12)",
-    await p.evaluate(() => { const t = document.getElementById("help").textContent.replace(/\s+/g, " ");
-      return /1 \+ 2 and 3 \+ 6 are the only unequal pairs/.test(t) && /Two 1s or two 2s never merge/.test(t) &&
-        /From 3 up, equal tiles merge/.test(t) && /A flush uses only 3, 6, 9 and 12/.test(t) && !/only pair that is not equal/.test(t); }));
-  ck("the page's how-to says equal tiles merge from 3 up", /from 3 up equal tiles merge/.test((await p.textContent(".how")).replace(/\s+/g, " ")));
-  ck("explainer example tiles are drawn like the board", await p.locator("#help .tile.three[data-band='7']").count() === 1);
-  ck("explainer's big tiles 24, 48, 96 wear three different colours", await p.evaluate(() => new Set([...document.querySelectorAll("#help .tile")].filter(t => +t.textContent >= 24).map(t => getComputedStyle(t).backgroundColor)).size === 3));
+  // 0. the how-to sheet (REDESIGN.md 1.3, 3.6, 9.3): opens by itself on a first visit, three steps, once; the full rules
+  // live in the collapsed How to play row under the board
+  await p.waitForSelector("#sh-howto:not([hidden])", { timeout: 3000 }).catch(() => {});
+  ck("first visit opens the How to play sheet", await p.isVisible("#sh-howto") && await p.evaluate(() => NumbericsUI.current() === "howto"));
+  ck("the sheet has three steps with the spec's words", await p.evaluate(() => [...document.querySelectorAll("#sh-howto .step p")].map(e => e.textContent).join("|")) ===
+    "Each swipe moves tiles one step.|1 and 2 make 3. From 3 up, equal tiles join.|Line up 3, 6, 9 for a rainbow flush.");
+  ck("each step has a drawn picture (3, 6, 9 wear the board's colours)", await p.locator("#sh-howto .step .pv").count() === 3 &&
+    await p.locator("#sh-howto .pv .mt.three[data-band='2']").count() === 1);
+  await p.waitForTimeout(300);
+  ck("the sheet fits at 375px", await p.evaluate(() => { const r = document.querySelector("#sh-howto .sheet").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight + 1 && document.documentElement.scrollWidth <= innerWidth; }));
+  await shot(p, "howto");
+  await p.keyboard.press("ArrowLeft");
+  ck("arrows do not play under the sheet", (await st(p)).moves === 0);
+  await p.click("#howto-play");
+  ck("Play closes the sheet", !(await p.isVisible("#sh-howto")) && await p.evaluate(() => !NumbericsUI.open()));
+  ck("the how-to is remembered in progress", await p.evaluate(() => NumbericsProgress.seenHowto("three")));
+  ck("fresh board hint fills the empty band", /Swipe to start/.test(await p.textContent("#hint")));
+  ck("subtitle: Numberics link then a tagline with a full stop", /^Numberics · Count in threes\.$/.test((await p.textContent(".sub")).trim()));
   ck("BEST is a dimmed none before any play (R11)", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
   ck("craft #5: the empty value uses the shared .stat .none style (same size as values, weight 600, muted)", await p.evaluate(() => {
     const n = getComputedStyle(document.getElementById("best")), v = getComputedStyle(document.getElementById("score")),
       mute = getComputedStyle(document.documentElement).getPropertyValue("--mute").trim();
     const probe = document.createElement("i"); probe.style.color = mute; document.body.appendChild(probe); const mc = getComputedStyle(probe).color; probe.remove();
     return n.fontSize === v.fontSize && n.fontWeight === "600" && n.color === mc; }));
-  ck("explainer fits at 375px", await p.evaluate(() => { const r = document.querySelector("#help .card").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight && document.documentElement.scrollWidth <= innerWidth; }));
-  await shot(p, "help");
-  await p.keyboard.press("ArrowLeft");
-  ck("arrows do not play under the explainer", (await st(p)).moves === 0);
-  ck("the card has focus, not the Play button (no double outline, craft #4)", await p.evaluate(() => document.activeElement.id === "help-card"));
-  await p.keyboard.press("Tab");
-  ck("Tab reaches Play", await p.evaluate(() => document.activeElement.id === "help-play"));
-  await p.keyboard.press("Enter");
-  ck("Enter on Play closes the explainer", !(await p.isVisible("#help")));
-  ck("fresh board hint fills the empty band", /Swipe to start/.test(await p.textContent("#hint")));
-  ck("subtitle: Numberics link then a tagline with a full stop", /^Numberics · Count in threes\.$/.test((await p.textContent(".sub")).trim()));
+  ck("the How to play row is collapsed and holds the full rules word for word", await p.evaluate(() => {
+    const d = document.getElementById("how"), t = d.textContent.replace(/\s+/g, " ");
+    return d.tagName === "DETAILS" && !d.open && /from 3 up equal tiles merge/.test(t) && /1 \+ 2 and 3 \+ 6 are the only unequal pairs/.test(t) &&
+      /Two 1s or two 2s never merge/.test(t) && /A flush uses only 3, 6, 9 and 12/.test(t) && /repeat with a ring/.test(t) && /Keys:/.test(t); }));
+  ck("the How to play row is a 44 px target", await p.evaluate(() => document.querySelector("#how summary").getBoundingClientRect().height >= 44));
   await p.reload();
-  ck("explainer is remembered", !(await p.isVisible("#help")));
-  await p.click("#help-open");
-  ck("How it works re-opens it", await p.isVisible("#help"));
+  ck("the sheet does not open again", !(await p.isVisible("#sh-howto")));
+  await p.click("#how summary"); await p.click("#howto-open");
+  ck("the row re-opens the steps", await p.isVisible("#sh-howto"));
   await p.keyboard.press("Escape");
-  ck("Esc closes it", !(await p.isVisible("#help")));
-  await p.click("#help-open"); await p.keyboard.press("Enter");
-  ck("Enter on the open card closes it", !(await p.isVisible("#help")));
+  ck("Esc closes it", !(await p.isVisible("#sh-howto")));
+  await p.click("#how summary");
+  ck("the games list at the page foot is the cards, in games.json order, Three marked Playing", await p.evaluate(() => {
+    const c = [...document.querySelectorAll("#games.cards a.card")].map(a => a.dataset.id);
+    return c.join() === "fibonacci,two,three,four,five,six,seven,nine,fifteen,sudoku" &&
+      document.querySelector('#games a.card[data-id="three"]').getAttribute("aria-current") === "page"; }));
   ck("nine starting tiles", await p.locator("#tiles .tile").count() === 9);
   ck("starting tiles are 1, 2 or 3", await p.evaluate(() => [...document.querySelectorAll("#tiles .tile")].every(t => /^[123]$/.test(t.textContent))));
   ck("starts with one Undo", JSON.stringify((await st(p)).power) === '{"undo":1,"smash":0,"swap":0,"third":0}');
@@ -60,7 +63,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.waitForTimeout(700);
   ck("moves were counted", (await st(p)).moves > 0);
   ck("every tile shows its number", await p.evaluate(() => [...document.querySelectorAll("#tiles .tile")].every(t => /^[0-9]+$/.test(t.textContent))));
-  ck("multiples of 3 wear a rainbow band", await p.evaluate(() => [...document.querySelectorAll("#tiles .tile")].every(t => (+t.textContent % 3 === 0) === t.hasAttribute("data-band"))));
+  ck("multiples of 3 wear a rainbow band", await p.evaluate(() => [...document.querySelectorAll("#tiles .tile > .face")].every(t => (+t.textContent % 3 === 0) === t.hasAttribute("data-band"))));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   const moves = (await st(p)).moves;
   await p.reload();
@@ -74,19 +77,21 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("1 + 2 makes 3", s.grid[4] === 3);
   ck("3 + 6 step-merges into 9", s.grid[8] === 9);
   ck("3 and 9 stay apart", s.grid[12] === 3 && s.grid[13] === 9);
-  ck("drawn 9 is yellow (band 2)", await p.evaluate(() => [...document.querySelectorAll("#tiles .tile")].some(t => t.textContent === "9" && t.dataset.band === "2")));
+  ck("drawn 9 is yellow (band 2)", await p.evaluate(() => [...document.querySelectorAll("#tiles .tile > .face")].some(t => t.textContent === "9" && t.dataset.band === "2")));
 
   // 3. Flush: the rainbow sweeps the run, then it collapses, scores and pays a power-up
   await set(p, FLUSH, { score: 0, power: { undo: 1, smash: 0, swap: 0, third: 0 } });
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(180);
   ck("the run is marked while the rainbow sweeps", await p.locator("#tiles .tile.run").count() === 3);
+  const flushToast = await p.textContent("#toast"); // a trophy earned by this swipe toasts after its animation
   await shot(p, "flush");
   await p.waitForTimeout(800);
   s = await st(p);
   ck("the run cleared from the board", !s.grid[8] && !s.grid[0] && !s.grid[4]);
   ck("flush scored sum x length = 54", s.score === 54);
   ck("flush earned one power-up", s.power.undo + s.power.smash + s.power.swap + s.power.third === 2);
-  ck("toast announces the flush", /^Flush 3-6-9, \+54\s+\+(Undo|Smash|Swap|Third)$/.test(await p.textContent("#toast")), await p.textContent("#toast"));
+  ck("toast announces the flush", /^Flush 3-6-9, \+54\s+\+(Undo|Smash|Swap|Third)$/.test(flushToast), flushToast);
+  ck("then the trophy it earned toasts, once the flush has played", /^Trophy: First flush$/.test(await p.textContent("#toast")), await p.textContent("#toast"));
   ck("a flush toast is a reward (gold)", !(await p.evaluate(() => document.getElementById("toast").classList.contains("bad"))));
   ck("the run marks are gone after the collapse", await p.locator("#tiles .tile.run").count() === 0);
   ck("score pill updated", (await p.textContent("#score")) === "54");
@@ -207,6 +212,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await set(p, [0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { next: 12, used: 0, power: { undo: 0, smash: 0, swap: 0, third: 0 } });
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(300);
   ck("overlay shows when locked with no usable power-up", await p.isVisible("#over"));
+  ck("the end card shows the run's trophy as a pill (Hello, numbers)", await p.isVisible("#over-pills") &&
+    /Trophy: Hello, numbers/.test(await p.textContent("#over-pills")), await p.textContent("#over-pills"));
+  ck("no trophy toast over the end card (R7)", !(await p.evaluate(() => { const t = document.getElementById("toast"); return t.classList.contains("on") && /Trophy/.test(t.textContent); })));
+  await shot(p, "over-pill");
   ck("overlay says it was a pure run", /pure run/.test(await p.textContent("#over-text")));
   ck("no New best when the record stands", !(await p.isVisible("#over-best")));
   await p.locator("#tray .pw").nth(0).click({ force: true });
@@ -237,21 +246,20 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("no page errors", errs.length === 0, errs.join("|"));
   await ctx.close();
 
-  // 5b. craft #4: at 320x568 the explainer starts at its title and scrolls to Play; R17: Enter on a games-row link navigates
+  // 5b. 320x568: the how-to sheet starts at its title and scrolls to Play; R17: Enter on a games-list card navigates
   ctx = await browser.newContext({ viewport: { width: 320, height: 568 } });
   p = await ctx.newPage();
-  await p.goto(page);
-  ck("320x568: the explainer title is on screen at the top", await p.evaluate(() => { const r = document.getElementById("help-title").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
-  ck("craft #2: 320x568: the whole explainer, Play included, fits without scrolling", await p.evaluate(() => { const c = document.querySelector("#help .card").getBoundingClientRect(); return c.top >= 0 && c.bottom <= innerHeight; }));
-  ck("craft #2: 320x568: the words get more room than the examples", await p.evaluate(() => { const li = document.querySelector("#help li"); return li.children[1].getBoundingClientRect().width > li.children[0].getBoundingClientRect().width; }));
-  ck("320x568: the explainer scrolls to Play", await p.evaluate(() => { const h = document.getElementById("help"), b = document.getElementById("help-play");
+  await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])");
+  ck("320x568: the sheet title is on screen", await p.evaluate(() => { const r = document.querySelector("#sh-howto h2").getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
+  ck("320x568: the words get more room than the pictures", await p.evaluate(() => { const st = document.querySelector("#sh-howto .step"); return st.children[1].getBoundingClientRect().width > st.children[0].getBoundingClientRect().width; }));
+  ck("320x568: the sheet scrolls to Play", await p.evaluate(() => { const h = document.querySelector("#sh-howto .sheet"), b = document.getElementById("howto-play");
     h.scrollTop = h.scrollHeight; const r = b.getBoundingClientRect(); return r.top >= 0 && r.bottom <= innerHeight; }));
   ck("320x568: no sideways scroll", await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-  await p.click("#help-play");
-  await p.focus("#games a[href]:not([aria-current])");
+  await p.click("#howto-play");
+  await p.focus("#games a.card:not([aria-current])");
   const href = await p.evaluate(() => document.activeElement.href);
   await Promise.all([p.waitForURL(u => String(u) === href, { timeout: 3000 }).catch(() => {}), p.keyboard.press("Enter")]);
-  ck("R17: Enter on a focused games-row link navigates", p.url() === href, p.url() + " vs " + href);
+  ck("R17: Enter on a focused games-list card navigates", p.url() === href, p.url() + " vs " + href);
   await ctx.close();
 
   // 6. storage that throws: still runs and plays
@@ -259,7 +267,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage(); const e2 = []; p.on("pageerror", e => e2.push(e.message));
   await p.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
   await p.goto(page);
-  await p.click("#help-play");
+  await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
   for (const k of ["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowUp"]) await p.keyboard.press(k);
   await p.waitForTimeout(300);
   ck("runs with storage blocked", e2.length === 0 && (await st(p)).moves > 0, e2.join("|"));
@@ -269,7 +277,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" });
   p = await ctx.newPage(); const e3 = []; p.on("pageerror", e => e3.push(e.message));
   await p.goto(page);
-  await p.click("#help-play");
+  await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
   await set(p, FLUSH, { score: 0 });
   await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(60);
   ck("reduced motion: still outline on the run", await p.locator("#tiles .tile.run.still").count() === 3);
@@ -282,5 +290,206 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const g2 = await p.evaluate(() => ({ dom: [...document.querySelectorAll("#tiles .tile")].length, eng: window.__three.state.grid.filter(Boolean).length }));
   ck("input during a flush settles it cleanly", g2.dom === g2.eng, JSON.stringify(g2));
   ck("no page errors under reduced motion", e3.length === 0, e3.join("|"));
+  await ctx.close();
+
+  // 8. motion (REDESIGN.md 5.4, 5.11): one-step slides, the dealt tile entering from the edge, merge pop, the flush
+  // sweep then clear; input during an animation is applied at once; sounds sit on the visual beats
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  p = await ctx.newPage(); const e8 = []; p.on("pageerror", e => e8.push(e.message));
+  await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
+  await p.evaluate(() => NumbericsSettings.set({ motion: "full" }));
+  // a probe: press a key from inside the page and sample, every frame for `ms`, the layer's nodes
+  const probe = (key, ms, extra) => p.evaluate(([key, ms, extra]) => new Promise(res => {
+    const box = document.getElementById("tiles").getBoundingClientRect(), snap = () => [...document.querySelectorAll("#tiles > .tile")].map(n => {
+      const f = n.querySelector(".face"), r = f.getBoundingClientRect();
+      return { id: n.dataset.id, v: f.textContent, x: r.x - box.x, y: r.y - box.y, w: r.width, o: +getComputedStyle(f).opacity,
+        c: +n.style.getPropertyValue("--c"), r: +n.style.getPropertyValue("--r"), cls: n.className, anims: f.getAnimations().length + n.getAnimations().length }; });
+    const before = snap(), m0 = window.__three.state.moves, t0 = performance.now(), log = [];
+    window.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+    const now = { moves: window.__three.state.moves, nodes: snap() };
+    if (extra) setTimeout(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: extra, bubbles: true })), 30);
+    (function f() { log.push({ t: performance.now() - t0, nodes: snap() }); if (performance.now() - t0 < ms) requestAnimationFrame(f);
+      else res({ before, m0, now, log, moves: window.__three.state.moves, grid: window.__three.state.grid }); })();
+  }), [key, ms, extra || null]);
+  const cellW = await p.evaluate(() => { const b = document.getElementById("tiles"); return (b.clientWidth - 3 * parseFloat(getComputedStyle(b).getPropertyValue("--gap"))) / 4 + parseFloat(getComputedStyle(b).getPropertyValue("--gap")); });
+
+  await set(p, [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 5, power: { undo: 1, smash: 1, swap: 1, third: 1 } });
+  let pr = await probe("ArrowLeft", 260);
+  const mover = pr.before[0].id, path = pr.log.map(l => l.nodes.find(n => n.id === mover)).filter(Boolean).map(n => Math.round(n.x));
+  ck("the input is applied in the handler: the move counts and the new cell is written at once", pr.now.moves === pr.m0 + 1 && pr.now.nodes.find(n => n.id === mover).c === 1);
+  ck("the tile slides one cell (frames between the two cells), not a blip", path.some(x => x < 2 * cellW - 3 && x > cellW + 3) && Math.abs(path[path.length - 1] - cellW) < 2, path.join(","));
+  ck("the slide takes about T.step (100 ms): there by 160 ms", pr.log.filter(l => l.t > 160).every(l => Math.abs(l.nodes.find(n => n.id === mover).x - cellW) < 2));
+  const dealt = pr.log[0].nodes.find(n => !pr.before.some(b => b.id === n.id));
+  ck("the dealt tile is a new node at the far edge of the moved line", !!dealt && dealt.c === 3 && dealt.r === 0, JSON.stringify(dealt));
+  const dpath = pr.log.map(l => l.nodes.find(n => n.id === dealt.id)).filter(Boolean);
+  ck("it enters from outside the right edge (starts one cell further right, fading in)", dpath[0].x > 3 * cellW + cellW * 0.5 && dpath[0].o < 1 &&
+    Math.abs(dpath[dpath.length - 1].x - 3 * cellW) < 2 && dpath[dpath.length - 1].o === 1, JSON.stringify(dpath.slice(0, 3).map(n => [Math.round(n.x), n.o])));
+  ck("the board clips the entering tile (never drawn over the frame)", await p.evaluate(() => getComputedStyle(document.getElementById("tiles")).overflow === "clip"));
+  await set(p, [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 5 });
+  pr = await probe("ArrowDown", 150);
+  const dd = pr.log[0].nodes.find(n => !pr.before.some(b => b.id === n.id));
+  ck("swiped down: the dealt tile enters from above the top edge", dd && dd.r === 0 && pr.log[0].nodes.find(n => n.id === dd.id).y < -cellW * 0.4, JSON.stringify(dd));
+
+  await set(p, [3, 3, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 5 });
+  pr = await probe("ArrowLeft", 420);
+  const mergedNode = pr.now.nodes.find(n => /\bmerged\b/.test(n.cls));
+  ck("a merge: the two tiles slide into one cell and a new tile pops on top", pr.now.nodes.filter(n => /\bmerged\b/.test(n.cls)).length === 2 &&
+    pr.now.nodes.filter(n => /\bgone\b/.test(n.cls)).length === 4 && pr.now.nodes.filter(n => /\bmerged\b/.test(n.cls)).map(n => n.v).sort().join() === "3,6", JSON.stringify(pr.now.nodes.map(n => [n.v, n.cls])));
+  const popW = pr.log.map(l => l.nodes.find(n => n.id === mergedNode.id)).filter(Boolean).map(n => n.w);
+  ck("the pop swells past full size after the slide, then settles", Math.max(...popW) > popW[popW.length - 1] * 1.05 && Math.abs(popW[popW.length - 1] - (cellW - 8)) < 4 + cellW, popW.map(Math.round).join(","));
+  ck("after the beats only the board's tiles remain", pr.log[pr.log.length - 1].nodes.length === pr.grid.filter(Boolean).length);
+
+  // the flush: sweep along the run 60 ms apart, then each tile shrinks away 40 ms apart; a second flush follows
+  await set(p, [3, 0, 3, 0, 6, 0, 6, 0, 9, 0, 9, 0, 0, 0, 0, 0], { moves: 5, score: 0, power: { undo: 1, smash: 0, swap: 0, third: 0 } });
+  await p.evaluate(() => { window.__snd = []; const A = window.NumbericsAudio, t0 = performance.now(); window.__t0 = t0;
+    ["slide", "merge", "pop", "power", "lose", "best"].forEach(n => { const o = A[n]; A[n] = function (x) { window.__snd.push([n, Math.round(performance.now() - window.__t0), x]); return o.apply(this, arguments); }; }); });
+  await p.evaluate(() => { window.__t0 = performance.now(); });
+  pr = await probe("ArrowLeft", 1900);
+  const runs = pr.log.map(l => ({ t: l.t, run: l.nodes.filter(n => /\brun\b/.test(n.cls)).map(n => n.id).sort().join() }));
+  const phases = [...new Set(runs.map(r => r.run))].filter(Boolean);
+  ck("two flushes from one swipe: the sweep marks one run, then the other", phases.length === 2 && phases.every(ph => ph.split(",").length === 3), JSON.stringify(phases));
+  const firstAt = runs.find(r => r.run).t, secondAt = runs.find(r => r.run === phases[1]).t;
+  ck("the first sweep starts after the 100 ms slide", firstAt >= 90 && firstAt < 160, firstAt);
+  ck("the second flush starts after the first ends (sweep 540 + clear 240 + 80 ms)", secondAt > 900 && secondAt < 1020, secondAt);
+  const shrink = pr.log.filter(l => l.t > 680 && l.t < 860).map(l => l.nodes.filter(n => /\brun\b/.test(n.cls)).map(n => Math.round(n.w)));
+  ck("each run tile shrinks to nothing after the sweep", shrink.some(ws => ws.some(w => w < cellW * 0.6)), JSON.stringify(shrink.slice(0, 4)));
+  ck("the two runs are gone and the board matches the engine", pr.log[pr.log.length - 1].nodes.length === pr.grid.filter(Boolean).length && [0, 1, 4, 5, 8, 9].every(c => !pr.grid[c]),
+    JSON.stringify(pr.log[pr.log.length - 1].nodes.map(n => [n.r, n.c, n.v, n.cls])) + " " + pr.grid);
+  let snd = await p.evaluate(() => window.__snd);
+  const sAt = (n) => snd.filter(x => x[0] === n).map(x => x[1]);
+  ck("sounds on the beats: slide at the input, pop(1) then pop(2) as each run clears", sAt("slide")[0] < 40 && snd.filter(x => x[0] === "pop").map(x => x[2]).join() === "1,2" &&
+    sAt("pop")[0] > 600 && sAt("pop")[0] < 760 && sAt("pop")[1] > 1400, JSON.stringify(snd));
+  // a new input finishes the timeline at once: final board, and the pending sounds are dropped, not bunched
+  await set(p, [3, 0, 3, 0, 6, 0, 6, 0, 9, 0, 9, 0, 0, 0, 0, 0], { moves: 5, score: 0 });
+  await p.evaluate(() => { window.__snd = []; window.__t0 = performance.now(); });
+  pr = await probe("ArrowLeft", 600, "ArrowDown");
+  snd = await p.evaluate(() => window.__snd);
+  ck("two quick inputs during an animation give two moves", pr.moves === pr.m0 + 2, pr.m0 + " -> " + pr.moves);
+  ck("the second input dropped the first flush's pending sounds", !snd.some(x => x[0] === "pop"), JSON.stringify(snd));
+  const last = pr.log[pr.log.length - 1].nodes;
+  ck("after both, every node sits on its engine cell with its engine value", last.length === pr.grid.filter(Boolean).length &&
+    last.every(n => String(pr.grid[n.r * 4 + n.c]) === n.v), JSON.stringify(last.map(n => [n.r, n.c, n.v])) + " " + pr.grid);
+  ck("the Next preview cross-fades when it changes", await p.evaluate(() => { const n = document.getElementById("next"), s = window.__three.state;
+    s.grid = [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; window.__three.state = s;
+    const v = n.textContent; window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+    return n.textContent === String(window.__three.state.next) && (n.textContent === v || n.getAnimations().length === 1); }));
+  // power-ups: Smash fades the tile out, Swap slides the pair past each other, Third pops; Undo cross-fades
+  await set(p, [1, 3, 0, 0, 6, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12], { moves: 3, power: { undo: 1, smash: 2, swap: 1, third: 1 } });
+  const bb = await p.locator("#board").boundingBox();
+  const tapc = (cell) => p.mouse.click(bb.x + bb.width * ((cell % 4) + 0.5) / 4, bb.y + bb.height * (Math.floor(cell / 4) + 0.5) / 4);
+  let ids0 = await p.evaluate(() => window.__three.ids);
+  await p.keyboard.press("3"); await tapc(0); await tapc(1);
+  ck("Swap keeps both tiles' nodes and slides them to each other's cells", await p.evaluate((ids0) => { const a = document.querySelector('#tiles > .tile[data-id="' + ids0[0] + '"]'), b = document.querySelector('#tiles > .tile[data-id="' + ids0[1] + '"]');
+    return a && b && a.style.getPropertyValue("--c") === "1" && b.style.getPropertyValue("--c") === "0"; }, ids0));
+  ids0 = await p.evaluate(() => window.__three.ids);
+  await p.keyboard.press("2"); await tapc(15);
+  ck("Smash fades the tile out (kept as a leaving node until the fade ends)", await p.evaluate((id) => { const n = document.querySelector('#tiles > .tile[data-id="' + id + '"]'); return !!n && n.classList.contains("nmm-out"); }, ids0[15]));
+  ck("no page errors in the motion checks", e8.length === 0, e8.join("|"));
+  await ctx.close();
+
+  // 9. reduced motion via the OS and via the in-app setting (5.12): Less beats Full devices, Full beats a reducing OS
+  for (const [os, setting, want] of [["reduce", "auto", "reduced"], ["no-preference", "reduced", "reduced"], ["reduce", "full", "full"]]) {
+    ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: os });
+    p = await ctx.newPage(); const e9 = []; p.on("pageerror", e => e9.push(e.message));
+    await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
+    await p.evaluate((m) => NumbericsSettings.set({ motion: m }), setting);
+    await set(p, [0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 5 });
+    const w = await p.evaluate(() => new Promise(res => {
+      const n = document.querySelector("#tiles > .tile"), x0 = n.getBoundingClientRect().x;
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }));
+      requestAnimationFrame(() => requestAnimationFrame(() => { const xs = n.getBoundingClientRect().x, fresh = [...document.querySelectorAll("#tiles > .tile")].find(t => t !== n);
+        res({ x0, xs, moved: Math.abs(xs - x0), moving: n.getAnimations().length + (getComputedStyle(n).transitionDuration.split(",").some(d => parseFloat(d) > 0) ? 1 : 0),
+          scale: fresh.querySelector(".face").getAnimations().some(a => a.effect.getKeyframes().some(k => k.transform && k.transform !== "none")) }); }));
+    }));
+    const tag = "OS " + os + " + setting " + setting + ": ";
+    if (want === "reduced") ck(tag + "no slide, no scale: the move lands at once", w.moving === 0 && !w.scale && w.moved > 50, JSON.stringify(w));
+    else ck(tag + "the slide plays (the in-app Full overrides the OS)", w.moving > 0 && w.scale, JSON.stringify(w));
+    if (want === "reduced") {
+      await set(p, FLUSH, { score: 0 });
+      await p.keyboard.press("ArrowLeft"); await p.waitForTimeout(60);
+      ck(tag + "the flush shows the still rainbow outline (colour, not motion)", await p.locator("#tiles .tile.run.still").count() === 3);
+      await p.waitForTimeout(600);
+      ck(tag + "then the run clears", await p.locator("#tiles .tile.run").count() === 0 && !(await st(p)).grid[8]);
+    }
+    ck(tag + "no page errors", e9.length === 0, e9.join("|"));
+    await ctx.close();
+  }
+
+  // 10. trophies (REDESIGN.md 8.4): every Three trophy fires on a scripted line, with real booleans and numbers
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  p = await ctx.newPage(); const e10 = []; p.on("pageerror", e => e10.push(e.message));
+  await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
+  const has = (id) => p.evaluate((id) => NumbericsTrophies.has(id), id);
+  const swipe = async (grid, extra, key) => { await set(p, grid, Object.assign({ moves: 5, power: { undo: 1, smash: 1, swap: 1, third: 1 } }, extra)); await p.keyboard.press(key || "ArrowLeft"); await p.evaluate(() => window.__three.settle()); };
+  await p.evaluate(() => { const r = NumbericsTrophies.report; window.__rep = []; NumbericsTrophies.report = function (g, e, d) { window.__rep.push([g, e, JSON.parse(JSON.stringify(d))]); return r.apply(this, arguments); }; });
+  ck("before play: no Three trophy", !(await has("thr_flush")) && !(await has("thr_96")));
+  await swipe([0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+  const rep = await p.evaluate(() => window.__rep.pop());
+  ck("swipe event fields: flushes, top, grid, moves and run {used, flushes}", rep[0] === "three" && rep[1] === "swipe" && rep[2].flushes === 0 && typeof rep[2].top === "number" &&
+    rep[2].grid.length === 16 && rep[2].moves === 6 && rep[2].run.used === 0 && typeof rep[2].run.flushes === "number", JSON.stringify(rep));
+  ck("no trophy from a plain swipe", !(await has("thr_flush")));
+  await swipe(FLUSH);
+  ck("thr_flush: First flush", await has("thr_flush"));
+  ck("thr_double: not from one flush", !(await has("thr_double")));
+  await swipe([3, 0, 3, 0, 6, 0, 6, 0, 9, 0, 9, 0, 0, 0, 0, 0]);
+  ck("thr_double: Double rainbow (two flushes from one swipe)", await has("thr_double"));
+  await swipe([48, 48, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { top: 0 });
+  ck("thr_96: Ninety-six", await has("thr_96") && !(await has("thr_384")));
+  await swipe([192, 192, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { top: 0 });
+  ck("thr_384: Big three", await has("thr_384"));
+  await swipe(FLUSH, { flushes: 3 });
+  ck("thr_five: not at four flushes in the run", !(await has("thr_five")));
+  await swipe(FLUSH, { flushes: 4 });
+  ck("thr_five: Rainbow run (five flushes in one game)", await has("thr_five"));
+  await swipe([3, 0, 12, 24, 6, 12, 6, 12, 12, 6, 12, 6, 6, 12, 6, 12]);
+  ck("thr_mono (secret): All grown up", await has("thr_mono"), JSON.stringify((await st(p)).grid));
+  await swipe([0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 298 });
+  ck("thr_long (secret): not at 299 moves", !(await has("thr_long")));
+  await swipe([0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { moves: 299 });
+  ck("thr_long (secret): Unhurried at 300 moves", await has("thr_long"));
+  await p.evaluate(() => { window.__three.base = 1e9; });
+  await swipe([0, 3, 12, 3, 12, 3, 12, 3, 3, 12, 3, 12, 12, 3, 12, 3], { next: 12, used: 2, flushes: 7, score: 500, power: { undo: 0, smash: 0, swap: 0, third: 0 } });
+  const endRep = await p.evaluate(() => window.__rep.filter(r => r[1] === "end"));
+  ck("end event once, with score, flushes and the run", endRep.length === 1 && endRep[0][2].score === 500 && endRep[0][2].flushes === 7 && endRep[0][2].run.used === 2, JSON.stringify(endRep));
+  ck("the run's end earns Hello, numbers, shown as a pill on the end card", await p.isVisible("#over") && /Hello, numbers/.test(await p.textContent("#over-pills")));
+  ck("progress summary: best, live and liveText on every persist", await p.evaluate(() => { const g = NumbericsProgress.get("three"); return g && /^Best /.test(g.best) && g.live === false && /^Score /.test(g.liveText); }));
+  await p.click("#again");
+  ck("New game: the progress shows no live run until the first move", await p.evaluate(() => NumbericsProgress.get("three").live === false));
+  await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp");
+  ck("after a move the run is live", await p.evaluate(() => NumbericsProgress.get("three").live === true && NumbericsProgress.get("three").liveText === "Score " + NumbericsKit.fmt(window.__three.state.score)));
+  ck("no page errors in the trophy line", e10.length === 0, e10.join("|"));
+  await ctx.close();
+
+  // 11. budgets (REDESIGN.md 10): a scripted 60-move session, a move every 45 ms; frames and tile nodes
+  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  p = await ctx.newPage(); const e11 = []; p.on("pageerror", e => e11.push(e.message));
+  await p.goto(page); await p.waitForSelector("#sh-howto:not([hidden])"); await p.click("#howto-play");
+  await p.evaluate(() => NumbericsSettings.set({ motion: "full" }));
+  // the same frame clock with no input first: on a machine busy with other work, the budget is judged against it
+  const idle = await p.evaluate(() => new Promise(res => { const fr = []; let last = performance.now(); const t0 = last;
+    (function f(t) { fr.push(t - last); last = t; if (t - t0 < 2700) requestAnimationFrame(f); else res(fr.slice(2)); })(performance.now()); }));
+  const idleS = idle.slice().sort((a, b) => a - b), idleP95 = idleS[Math.floor(idleS.length * 0.95)], idleOver = idle.filter(x => x > 17.5).length / idle.length;
+  const bud = await p.evaluate(() => new Promise(res => {
+    const frames = [], nodes = [], keys = ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"]; let last = performance.now(), n = 0, run = true, moves = 0;
+    (function f(t) { frames.push(t - last); last = t; if (run) requestAnimationFrame(f); })(performance.now());
+    const iv = setInterval(() => {
+      const s = window.__three.state; if (s.over || !window.NumbericsThree.canMove(s)) { const g = window.NumbericsThree.newGame(n + 7); g.power = { undo: 9, smash: 9, swap: 9, third: 9 }; window.__three.state = g; }
+      const m0 = window.__three.state.moves;
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: keys[n % 4] })); n++;
+      if (window.__three.state.moves > m0) moves++;
+      nodes.push([document.querySelectorAll("#tiles > .tile").length, window.__three.state.grid.filter(Boolean).length]);
+      if (n >= 60) { clearInterval(iv); setTimeout(() => { run = false; window.__three.settle();
+        res({ frames: frames.slice(2), nodes, moves, after: [document.querySelectorAll("#tiles > .tile").length, window.__three.state.grid.filter(Boolean).length] }); }, 700); }
+    }, 45);
+  }));
+  const fr = bud.frames.slice().sort((a, b) => a - b), p95 = fr[Math.floor(fr.length * 0.95)], over = bud.frames.filter(x => x > 17.5).length / bud.frames.length;
+  console.log("three budgets: moves " + bud.moves + ", frames " + fr.length + ", p95 " + p95.toFixed(1) + " ms, max " + fr[fr.length - 1].toFixed(1) + " ms, >17.5 ms " + (over * 100).toFixed(1) +
+    "% (idle baseline: p95 " + idleP95.toFixed(1) + " ms, >17.5 ms " + (idleOver * 100).toFixed(1) + "%)");
+  ck("60-move session: most inputs moved", bud.moves >= 40, bud.moves);
+  ck("frames: p95 within 17.5 ms (16.7 + headless vsync jitter, or the idle page's own p95 on a busy machine) and at most 5% more frames over than idle",
+    p95 <= Math.max(17.5, idleP95 + 0.5) && over <= idleOver + 0.05, "p95 " + p95 + " over " + over + " idle " + idleP95 + "/" + idleOver);
+  ck("tile nodes never exceed the board's tiles + 8", bud.nodes.every(([d, e]) => d <= e + 8), JSON.stringify(bud.nodes.filter(([d, e]) => d > e + 8)));
+  ck("after the last move settles, one node per tile", bud.after[0] === bud.after[1], JSON.stringify(bud.after));
+  ck("no page errors in the budget run", e11.length === 0, e11.join("|"));
   await ctx.close();
 };

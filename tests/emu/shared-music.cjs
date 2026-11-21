@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Browser checks for shared/music.js (docs/design/MUSIC.md) on tests/fixtures/music.html: no AudioContext before a
  * gesture, play / crossfade / duck / stop, every style plays without an error, the main thread stays free (no long
- * task over 50 ms while music plays and switches), and a hidden tab pauses it.
+ * task over 50 ms while music plays and switches), and a hidden tab pauses it. Then the lazy loader in shared/audio.js
+ * (tests/fixtures/music-lazy.html and the live pages): no music request before a gesture, music.js after the first tap
+ * when Music is on, none when off (until it is turned on), one AudioContext in total, a duck before the load applied.
  * Run: NODE_PATH=$(npm root -g) node tests/emu/run.cjs shared-music */
 "use strict";
 const SPY = () => {
@@ -40,7 +42,7 @@ module.exports = async function ({ browser, url, ck }) {
   ck("a style start announces its SFX key on numberics:music", await p.evaluate(() => window.__mus.length === 1 && window.__mus[0].style === NumbericsMusic.state().style && window.__mus[0].key === NumbericsMusic.key()));
   s = await S();
   ck("notes are booked ahead on the audio clock", s.notes > 5 && s.live > 0, JSON.stringify(s));
-  ck("the mix sits at musicVolume * SCALE", Math.abs(s.mix - s.volume * (await p.evaluate(() => 0.016))) < 1e-6 || s.mix > 0, String(s.mix));
+  ck("the mix sits at musicVolume * SCALE", Math.abs(s.mix - s.volume * (await p.evaluate(() => 0.07))) < 1e-6 || s.mix > 0, String(s.mix));
 
   // 2. crossfade, then every style plays
   await p.evaluate(() => NumbericsMusic.setStyle("chill"));
@@ -107,4 +109,58 @@ module.exports = async function ({ browser, url, ck }) {
   ck("contract: visible resumes", await q.evaluate(() => !NumbericsMusic.state().paused && NumbericsMusic.state().playing));
   ck("contract: no page errors", e2.length === 0, e2.join(" | "));
   await c2.close();
+
+  // 8. lazy loading (MUSIC.md, Loading): pages load audio.js only; it injects music.js after the first gesture
+  const lazy = async (opts) => {
+    const c = await browser.newContext({ viewport: { width: 390, height: 700 } }); await c.addInitScript(SPY);
+    if (opts && opts.off) await c.addInitScript(() => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, music: false })); } catch (e) { /* none */ } });
+    const pg = await c.newPage(), reqs = [], errs = [];
+    pg.on("request", r => { if (/music\.js/.test(r.url())) reqs.push(r.url()); }); pg.on("pageerror", e => errs.push(e.message));
+    return { c, pg, reqs, errs };
+  };
+  let L = await lazy();
+  await L.pg.goto(url + "tests/fixtures/music-lazy.html"); await L.pg.waitForTimeout(300);
+  ck("lazy: a stub NumbericsMusic at load, and no music request before a gesture", L.reqs.length === 0 &&
+    await L.pg.evaluate(() => NumbericsMusic.stub === true && NumbericsMusic.dip() === false && NumbericsMusic.key() === 0 && !document.querySelector('script[src*="music.js"]')));
+  await L.pg.evaluate(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "a" })); NumbericsMusic.duck(true); });
+  await L.pg.waitForTimeout(150);
+  ck("lazy: an untrusted event loads nothing", L.reqs.length === 0);
+  await L.pg.click("#b"); await L.pg.waitForFunction(() => !NumbericsMusic.stub, null, { timeout: 3000 }).catch(() => {});
+  await L.pg.waitForTimeout(600);
+  s = await L.pg.evaluate(() => NumbericsMusic.state && NumbericsMusic.state());
+  ck("lazy: music.js loaded after the first tap (Music on), once", L.reqs.length === 1 && /shared\/music\.js$/.test(L.reqs[0]), JSON.stringify(L.reqs));
+  ck("lazy: it plays on the SFX context (one AudioContext in total)", s && s.playing && s.shared && s.contexts === 0 && await L.pg.evaluate(() => window.__ac) === 1, JSON.stringify(s));
+  ck("lazy: started with the page's game (#games data-current endless -> two)", s && s.resolved === (await L.pg.evaluate(() => NumbericsMusic.forGame("two"))) && await L.pg.evaluate(() => NumbericsMusic.game() === "two"), JSON.stringify(s));
+  ck("lazy: the duck asked for before the load is applied after it", s && s.ducked === true, JSON.stringify(s));
+  await L.pg.click("#b"); await L.pg.keyboard.press("a"); await L.pg.waitForTimeout(200);
+  ck("lazy: later gestures load nothing more, still one context", L.reqs.length === 1 && await L.pg.evaluate(() => window.__ac === 1 && document.querySelectorAll('script[src*="music.js"]').length === 1));
+  const sfx = await L.pg.evaluate(() => { NumbericsMusic.duck(false); return new Promise(r => setTimeout(() => r(NumbericsAudio.key() === NumbericsMusic.key() && NumbericsAudio.merge(4) === true), 300)); });
+  ck("lazy: the SFX follow the playing style's key, and still play", sfx);
+  ck("lazy: no page errors", L.errs.length === 0, L.errs.join(" | "));
+  await L.c.close();
+
+  L = await lazy({ off: true });
+  await L.pg.goto(url + "tests/fixtures/music-lazy.html"); await L.pg.waitForTimeout(200);
+  await L.pg.click("#b"); await L.pg.keyboard.press("a"); await L.pg.waitForTimeout(500);
+  ck("lazy: Music off: no music request after taps, the stub stays, one SFX context", L.reqs.length === 0 && await L.pg.evaluate(() => NumbericsMusic.stub === true && window.__ac === 1));
+  await L.pg.evaluate(() => NumbericsSettings.set({ music: true }));
+  await L.pg.waitForFunction(() => !NumbericsMusic.stub, null, { timeout: 3000 }).catch(() => {}); await L.pg.waitForTimeout(600);
+  s = await L.pg.evaluate(() => NumbericsMusic.state && NumbericsMusic.state());
+  ck("lazy: turning Music on later loads it then, and it plays on the one context", L.reqs.length === 1 && s && s.playing && s.shared && await L.pg.evaluate(() => window.__ac) === 1, JSON.stringify(s));
+  ck("lazy (off, then on): no page errors", L.errs.length === 0, L.errs.join(" | "));
+  await L.c.close();
+
+  // the live pages: no music request on load; after a tap, music.js and one context
+  for (const path of ["", "four/"]) {
+    L = await lazy();
+    await L.pg.goto(url + path); await L.pg.waitForTimeout(300);
+    const before = L.reqs.length;
+    await L.pg.mouse.click(5, 300); await L.pg.waitForFunction(() => !NumbericsMusic.stub, null, { timeout: 3000 }).catch(() => {}); await L.pg.waitForTimeout(600);
+    s = await L.pg.evaluate(() => NumbericsMusic.state && NumbericsMusic.state());
+    const want = await L.pg.evaluate(id => NumbericsMusic.forGame(id), path ? "four" : "two");
+    ck("live /" + path + ": no music request before a gesture; music.js after the first tap, playing " + want + " on one context",
+      before === 0 && L.reqs.length === 1 && s && s.playing && s.style === want && s.shared && await L.pg.evaluate(() => window.__ac) === 1, before + " " + JSON.stringify(s));
+    ck("live /" + path + ": no page errors", L.errs.length === 0, L.errs.join(" | "));
+    await L.c.close();
+  }
 };

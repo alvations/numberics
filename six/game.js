@@ -4,6 +4,7 @@
 (function () {
   "use strict";
   var E = window.NumbericsSix, K = window.NumbericsKit, P = window.NumbericsPower;
+  var M = window.NumbericsMotion, A = window.NumbericsAudio, TR = window.NumbericsTrophies, PG = window.NumbericsProgress;
   var store = K.store("numberics_six_v1");
   var $ = function (id) { return document.getElementById(id); };
 
@@ -23,19 +24,27 @@
     var n = s.lines[s.idx].n.length;
     return s.cur.g.length === n - 1 && s.cur.u.length === n && s.power && E.POWERS.every(function (p) { return Number.isInteger(s.power[p]) && s.power[p] >= 0; });
   }
-  var saved = store.load() || {};
+  var loaded = store.load(), saved = loaded || {};
   var today = K.daySeed();
   var games = {
     climb: valid(saved.climb) && saved.climb.mode === "climb" ? saved.climb : E.newGame(K.freshSeed(), "climb"),
     daily: valid(saved.daily) && saved.daily.mode === "daily" && saved.daily.start === today ? saved.daily : E.newGame(today, "daily"),
   };
   var mode = saved.mode === "daily" ? "daily" : "climb";
+  // the Today card links here with ?mode=daily (REDESIGN.md 3.4); both runs are kept, so switching loses nothing
+  try { if (/[?&]mode=daily(&|$)/.test(window.location.search)) mode = "daily"; } catch (e) { /* no location */ }
   // Best: the most Climb rounds cleared in one run, "none" before any (round 2: it read 1 before any play).
   // Older saves kept the round reached, so a reached round 3 means 2 cleared.
   var best = saved.cleared >= 0 ? saved.cleared | 0 : Math.max(0, (saved.best | 0) - 1);
   // the best before this Climb run began, so the round-cleared card can say "New best."
   var runBest = saved.runCleared >= 0 ? Math.min(saved.runCleared | 0, best) : best;
   var state = games[mode];
+  // the run record (REDESIGN.md 8.2): lines made without help in a row, per mode. It never changes a rule; it only
+  // lets trophies see how a run went. Old saves without it start at zero. A new run (or a new Daily day) resets it.
+  function validRun(r) { return r && typeof r === "object" && r.streak >= 0 ? { used: r.used | 0, streak: r.streak | 0 } : { used: 0, streak: 0 }; }
+  var runs = { climb: validRun(saved.runs && saved.runs.climb), daily: validRun(saved.runs && saved.runs.daily) };
+  if (games.daily !== saved.daily) runs.daily = { used: 0, streak: 0 };
+  if (games.climb !== saved.climb) runs.climb = { used: 0, streak: 0 };
   var cursor = 0, anchor = -1, bracketMode = false, drag = null, kbd = false; // kbd: show the cursor only for keyboard play
   var viewing = false, cardUp = false; // "See the board" hides the end card; cardUp: the card showed at the last draw
   var note = ""; // a one-off hint line message (a power-up explaining itself, a confirm), cleared by the next action
@@ -43,12 +52,107 @@
   function persist() {
     games[mode] = state;
     if (state.mode === "climb") best = Math.max(best, cleared(state));
-    store.save({ climb: games.climb, daily: games.daily, mode: mode, cleared: best, runCleared: runBest });
+    runs[mode].used = state.used | 0;
+    store.save({ climb: games.climb, daily: games.daily, mode: mode, cleared: best, runCleared: runBest, runs: runs });
+    // the card summary (REDESIGN.md 3.5): the best Climb, and whether a Climb run is live
+    var c = games.climb, live = !c.over && (c.edits > 0 || c.round > 1 || c.idx > 0);
+    try {
+      if (PG) PG.put("six", { best: best ? "Best " + best + " round" + (best === 1 ? "" : "s") : "", live: live,
+        liveText: live ? "Round " + c.round + " · line " + (c.idx + 1) + "/6" : "" });
+    } catch (e) { /* a missing module costs a card line, never the game */ }
   }
   function cleared(s) { return s.round - 1 + (s.over && !s.ended ? 1 : 0); } // Climb rounds cleared in this run
   function toast(m, kind) { K.toast(m, kind); }
   function level(tok) { return (parseInt(tok, 10) % 11) + 1; }
   function ord(k) { return ["1st", "2nd", "3rd", "4th", "5th", "6th"][k] || (k + 1) + "th"; }
+
+  // ---------- sound, haptics, trophies, music (every call is safe when its module is missing) ----------
+  function snd(name, arg) { try { if (A && typeof A[name] === "function") A[name](arg); } catch (e) { /* silent */ } }
+  function report(ev, d) { try { return TR ? TR.report("six", ev, d) || [] : []; } catch (e) { return []; } }
+  function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
+  // roots and factorials in the made line (a number's sign and a bracket's sign): 1 root, 2 !, 3 two roots, 4 (root)!
+  var ROOTS = [0, 1, 0, 2, 1], FACTS = [0, 0, 1, 0, 1];
+  function signs(cur) {
+    var r = 0, f = 0;
+    cur.u.forEach(function (u) { r += ROOTS[u] || 0; f += FACTS[u] || 0; });
+    cur.b.forEach(function (b) { r += ROOTS[b[2]] || 0; f += FACTS[b[2]] || 0; });
+    return { sqrt: r, fact: f };
+  }
+
+  // ---------- motion (REDESIGN.md 5.9, 5.11, 5.12) ----------
+  // Effective motion is read from NumbericsMotion at each animation (Settings first, then the device). Every
+  // animation is tracked; a new input calls hush() first, which ends them all and runs the pending steps at once
+  // (pending sounds are dropped), so an input is never delayed and never lands on a stale picture.
+  var T = M ? M.T : { flip: 160, pop: 180 }, EZ = M ? M.E : { out: "ease-out", pop: "ease-out" };
+  var seq = M ? M.seq() : null, anims = [], ghosts = [], hushing = false;
+  function play(el, frames, opts, red) { var a = M && M.play ? M.play(el, frames, opts, red) : null; if (a) anims.push(a); return a; }
+  function later(ms, fn, sound) {
+    if (!seq) { if (!sound) fn(); return; }
+    seq.at(ms, function () { if (sound && hushing) return; fn(); });
+  }
+  function hush() {
+    hushing = true;
+    try { if (seq) seq.finish(); } finally { hushing = false; }
+    var a = anims; anims = [];
+    a.forEach(function (x) { try { x.cancel(); } catch (e) { /* already gone */ } });
+    ghosts.forEach(function (g) { if (g.parentNode) g.parentNode.removeChild(g); }); ghosts = [];
+  }
+  var FLIP_IN = [{ transform: "perspective(120px) rotateX(90deg)", opacity: 0 }, { transform: "perspective(120px) rotateX(0deg)", opacity: 1 }];
+  var FADE_IN = [{ opacity: 0 }, { opacity: 1 }];
+  function flipIn(el) { if (el) play(el, FLIP_IN, { duration: T.flip, easing: EZ.out }, FADE_IN); }
+  // the old sign flips out over the first half of the flip, as a ghost on top that removes itself
+  function flipOut(parent, tag, cls, text) {
+    if (!parent || !text) return;
+    var g = document.createElement(tag); g.className = cls + " old"; g.textContent = text; g.setAttribute("aria-hidden", "true");
+    parent.appendChild(g); ghosts.push(g);
+    var a = play(g, [{ transform: "perspective(120px) rotateX(0deg)", opacity: 1 }, { transform: "perspective(120px) rotateX(-90deg)", opacity: 0 }],
+      { duration: Math.round(T.flip / 2), easing: EZ.out, fill: "forwards" }, [{ opacity: 1 }, { opacity: 0 }]);
+    if (a) a.onfinish = function () { if (g.parentNode) g.parentNode.removeChild(g); };
+    else if (g.parentNode) g.parentNode.removeChild(g);
+  }
+  // the gold sheen over the made line: a band that sweeps left to right (reduced: one opacity flash, no travel)
+  var sheen = null;
+  function sweep() {
+    if (!sheen) { sheen = document.createElement("div"); sheen.className = "sheen"; sheen.setAttribute("aria-hidden", "true"); sheen.appendChild(document.createElement("i")); boardEl.insertBefore(sheen, $("over")); }
+    var s = sheen.style; // one layout read for the move (5.13), before any write
+    var x = lineEl.offsetLeft, y = lineEl.offsetTop, w = lineEl.offsetWidth, h = lineEl.offsetHeight;
+    s.left = x + "px"; s.top = y + "px"; s.width = w + "px"; s.height = h + "px";
+    var red = M && M.reduced();
+    play(sheen, red ? [{ opacity: 0 }, { opacity: 0.8, offset: 0.4 }, { opacity: 0 }] : [{ opacity: 1 }, { opacity: 1 }],
+      { duration: red ? 160 : 500, easing: "linear" }, [{ opacity: 0 }, { opacity: 0.8, offset: 0.4 }, { opacity: 0 }]);
+    if (!red) play(sheen.firstChild, [{ transform: "translateX(-100%)" }, { transform: "translateX(100%)" }], { duration: 500, easing: EZ.out }, null);
+  }
+  // what the last draw showed, so a draw animates only what changed
+  var shown = null;
+  function animate(was, now, el) {
+    if (was.key !== now.key) { // a new line slides in from the right
+      // not ended by an input (it holds no state): a tap during it must land where the player sees the tile
+      [lineEl, barsEl].forEach(function (x) { if (M && M.play) M.play(x, [{ transform: "translateX(24px)", opacity: 0 }, { transform: "translateX(0)", opacity: 1 }], { duration: 220, easing: EZ.out }, FADE_IN); });
+      return;
+    }
+    var placed = false;
+    now.g.forEach(function (op, k) {
+      if (op === was.g[k]) return;
+      flipIn(el.gaps[k]); if (was.g[k]) flipOut(el.gaps[k] && el.gaps[k].parentNode, "b", "", was.t[k]);
+      if (op) placed = true;
+    });
+    Object.keys(Object.assign({}, was.sg, now.sg)).forEach(function (k) {
+      if ((was.sg[k] || 0) === (now.sg[k] || 0)) return;
+      if (now.sg[k]) { flipIn(el.sg[k]); placed = true; }
+      if (was.sg[k]) flipOut(el.tiles[k], "span", "sg", SIGN[was.sg[k]]);
+    });
+    Object.keys(now.bars).forEach(function (span) {
+      var b = el.bars[span]; if (!b) return;
+      if (!(span in was.bars)) { play(b, [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: 180, easing: EZ.out }, FADE_IN); placed = true; }
+      else if (was.bars[span] !== now.bars[span]) { flipIn(b.querySelector("i")); if (now.bars[span]) placed = true; }
+    });
+    if (was.val !== now.val) play($("val"), FADE_IN, { duration: 120, easing: "linear" }, FADE_IN);
+    if (now.made && !was.made) { // the line makes its target: the target pops, then the gold sheen sweeps the line
+      play($("target"), [{ transform: "scale(.72)" }, { transform: "scale(1.14)", offset: 0.6 }, { transform: "scale(1)" }], { duration: T.pop, easing: EZ.pop }, null);
+      snd("pop", state.idx + 1); snd("buzz", "merge");
+      later(M && M.reduced() ? 0 : T.pop, sweep);
+    } else if (placed) { snd("place"); snd("buzz", "tap"); }
+  }
 
   // ---------- drawing ----------
   var boardEl = $("board"), lineEl = $("line"), barsEl = $("bars");
@@ -73,6 +177,7 @@
     boardEl.classList.toggle("gold", gold);
     var peekOn = {}; state.peeks.forEach(function (p) { for (var k = p.i; k <= p.j; k++) peekOn[k] = true; });
 
+    var el = { tiles: {}, gaps: [], sg: {}, bars: {} }, sgNow = {}, gText = [];
     lineEl.textContent = "";
     L.n.forEach(function (tok, k) {
       var t = document.createElement("div"), lv = level(tok);
@@ -84,7 +189,8 @@
       var u = cur.u[startOf[k]];
       if (k > 0 && (cur.g[k - 1] === "j" || cur.g[k - 1] === ".")) t.classList.add("jl");
       if (k < n - 1 && (cur.g[k] === "j" || cur.g[k] === ".")) t.classList.add("jr");
-      if (startOf[k] === k && u) { var sg = document.createElement("span"); sg.className = "sg"; sg.textContent = SIGN[u]; t.appendChild(sg); }
+      if (startOf[k] === k && u) { var sg = document.createElement("span"); sg.className = "sg"; sg.textContent = SIGN[u]; t.appendChild(sg); el.sg[k] = sg; sgNow[k] = u; }
+      el.tiles[k] = t;
       t.setAttribute("aria-label", "number " + tok + (u ? ", sign " + ["", "square root", "factorial", "square root twice", "factorial of the square root"][u] : ""));
       if (kbd && cursor === 2 * k) t.classList.add("cur");
       if (anchor === k) t.classList.add("anchor");
@@ -95,7 +201,7 @@
         g.type = "button"; g.className = "gp" + (!op ? " empty" : op === "j" ? " j" : op === "." ? " dot" : "");
         g.dataset.g = k; g.style.gridColumn = String(2 * k + 2); g.style.gridRow = stack ? "2" : "";
         var b = document.createElement("b"); b.textContent = !op ? "?" : op === "j" ? "·" : op === "." ? "." : E.SYM[op];
-        g.appendChild(b);
+        g.appendChild(b); el.gaps[k] = b; gText[k] = b.textContent;
         g.setAttribute("aria-label", "gap " + (k + 1) + ": " + (!op ? "empty" : op === "j" ? "joined" : op === "." ? "decimal point" : op));
         if (kbd && cursor === 2 * k + 1) g.classList.add("cur");
         lineEl.appendChild(g);
@@ -103,7 +209,7 @@
     });
 
     barsEl.textContent = "";
-    var bars = cur.b.slice(), rows = 1;
+    var bars = cur.b.slice(), rows = 1, ref = el, barNow = {};
     // the drag preview; over an existing bracket of the same span (dropping there removes it) none is added
     var gl = drag && drag.to >= 0 && drag.to !== drag.from ? [Math.min(drag.from, drag.to), Math.max(drag.from, drag.to), 0, "ghost"] : null;
     if (gl && !bars.some(function (b) { return b[0] === gl[0] && b[1] === gl[1]; })) bars.push(gl);
@@ -116,6 +222,7 @@
       el.style.gridColumn = (2 * br[0] + 1) + " / " + (2 * br[1] + 2);
       el.style.gridRow = String(d);
       if (br[2]) { var i = document.createElement("i"); i.textContent = SIGN[br[2]] + "( )"; if (br[2] === 2) i.textContent = "( )!"; if (br[2] === 4) i.textContent = "(√( ))!"; el.appendChild(i); }
+      if (!br[3]) { ref.bars[br[0] + "-" + br[1]] = el; barNow[br[0] + "-" + br[1]] = br[2]; }
       barsEl.appendChild(el);
     });
     barsEl.style.minHeight = (rows * 18) + "px";
@@ -189,8 +296,16 @@
         $("again").textContent = "Next round";
       }
     }
+    if (!state.over) { var tp = $("over-pills"); tp.textContent = ""; tp.hidden = true; }
     if (card && !cardUp && drawn) $("again").focus({ preventScroll: true });
-    cardUp = card; drawn = true;
+    if (card !== cardUp) duck(card); // the music dips under the end card and comes back when it closes
+    cardUp = card;
+
+    // motion: compare with the last draw and animate only what changed (nothing on the first draw)
+    var now = { key: state.mode + ":" + state.start + ":" + state.round + ":" + state.idx + ":" + L.n.join(" ") + ">" + L.g,
+                g: cur.g.slice(), t: gText, sg: sgNow, bars: barNow, val: tv.textContent, made: state.done && !state.gave };
+    if (shown && drawn) animate(shown, now, el);
+    shown = now; drawn = true;
   }
   var drawn = false; // the first draw (page load) never moves focus
   function seeBoard() { if (!state.over) return; viewing = true; render(); boardEl.focus({ preventScroll: true }); }
@@ -203,19 +318,37 @@
       if (!quiet && r.why === "cross") toast("Brackets cannot cross", "bad");
       else if (!quiet && r.why === "one") toast("Group two numbers or more", "bad");
       else if (!quiet && r.why === "dot") toast("One number takes one decimal point", "bad");
+      if (!quiet && /cross|one|dot/.test(r.why)) snd("bad");
       return false;
     }
     state = r.state; note = ""; disarmReveal();
+    if (!played) { played = true; report("move", {}); } // the game counts as played from its first edit (8.1)
     // a made line is said once, in the hint line (R7); only a reward gets the toast
-    if (r.award) toast("Three clean lines: +" + NAME[r.award]);
+    if (r.award) { toast("Three clean lines: +" + NAME[r.award]); snd("power"); }
     else if (r.full) toast("Three clean lines. Power-ups full", "info"); // R15: a skipped reward is said
-    persist(); render(); return true;
+    if (r.solved) runs[mode].streak = state.helped ? 0 : runs[mode].streak + 1;
+    persist(); render();
+    if (r.solved) { // trophies (REDESIGN.md 8.4); the made line is the moment, so a trophy toast follows it
+      var L = E.line(state), n = signs(state.cur);
+      report("solve", { tier: L.t, helped: !!state.helped, sqrt: n.sqrt, fact: n.fact, mode: state.mode, round: state.round,
+        streak: runs[mode].streak, daily: state.mode === "daily" });
+    }
+    return true;
+  }
+  var played = false;
+  // the end of a Climb round, a Climb run or the Daily: the card is up first, so a trophy shows as a pill on it (R7)
+  function endRun(revealed) {
+    var ids = report("end", { mode: state.mode, solved: state.solved, round: state.round, daily: state.mode === "daily" });
+    TR && TR.pills ? TR.pills($("over-pills"), ids) : null;
+    if (state.mode === "daily") { try { if (PG) PG.daily("six", state.solved + " made"); } catch (e) { /* no card line */ } }
+    if (revealed && state.mode === "climb") { snd("lose"); snd("buzz", "lose"); }
+    else { snd("win"); snd("buzz", "win"); if (state.mode === "climb" && state.round > runBest) later(400, function () { snd("best"); }, true); }
   }
   function doEdit(act, quiet) { return apply(E.edit(state, act), quiet); }
   function activate(id) {
     if (!E.useable(state, id)) { // a slot that cannot act explains itself (R5), the same for keys 1-4 and taps
       var d = PW.filter(function (x) { return x.id === id; })[0];
-      note = P.info(d, state.power, E.why(state, id), { earn: EARN }); render(); return;
+      note = P.info(d, state.power, E.why(state, id), { earn: EARN }); snd("bad"); render(); return;
     }
     var r = E.use(state, id);
     if (!r.ok) return;
@@ -225,7 +358,7 @@
       toast(st.kind === "gap" ? "Hint: the " + ord(st.i) + " gap is " + (sol.g[st.i] === "j" ? "joined" : sol.g[st.i] === "." ? "a decimal point" : E.SYM[sol.g[st.i]])
         : st.kind === "un" ? "Hint: the " + ord(st.i) + " number takes " + (SIGN[sol.u[st.i]] || "no sign")
         : st.kind === "brx" ? "Hint: that bracket is not needed" : "Hint: group numbers " + (st.b[0] + 1) + " to " + (st.b[1] + 1), "info");
-    } else if (id === "skip") { toast("New line", "info"); cursor = 0; disarm(); }
+    } else if (id === "skip") { toast("New line", "info"); cursor = 0; disarm(); runs[mode].streak = 0; } // Skip is help
     else if (id === "undo") toast("Took back the last edit", "info"); // gold is for rewards only (R7)
     persist(); render();
   }
@@ -234,6 +367,7 @@
   function nextLine() {
     var r = E.next(state); if (!r.ok) return; disarm();
     state = r.state; cursor = 0; anchor = -1; bracketMode = false; note = ""; persist(); render();
+    if (r.round) endRun(false);
   }
   function again() {
     if (!state.over) return;
@@ -245,12 +379,13 @@
   function setMode(m) {
     if (m === mode) return;
     disarm(); games[mode] = state; mode = m;
-    if (m === "daily" && games.daily.start !== K.daySeed()) games.daily = E.newGame(K.daySeed(), "daily");
+    if (m === "daily" && games.daily.start !== K.daySeed()) { games.daily = E.newGame(K.daySeed(), "daily"); runs.daily = { used: 0, streak: 0 }; }
     state = games[m]; cursor = 0; anchor = -1; bracketMode = false; drag = null; note = ""; viewing = false; persist(); render();
   }
   function startNew() {
     disarm();
     state = mode === "daily" ? E.newGame(K.daySeed(), "daily") : E.newGame(K.freshSeed(), "climb");
+    runs[mode] = { used: 0, streak: 0 };
     if (mode === "climb") runBest = best;
     cursor = 0; anchor = -1; bracketMode = false; note = ""; viewing = false; persist(); render();
   }
@@ -268,6 +403,9 @@
     while (el && el !== boardEl && !(el.dataset && el.dataset.i !== undefined && el.classList.contains("num"))) el = el.parentElement;
     return el && el !== boardEl ? +el.dataset.i : -1;
   }
+  // 5.11: every input first ends the running animation (end state now, pending steps run, pending sounds dropped),
+  // then is applied at once. Capture phase, so it runs before any handler below.
+  ["pointerdown", "keydown"].forEach(function (t) { window.addEventListener(t, hush, true); });
   // seeing the board after the end: a tap anywhere on it brings the summary back
   boardEl.addEventListener("click", function (e) { if (viewing && !(e.target.closest && e.target.closest(".over"))) showCard(); });
   $("over-view").addEventListener("click", function (e) { e.stopPropagation(); seeBoard(); });
@@ -332,7 +470,8 @@
     }
     disarmReveal(); note = "";
     var r = E.reveal(state); if (!r.ok) return;
-    state = r.state; anchor = -1; bracketMode = false; persist(); render();
+    state = r.state; anchor = -1; bracketMode = false; runs[mode].streak = 0; persist(); render();
+    if (state.over) endRun(true);
   });
   $("again").addEventListener("click", again);
   Array.prototype.forEach.call($("modes").children, function (b) { b.addEventListener("click", function () { setMode(b.dataset.mode); }); });
@@ -342,6 +481,7 @@
   var OPKEY = { "+": "+", "-": "-", "*": "*", "x": "*", "X": "*", "/": "/", "j": "j", ".": "." };
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (window.NumbericsUI && window.NumbericsUI.open()) return; // a sheet is open: no game keys
     var n = E.line(state).n.length, max = 2 * n - 2, key = e.key;
     // Enter or Space on a focused button or link is that control's own click, never a game action (R9, R17);
     // a focused link or form field keeps every key (the gaps are buttons, so typing on them still edits)
@@ -362,11 +502,11 @@
       return;
     }
     if (OPKEY[key]) {
-      if ((key === "j" || key === ".") && !E.canJoin(state)) { disarmReveal(); toast("Joining digits arrives at Tier 4", "bad"); return; }
+      if ((key === "j" || key === ".") && !E.canJoin(state)) { disarmReveal(); toast("Joining digits arrives at Tier 4", "bad"); snd("bad"); return; }
       e.preventDefault();
       var gi = onGap ? k : Math.min(k, n - 2);
-      doEdit({ k: "gap", i: gi, op: OPKEY[key] }, true);
-      cursor = Math.min(max, 2 * gi + 2); render();
+      cursor = Math.min(max, 2 * gi + 2); // moved first, so one draw shows both (a second draw would cut the flip short)
+      if (!doEdit({ k: "gap", i: gi, op: OPKEY[key] }, true)) render();
       return;
     }
     var t = k, cu = state.cur.u[t];
@@ -394,8 +534,30 @@
   });
 
   render();
+
+  // ---------- how to play (REDESIGN.md 1.3, 9.6): three steps, a small picture and one sentence each ----------
+  function mt(v, cls) { return '<span class="mt' + (cls ? " " + cls : "") + '"' + (cls ? "" : ' style="--h:' + K.hue(level(String(v))) + '"') + ">" + v + "</span>"; }
+  var STEPS = [
+    ['<div class="eq">' + mt(2) + '<span class="hg">+</span>' + mt(2) + "</div>", "Tap a gap to put a sign there."],
+    ['<div class="eq">' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">=</span>' + mt(6, "gold") + "</div>", "Make the line equal six."],
+    ['<div class="eq"><span class="op">(</span>' + mt(3) + '<span class="op">)!</span><span class="op">=</span>' + mt(6, "gold") + "</div>", "Use brackets, roots and ! when you need them."]
+  ];
+  function howto() {
+    var U = window.NumbericsUI; if (!U || !U.sheet) return;
+    U.sheet("howto", function (body) {
+      body.innerHTML = '<div class="howto">' + STEPS.map(function (st) { return '<div class="step"><div class="pv" aria-hidden="true">' + st[0] + "</div><p>" + st[1] + "</p></div>"; }).join("") + "</div>";
+    }, { title: "How to play Six" });
+    try { if (PG) PG.markHowto("six"); } catch (e) { /* seen in memory only */ }
+  }
+  $("howto-open").addEventListener("click", howto);
+  // opens by itself once, on a first visit with nothing saved (ui.js loads after this file, so once the page is parsed)
+  var firstVisit = !loaded; try { firstVisit = firstVisit && !(PG && PG.seenHowto("six")); } catch (e) { /* keep */ }
+  var demoed = false;
+  function autoHowto() { if (!demoed) howto(); }
+  if (firstVisit) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", autoHowto); else setTimeout(autoHowto, 0); }
   // Screenshot hook (tools/shots.cjs): a fixed mid-round state, not reachable from the UI.
   window.__demo = function () {
+    demoed = true; if (window.NumbericsUI && window.NumbericsUI.current() === "howto") window.NumbericsUI.close();
     var s = E.newGame(2026, "climb");
     var pick = function (n) { var id = E.BANK.findIndex(function (b) { return b.n === n; }); var b = E.BANK[id]; return { id: id, t: b.t, n: b.n.split(" "), g: b.g, d: b.d, h: b.h, sol: b.s }; };
     s.lines = ["1 1 1", "12 12 12", "37 37 37", "18 18 18", "8 8 8", "0 0 0"].map(pick); // a Tier 3 round
@@ -404,6 +566,6 @@
     s.power = { hint: 1, skip: 1, peek: 2, undo: 1 };
     mode = "climb"; drag = null; anchor = -1; bracketMode = false; cursor = 0; state = s; render();
   };
-  window.__six = { get state() { return state; }, set state(s) { state = s; render(); }, render: render, E: E,
+  window.__six = { get state() { return state; }, set state(s) { state = s; shown = null; render(); }, render: render, E: E,
                    setMode: setMode };
 })();

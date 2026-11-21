@@ -5,6 +5,8 @@
 (function () {
   "use strict";
   var F = window.NumbericsFifteen, K = window.NumbericsKit, P = window.NumbericsPower;
+  var M = window.NumbericsMotion, A = window.NumbericsAudio, TR = window.NumbericsTrophies, PR = window.NumbericsProgress;
+  var ID = "fifteen";
   var store = K.store("numberics_fifteen_v1");
   var THINK = 520;                       // the computer's pause (a delay, not motion)
   var PW = { undo: "Undo", erase: "Erase", peek: "Peek", double: "Double" };
@@ -19,10 +21,22 @@
   var HOLD = 1500;                       // R13: the finished board stays in view this long before the card
 
   var saved = store.load() || {};
-  var state = saved.state && F.valid(saved.state) ? saved.state : F.newMatch(K.freshSeed(), "medium");
+  // REDESIGN.md 1.3: a first visit (no saved game) starts on Easy; a saved choice is always kept
+  var first = !saved.state;
+  var savedDiff = saved.state && F.DIFFS.indexOf(saved.state.diff) >= 0 ? saved.state.diff : "easy";
+  var state = saved.state && F.valid(saved.state) ? saved.state : F.newMatch(K.freshSeed(), savedDiff);
   var view = saved.view === "grid" ? "grid" : "numbers";
   // R12/R16: matches won and lost on this device; a quit live match counts as lost
   var record = saved.record && typeof saved.record.won === "number" && typeof saved.record.lost === "number" ? saved.record : { won: 0, lost: 0 };
+  // the same record per level, for the card (REDESIGN.md 8.5: cards show the current level's record)
+  var levels = {};
+  F.DIFFS.forEach(function (d) {
+    var l = saved.levels && saved.levels[d];
+    levels[d] = l && typeof l.won === "number" && typeof l.lost === "number" ? { won: l.won, lost: l.lost } : { won: 0, lost: 0 };
+  });
+  // run record (8.2): power-ups used, your first claim this round (fif_mid); runPrev is what Undo restores
+  function runOf(r) { r = r || {}; return { used: +r.used || 0, first: r.first >= 1 && r.first <= 9 ? r.first : 0 }; }
+  var run = runOf(saved.run), runPrev = saved.runPrev ? runOf(saved.runPrev) : null;
   var counted = !!saved.counted;         // this match's result is already in the record
   var seen = !!saved.seen;               // the one-line note on the first switch to Grid
   var armed = null;                      // "erase" | "double" while a power-up waits for a pick
@@ -32,6 +46,17 @@
   var note = "";                         // a tapped power-up's explanation, shown until the next action
   var cpuNote = "";                      // R14: what the computer's power-up just did, shown on your turn
   var holding = false, holdT = null;     // R13: a result just happened; the card waits HOLD ms
+  var claiming = {};                     // claim fills playing (5.8)
+  var cardIds = [];                      // trophies of this result: pills on its card (8.1)
+  // motion (5.8, 5.11): one guarded timeline; an input finishes it (animations first, so a step measures the end layout)
+  var tl = M.seq(), anims = [];
+  function endAnims() { var a = anims; anims = []; a.forEach(function (x) { try { x.finish(); } catch (e) { /* done */ } }); }
+  function finishFx() { endAnims(); tl.finish(); endAnims(); }
+  function snd(name, arg) { try { A[name](arg); } catch (e) { /* no sound */ } }
+  function buzz(kind) { snd("buzz", kind); }
+  function duck(on) { try { window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
+  function trophy(ev, data, quiet) { try { return TR.report(ID, ev, data, quiet && { quiet: true }) || []; } catch (e) { return []; } }
+  function uiOpen() { try { return window.NumbericsUI.open(); } catch (e) { return false; } }
   var viewing = false;                   // R13: "See the board" hides the card again
 
   var $ = function (id) { return document.getElementById(id); };
@@ -47,9 +72,20 @@
   }
 
   function tally() {                     // count a finished match once (a drawn match counts neither way)
-    if (state.match && !counted) { counted = true; if (state.match.winner === 1) record.won++; else if (state.match.winner === 2) record.lost++; }
+    if (state.match && !counted) {
+      counted = true; var l = levels[state.diff];
+      if (state.match.winner === 1) { record.won++; l.won++; } else if (state.match.winner === 2) { record.lost++; l.lost++; }
+    }
   }
-  function persist() { tally(); store.save({ state: state, view: view, seen: seen, record: record, counted: counted }); }
+  function persist() {
+    tally();
+    store.save({ state: state, view: view, seen: seen, record: record, counted: counted, levels: levels, run: run, runPrev: runPrev });
+    var l = levels[state.diff], on = live();
+    try {
+      PR.put(ID, { best: l.won || l.lost ? DIFF[state.diff] + ": won " + l.won + ", lost " + l.lost : "", live: on,
+        liveText: on ? "Round " + state.round + " · You " + state.wins[1] + " : " + state.wins[2] + " Computer" : "" });
+    } catch (e) { /* no progress */ }
+  }
   function live() { return !state.match && (state.moves > 0 || state.rounds.length > 0); }
   function cellOf(n) { return view === "grid" ? F.CELL_OF[n] : n - 1; }
   function numAt(cell) { for (var k = 1; k <= 9; k++) if (cellOf(k) === cell) return k; return 5; }
@@ -64,7 +100,7 @@
       else { el.style.setProperty("--r", c < 5 ? 0 : 1); el.style.setProperty("--c", c < 5 ? c : c - 4.5); }
       el.className = "ft" + (o === 1 ? " mine" : o === 2 ? " theirs" : "") +
         (line && line.indexOf(n) >= 0 ? " win" : line ? " dim" : "") +
-        (fresh[n] ? " fresh" : "") +
+        (fresh[n] ? " fresh" : "") + (claiming[n] ? " claiming" : "") +
         (peek && peek.mark.indexOf(n) >= 0 ? " peek" : "") +
         (n === state.blocked ? " blocked" : "") +
         (armed === "erase" && o === 2 ? " target" : "");
@@ -107,7 +143,13 @@
     over.hidden = !card; boardEl.classList.toggle("ended", card);
     // one end-card pattern (TRIAGE3): the page's New game hides while the card shows, its space kept
     $("new").style.visibility = card ? "hidden" : "";
+    if (card !== was) duck(card);          // the music steps back while a card is up
     if (!card) return;
+    try { TR.pills($("pills"), cardIds); } catch (e) { $("pills").hidden = true; }
+    if (!was) {                           // the card's own moment: a trophy, else a power-up earned
+      if (cardIds.length) { snd("trophy"); buzz("big"); }
+      else if (res.winner === 1 && res.earned) snd("power");
+    }
     var m = state.match, w = m ? m.winner : res.winner, a = state.wins[1], c = state.wins[2];
     // R16: rounds read "You 2 : 1 Computer", a match "Match won 3-1"; each part stays on one line (craft #9)
     var parts = [m ? (w === 1 ? "Match won " + a + "-" + c : w === 2 ? "Match lost " + a + "-" + c : "Match drawn " + a + "-" + c)
@@ -163,12 +205,50 @@
   }
 
   // ---- turns ----
+  // after any board action: the claim fill, then (a round just ended) the result beat; every step is on the timeline
   function settle(prevOwner) {
-    fresh = {};
-    if (state.result && prevOwner) startHold();
-    if (prevOwner) for (var i = 0; i < 9; i++) if (prevOwner[i] !== state.owner[i]) fresh[i + 1] = true;
+    finishFx();
+    fresh = {}; claiming = {};
+    var ended = !!(state.result && prevOwner), n;
+    if (prevOwner) for (var i = 0; i < 9; i++) if (prevOwner[i] !== state.owner[i]) { if (state.owner[i]) claiming[i + 1] = true; else fresh[i + 1] = true; }
+    if (ended) { startHold(); report(); }
     persist(); render();
+    var claimed = Object.keys(claiming).length > 0, t = M.reduced() ? M.T.fade : M.T.claim;
+    if (claimed) { snd("place"); buzz("tap"); }
+    if (claimed || ended) tl.at(t, function () {
+      for (n in claiming) tiles[n - 1].classList.remove("claiming");
+      claiming = {};
+      if (ended) {
+        var w = state.result && state.result.winner;
+        if (w === 1) { snd("win"); buzz("win"); } else if (w === 2) { snd("lose"); buzz("lose"); }
+        drawLine();
+      }
+    });
+    if (!ended) clearLine();
     if (cpuPending()) schedule();
+  }
+  // trophies at a round's end (REDESIGN.md 8.4): quiet here, because the card that follows shows them as pills
+  function report() {
+    var res = state.result; cardIds = [];
+    cardIds = cardIds.concat(trophy("round", { won: res.winner === 1, view: view, firstMid: run.first === 5 }, true));
+    if (state.match) cardIds = cardIds.concat(trophy("match", { won: state.match.winner === 1, diff: state.diff }, true));
+    if (cardIds.length) try { window.NumbericsUI.dot(true); } catch (e) { /* no top bar */ }
+  }
+  // the winning line in Grid view: one SVG line through the three centres, drawn by stroke-dashoffset (5.8, as Four)
+  var wl = $("wl"), wlLine = wl.firstElementChild;
+  function clearLine() { wl.hidden = true; }
+  function drawLine() {
+    var res = state.result;
+    if (!res || !res.line || view !== "grid") return clearLine();
+    var cells = res.line.map(function (k) { return { n: k, c: F.CELL_OF[k] }; }).sort(function (a, b) { return a.c - b.c; });
+    var a = tiles[cells[0].n - 1], b = tiles[cells[2].n - 1], base = tilesEl.getBoundingClientRect();   // one read
+    var ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    var x1 = ra.left + ra.width / 2 - base.left, y1 = ra.top + ra.height / 2 - base.top;
+    var x2 = rb.left + rb.width / 2 - base.left, y2 = rb.top + rb.height / 2 - base.top, len = Math.hypot(x2 - x1, y2 - y1);
+    wlLine.setAttribute("x1", x1); wlLine.setAttribute("y1", y1); wlLine.setAttribute("x2", x2); wlLine.setAttribute("y2", y2);
+    wlLine.style.strokeDasharray = len; wlLine.style.strokeDashoffset = 0; wl.hidden = false;
+    var an = M.play(wlLine, [{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: M.T.line, easing: M.E.out }, [{ opacity: 0 }, { opacity: 1 }]);
+    if (an) anims.push(an);
   }
   function schedule() {
     clearTimeout(timer); var g = ++gen;
@@ -184,6 +264,8 @@
     }, THINK);
   }
   function cancelCpu() { gen++; clearTimeout(timer); timer = null; }
+  // the run record moves with the engine's Undo snapshot (taken on your first action of a turn)
+  function snapRun() { if (state.turn === 1 && !state.acted) runPrev = runOf(run); }
   function startHold() {
     clearTimeout(holdT); holding = true; viewing = false;
     holdT = setTimeout(function () { holdT = null; if (holding) showCard(); }, HOLD);
@@ -193,6 +275,7 @@
 
   function onTile(ev) { pick(+ev.currentTarget.dataset.n); }
   function pick(n) {
+    finishFx();
     cur = cellOf(n);
     if (state.result && holding) return;                           // the finished board holds its full 1.5 s (TRIAGE3)
     if (state.result && viewing) return showCard();                // a tap on the finished board brings the card back
@@ -201,28 +284,35 @@
     var before = state.owner.slice(), r;
     if (armed === "erase") {
       r = F.use(state, "erase", n);
-      if (!r.ok) { K.toast("Pick one of the computer's numbers", "bad"); return render(); }
+      if (!r.ok) { snd("bad"); K.toast("Pick one of the computer's numbers", "bad"); return render(); }
+      snapRun(); run.used++;
       armed = null; state = r.state; peek = null; return settle(before);   // the hint says what comes next
     }
     if (armed === "double") {
-      if (state.owner[n - 1]) { K.toast("Pick a free number", "bad"); return render(); }
+      if (state.owner[n - 1]) { snd("bad"); K.toast("Pick a free number", "bad"); return render(); }
       r = F.use(state, "double"); if (!r.ok) { armed = null; return render(); }
+      snapRun(); run.used++;
       state = r.state; armed = null;
     }
     r = F.claim(state, n);
-    if (!r.ok) { K.toast(n === state.blocked ? "You just erased that one" : "Already taken", "bad"); return render(); }
+    if (!r.ok) { snd("bad"); K.toast(n === state.blocked ? "You just erased that one" : "Already taken", "bad"); return render(); }
+    snapRun();
+    if (!run.first) run.first = n;
     state = r.state; peek = null;
+    // fif_fork: your open winning threats right after your claim (REDESIGN.md 8.4)
+    if (!state.result) trophy("claim", { forks: F.threats(state.owner, 1).length });
     settle(before);   // a round won shows in the overlay, its reward included (R7)
   }
 
   function activate(id) {
+    finishFx();
     note = ""; cpuNote = "";
     if (armed === id) { armed = null; return render(); }
     armed = null;
     if (id === "undo") {
       if (!F.canUse(state, "undo", 1)) { note = P.info(DEFS[0], state.power, whyNot("undo"), {}); return render(); }
       cancelCpu(); var before = state.owner.slice(), u = F.use(state, "undo");
-      if (u.ok) { state = u.state; peek = null; K.toast("Rewound your last turn"); }
+      if (u.ok) { state = u.state; peek = null; if (runPrev) run = runOf(runPrev); runPrev = null; run.used++; K.toast("Rewound your last turn"); }
       return settle(before);
     }
     if (cpuPending() || !F.canUse(state, id, 1)) {    // keys 1-4 explain too, like a tap (R5)
@@ -231,7 +321,7 @@
       return render();
     }
     if (id === "peek") {
-      var r = F.use(state, "peek"), i = r.info; state = r.state;
+      var r = F.use(state, "peek"), i = r.info; state = r.state; run.used++;
       peek = i.win.length ? { mark: i.win, text: "Peek: " + i.win.join(" or ") + " wins it for you." }
         : i.block.length > 1 ? { mark: i.block, text: "Peek: the computer has two ways in (" + i.block.join(" and ") + "). Block one." }
         : i.block.length ? { mark: i.block, text: "Peek: block " + i.block[0] + "." }
@@ -241,24 +331,46 @@
     armed = id; render();
   }
 
+  // the view switch is a FLIP (5.8): read the rects, lay out the new view, read again, animate translate + scale back
+  var FLIP_MS = 380, FLIP_E = "cubic-bezier(.3,.7,.2,1)";
+  function rects() {
+    var base = tilesEl.getBoundingClientRect();
+    return tiles.map(function (el) { var r = el.getBoundingClientRect(); return { x: r.left - base.left, y: r.top - base.top, w: r.width, h: r.height }; });
+  }
   function setView(v, quiet) {
     if (v === view) return;
+    finishFx();
     var keep = numAt(cur); view = v; cur = cellOf(keep);   // the cursor stays on the same number
     // the one-line note goes in the hint line, so it covers nothing (cold #1)
     if (v === "grid" && !seen && !quiet) { seen = true; note = "Same board: every line adds up to 15."; }
-    persist(); render();
+    var old = M.reduced() ? null : rects();
+    persist(); render(); clearLine();
+    if (old) {
+      var now = rects();
+      tiles.forEach(function (el, i) {
+        var o = old[i], n = now[i]; if (!n.w || !n.h) return;
+        var sx = o.w / n.w, sy = o.h / n.h, tx = o.x - sx * n.x, ty = o.y - sy * n.y;
+        var a = M.play(el, [{ translate: tx + "px " + ty + "px", scale: sx + " " + sy }, { translate: "0px 0px", scale: "1 1" }],
+          { duration: FLIP_MS, easing: FLIP_E });
+        if (a) anims.push(a);
+      });
+    }
+    snd("tick");
+    if (state.result && v === "grid") tl.at(old ? FLIP_MS : 0, drawLine);
   }
 
   // ---- match flow ----
   // R12: quitting a live match (New game or a level switch after the first move) records it as lost
   function startMatch(diff) {
-    if (live()) record.lost++;
+    if (live()) { record.lost++; levels[state.diff].lost++; }
+    finishFx(); clearLine(); run = runOf(null); runPrev = null; cardIds = [];
     cancelCpu(); clearHold(); armed = null; peek = null; fresh = {}; note = ""; cpuNote = "";
     state = F.newMatch(K.freshSeed(), diff || state.diff); counted = false; persist(); render();
     if (cpuPending()) schedule();
   }
   function nextRound() {
     if (!state.result || state.match) return;
+    finishFx(); clearLine(); run.first = 0; runPrev = null; cardIds = [];
     cancelCpu(); clearHold(); armed = null; peek = null; fresh = {}; note = ""; cpuNote = "";
     var back = $("over").contains(document.activeElement);
     state = F.nextRound(state); persist(); render();
@@ -281,13 +393,13 @@
         note = "Sure? Switching to " + DIFF[d] + " counts as a loss."; $("hint").textContent = note;
         diffT = setTimeout(disarmDiff, 3000); return;
       }
-      disarmDiff(); startMatch(d);
+      disarmDiff(); snd("tick"); startMatch(d);
     });
     $("diff").appendChild(b);
   });
   K.twoStep($("new"), live, function () { startMatch(); }, "Sure? Counts as a loss");
-  $("again").addEventListener("click", function () { startMatch(); });
-  $("next").addEventListener("click", nextRound);
+  $("again").addEventListener("click", function () { snd("tick"); startMatch(); });
+  $("next").addEventListener("click", function () { snd("tick"); nextRound(); });
   $("over-view").addEventListener("click", function () { viewing = true; render(); boardEl.focus(); });
   $("v-numbers").addEventListener("click", function () { setView("numbers"); });
   $("v-grid").addEventListener("click", function () { setView("grid"); });
@@ -298,6 +410,7 @@
   // a focused link, input or select keeps every key to itself (R17: Enter on a games-row link navigates).
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (uiOpen()) return;                  // a sheet is open: no key reaches the game (REDESIGN.md 3.6)
     var t = e.target && e.target.closest ? e.target.closest("a, input, select, textarea") : null;
     if (t) return;
     var ae = document.activeElement, onButton = ae && ae.tagName === "BUTTON" && !ae.classList.contains("ft");
@@ -326,11 +439,45 @@
   });
   boardEl.addEventListener("focus", function () { tiles[numAt(cur) - 1].focus(); });
 
+  // ---- how to play (REDESIGN.md 1.3, 9.9): three steps in a sheet, opened by itself once on a first visit ----
+  function chip(n, bg, px) {
+    px = px || 22;
+    return '<span class="mt" style="width:' + px + "px;height:" + px + "px;font-size:12px;border-radius:5px;background:" + (bg || "var(--cell)") +
+      ";color:var(--" + (bg ? "tile-ink" : "mute") + ')">' + n + "</span>";
+  }
+  var G = "var(--accent)", PL = '<span class="op">+</span>';
+  var STEPS = [
+    ['<div class="mg" style="grid-template-columns:repeat(5,18px)">' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (k) { return chip(k, k === 5 && G, 18); }).join("") +
+      "</div>", "Pick a number from 1 to 9."],
+    ['<div class="eq">' + chip(5, G) + chip(8, "var(--cool)") + "</div>", "The computer picks too."],
+    ['<div class="eq">' + chip(8, G) + PL + chip(1, G) + PL + chip(6, G) + '<span class="op">=</span><span>15</span></div>',
+      "Hold three numbers that add up to fifteen to win."]
+  ];
+  function howto() {
+    var U = window.NumbericsUI; if (!U) return;
+    U.sheet("howto", function (body) {
+      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
+        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
+      }).join("") + '</div><div class="row"><button class="btn primary" type="button" data-play>Play</button></div>';
+      body.querySelector("[data-play]").addEventListener("click", function () { U.close(); });
+    }, { title: "How to play Fifteen" });
+    try { PR.markHowto(ID); } catch (e) { /* in memory only */ }
+  }
+  $("how-steps").addEventListener("click", function () { snd("tick"); howto(); });
+  function autoHow() {
+    var seenIt = true; try { seenIt = PR.seenHowto(ID); } catch (e) { /* no progress */ }
+    if (first && !seenIt) howto();
+  }
+  // ui.js loads after this file: open once the page's scripts have all run
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", autoHow); else setTimeout(autoHow, 0);
+
   render();
   if (cpuPending()) schedule();
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-match. Not reachable from the UI.
   window.__demo = function () {
+    try { window.NumbericsUI.close(); } catch (e) { /* no sheet */ }
+    finishFx(); clearLine();
     cancelCpu(); clearHold(); armed = null; fresh = {}; note = ""; cpuNote = ""; record = { won: 2, lost: 1 };
     var s = F.newMatch(2026, "medium");
     s.round = 3; s.wins = [1, 1, 0]; s.rounds = [1, 0];
@@ -339,7 +486,8 @@
     state = s; peek = null; fresh = { 5: true }; render();
   };
   window.__fifteen = {
-    get state() { return state; }, set state(s) { cancelCpu(); clearHold(); state = s; armed = null; peek = null; note = ""; cpuNote = ""; render(); if (cpuPending()) schedule(); },
+    get state() { return state; }, set state(s) { finishFx(); clearLine(); cancelCpu(); clearHold(); claiming = {}; state = s; armed = null; peek = null; note = ""; cpuNote = ""; render(); if (cpuPending()) schedule(); },
+    get run() { return run; }, get cardIds() { return cardIds.slice(); }, get levels() { return levels; },
     get view() { return view; }, render: render, get record() { return record; },
     get holding() { return holding; }, get viewing() { return viewing; }, HOLD: HOLD, THINK: THINK,
   };

@@ -62,8 +62,8 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 .stat{ background:var(--panel); border-radius:10px; padding:6px 12px; min-width:64px; text-align:center; }
 .stat span{ display:block; font-size:.68rem; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
 .stat b{ font-size:1.1rem; font-variant-numeric:tabular-nums; }
-.levels{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:8px; }
-.levels button{ background:var(--panel); color:var(--mute); border:1px solid var(--line); border-radius:10px; padding:7px; font:inherit; font-size:.85rem; cursor:pointer; }
+.levels{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:8px; } /* Easy, Medium, Hard and the Daily (REDESIGN.md 9.10) */
+.levels button{ min-height:var(--tap); background:var(--panel); color:var(--mute); border:1px solid var(--line); border-radius:10px; padding:4px; font:inherit; font-size:.85rem; cursor:pointer; }
 .levels button[aria-pressed="true"]{ color:var(--ink); border-color:var(--accent); }
 .board{ display:grid; grid-template-columns:repeat(9,1fr); width:100%; aspect-ratio:1; background:var(--line-2); gap:1px;
   border:2px solid var(--line-2); border-radius:14px; overflow:hidden; container-type:inline-size; touch-action:manipulation; }
@@ -77,11 +77,16 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 .c:nth-child(9n+4),.c:nth-child(9n+7){ box-shadow:-2px 0 0 var(--line-2); }
 .r{ display:contents; } /* role="row" wrappers for valid grid ARIA; the cells stay items of the board grid */
 .r:nth-child(3) .c,.r:nth-child(6) .c{ border-bottom:2px solid var(--line-2); }
+/* each cell: the value (.v, the digit or the notes) and a colour overlay (.fx) for the clash flash, the unit sweep and
+   the solve pulse (REDESIGN.md 5.10). Only opacity and transform animate; no will-change on the 81 cells (5.13). */
+.c > .v{ display:flex; align-items:center; justify-content:center; width:100%; height:100%; }
+.c > .fx{ position:absolute; inset:0; background:var(--accent); opacity:0; pointer-events:none; }
+.c > .fx.bad{ background:var(--bad); }
 .notes{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,1fr); font-size:3.6cqw; color:var(--mute); line-height:1; } /* readable on a phone (S3, craft #4) */
 .notes i{ font-style:normal; display:flex; align-items:center; justify-content:center; }
 /* power-up tray: the Endless tray (shared/theme.css), sitting where the old tools row was */
 .tray{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:10px 0 8px; }
-.pw{ position:relative; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px;
+.pw{ position:relative; min-height:var(--tap); background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px;
   padding:9px 4px; font:inherit; font-size:.85rem; cursor:pointer; white-space:nowrap; }
 .pw.empty{ opacity:.45; } .pw.empty:hover{ opacity:.6; } /* unusable now: a tap explains it (R5) */
 .pw.armed{ border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset; }
@@ -93,16 +98,15 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 .c.wrong{ background:var(--wrong); }
 .tools{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin:0 0 8px; }
 .pad{ display:grid; grid-template-columns:repeat(9,1fr); gap:6px; }
-.pad button{ position:relative; background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 0 12px;
+.pad button{ position:relative; min-height:var(--tap); background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:8px; padding:10px 0 12px;
   font:inherit; font-size:1.15rem; font-weight:700; cursor:pointer; }
 .pad button small{ position:absolute; right:3px; bottom:1px; font-size:.7rem; color:var(--mute); font-weight:400; }
 .pad button:disabled{ opacity:.3; cursor:default; }
-.btn{ background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:9px 6px; font:inherit; font-size:.85rem; cursor:pointer; }
+.btn{ min-height:var(--tap); background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:9px 6px; font:inherit; font-size:.85rem; cursor:pointer; }
 .btn[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent-text); }
 .btn.primary{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; padding:9px 18px; }
 .btn:focus-visible,.pw:focus-visible,.pad button:focus-visible,.levels button:focus-visible,.c:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
 .row{ display:flex; justify-content:center; margin:10px 0 4px; } .row .btn{ padding:9px 18px; font-size:1rem; } /* same size as the family (F17) */
-.how{ color:var(--mute); font-size:.82rem; text-align:center; margin:8px 0; }
 /* end card: the family overlay (shared .over, R8), a full scrim over the board */
 .wrap{ position:relative; }
 .over{ position:absolute; inset:0; border-radius:14px; background:rgba(18,19,26,.985); background:color-mix(in srgb, var(--bg) 98.5%, transparent); display:flex; flex-direction:column;
@@ -127,8 +131,8 @@ h1{ margin:0; font-size:2rem; color:var(--accent-text); letter-spacing:.02em; }
 a:hover{ color:var(--ink); }
 a:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:6px; } /* gold ring on links too (F9) */
 .board:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
-.games{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px 12px; margin:10px 0 4px; font-size:.82rem; }
-.games a{ color:var(--mute); } .games a[aria-current="page"]{ color:var(--accent-text); text-decoration:none; }
+/* the games list at the page foot: the family cards (REDESIGN.md 3.1, 3.3), styled by the copied block below */
+#games{ margin:18px 0 4px; }
 /* the family top bar (REDESIGN.md 3.2), mirrored from shared/theme.css */
 .topbar{ width:100%; max-width:1100px; min-height:var(--tap-lg); margin:0 auto 4px; display:flex; align-items:center; gap:8px; }
 .tb-home{ display:flex; align-items:center; gap:8px; min-height:var(--tap); padding:0 6px 0 2px; margin-left:-2px; border-radius:var(--r-sm);
@@ -145,3 +149,114 @@ a:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-rad
 .tb-btn:focus-visible,.tb-home:focus-visible{ outline:3px solid var(--accent); outline-offset:2px; }
 .tb-dot{ position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--panel); }
 .tb-dot[hidden]{ display:none; }
+/* ===== copied from shared/theme.css (Sudoku keeps its own CSS, REDESIGN.md 2.3): how-to row, trophy toast and pills,
+   sheets (Games, Trophies, Settings, How to play), the games cards and Today card, B1 motion, B4 pills ===== */
+details.how{ margin:6px 0 0; background:var(--panel); border:1px solid var(--line); border-radius:var(--r-md); box-shadow:var(--sh-1); }
+details.how summary{ min-height:var(--tap); display:flex; align-items:center; padding:0 14px; cursor:pointer; font-weight:650; font-size:var(--fs-sm); color:var(--mute); }
+details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
+.toast.trophy{ display:flex; align-items:center; gap:8px; }
+.toast svg{ width:18px; height:18px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.over p{ margin:0; color:var(--mute); text-wrap:balance; } .over .best{ color:var(--accent-text); font-weight:800; }
+.over .trophy{ display:flex; gap:8px; align-items:center; background:var(--panel); border:1px solid var(--line); border-radius:var(--r-pill);
+  padding:6px 14px 6px 8px; font-weight:700; font-size:var(--fs-sm); }
+.over .trophy svg{ width:22px; height:22px; color:var(--accent); fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+/* ===== sheets (shared/ui.js: Games, Trophies, Settings, How to play) ===== */
+.scrim{ position:fixed; inset:0; background:rgba(5,6,10,.55); z-index:20; display:flex; align-items:flex-end; justify-content:center; }
+.scrim[hidden]{ display:none; }
+.sheet{ width:100%; max-width:560px; max-height:88dvh; overflow:auto; overscroll-behavior:contain; background:var(--panel); color:var(--ink);
+  border:1px solid var(--line); border-radius:var(--r-lg) var(--r-lg) 0 0; padding:8px 18px 22px; box-shadow:0 -10px 40px rgba(0,0,0,.4);
+  animation:nm-sheet var(--m-sheet) var(--e-out); }
+@media (min-width:640px){ .scrim{ align-items:center; } .sheet{ border-radius:var(--r-lg); } }
+@keyframes nm-sheet{ from{ transform:translateY(24px); opacity:0; } }
+@keyframes nm-fadein{ from{ opacity:0; } }
+:root[data-motion="reduced"] .sheet{ animation:nm-fadein var(--m-fade) linear; }
+.grab{ width:40px; height:5px; border-radius:3px; background:var(--line-2); margin:4px auto 6px; }
+.sh-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin:4px 0 10px; }
+.sh-head h2{ margin:0; font-size:var(--fs-xl); }
+.sec{ margin:16px 0 4px; font-size:var(--fs-xs); font-weight:750; letter-spacing:.08em; text-transform:uppercase; color:var(--mute); }
+.set{ display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:var(--tap-lg); border-top:1px solid var(--line); padding:6px 0; }
+.set .lbl b{ display:block; font-weight:700; } .set .lbl small{ color:var(--mute); font-size:var(--fs-sm); }
+.sw{ width:52px; height:32px; border-radius:16px; background:var(--cell); border:1px solid var(--line-2); position:relative; flex:none; cursor:pointer; padding:0; }
+.sw::after{ content:""; position:absolute; top:3px; left:3px; width:24px; height:24px; border-radius:50%; background:var(--mute); transition:transform 160ms var(--e-out); }
+.sw[aria-checked="true"]{ background:var(--accent); border-color:var(--accent); }
+.sw[aria-checked="true"]::after{ transform:translateX(20px); background:var(--accent-ink); }
+:root[data-motion="reduced"] .sw::after{ transition:none; }
+.seg3{ display:grid; grid-auto-flow:column; grid-auto-columns:1fr; gap:4px; background:var(--bg); padding:3px; border-radius:var(--r-sm); border:1px solid var(--line); }
+.seg3 button{ min-height:38px; border:0; background:none; border-radius:9px; padding:0 10px; font:inherit; font-size:var(--fs-sm); font-weight:650; color:var(--mute); cursor:pointer; }
+.seg3 button[aria-pressed="true"]{ background:var(--panel-2); color:var(--ink); box-shadow:var(--sh-1), inset 0 0 0 1px var(--accent); }
+.vol{ width:100%; accent-color:var(--accent); }
+.mem{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:6px; }
+/* trophies */
+.tro{ display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:10px; }
+.tro-game{ margin:14px 0 6px; font-weight:750; color:var(--mute); font-size:var(--fs-sm); }
+.tr{ display:flex; gap:10px; align-items:flex-start; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-md); padding:10px; }
+.tr svg{ width:30px; height:30px; flex:none; color:var(--accent); fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.tr b{ display:block; font-size:var(--fs-sm); } .tr small{ display:block; color:var(--mute); font-size:var(--fs-xs); line-height:1.3; }
+.tr.secret{ border-color:color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.tr.secret b::after{ content:" \2726"; color:var(--accent-text); }
+/* how to play steps */
+.howto{ display:grid; gap:12px; }
+.howto .step{ display:grid; grid-template-columns:120px 1fr; gap:14px; align-items:center; background:var(--bg); border:1px solid var(--line); border-radius:var(--r-md); padding:10px; }
+.howto .step .pv{ height:72px; border:0; border-radius:var(--r-sm); }
+.howto .step p{ margin:0; font-size:var(--fs-md); }
+@media (max-width:360px){ .howto .step{ grid-template-columns:96px 1fr; gap:10px; } }
+/* ===== games cards and the Today card (shared/nav.js, C1) ===== */
+.cards{ display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+@media (min-width:640px){ .cards{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+.cards > .card{ position:relative; display:flex; flex-direction:column; min-height:var(--tap); text-decoration:none; color:var(--ink);
+  background:var(--panel); border:1px solid var(--line); border-radius:var(--r-lg); overflow:hidden; box-shadow:var(--sh-1); }
+.cards > .card:hover{ border-color:var(--line-2); }
+.cards > .card[aria-current="page"]{ border-color:var(--accent); }
+.pv{ position:relative; height:84px; background:var(--well); display:grid; place-items:center; border-bottom:1px solid var(--line); }
+.cards > .card .body{ padding:9px 12px 11px; display:flex; flex-direction:column; gap:2px; flex:1; }
+.cards > .card b{ font-size:1.06rem; font-weight:800; display:flex; align-items:center; gap:6px; }
+.cards > .card .blurb{ color:var(--mute); font-size:var(--fs-sm); line-height:1.3; }
+.cards > .card .foot{ margin-top:auto; padding-top:6px; display:flex; gap:6px; flex-wrap:wrap; font-size:var(--fs-xs); font-weight:700; }
+.tag{ border-radius:var(--r-pill); padding:2px 8px; background:var(--cell); color:var(--mute); }
+.tag.vs{ color:var(--cool); background:color-mix(in srgb, var(--cool) 14%, transparent); }
+.tag.best{ color:var(--accent-text); background:color-mix(in srgb, var(--accent) 14%, transparent); }
+.tag.go{ color:var(--accent-ink); background:var(--accent); }
+.tag.cont{ color:var(--accent-text); background:none; box-shadow:inset 0 0 0 1px var(--accent); }
+.tag.new{ color:var(--good); background:color-mix(in srgb, var(--good) 14%, transparent); }
+.today{ background:linear-gradient(160deg, var(--panel-2), var(--panel)); border:1px solid var(--line); border-radius:var(--r-lg);
+  padding:14px 16px; margin:0 0 20px; box-shadow:var(--sh-2); }
+.today .when{ display:flex; justify-content:space-between; align-items:center; font-size:var(--fs-sm); color:var(--mute); font-weight:650; }
+.today .streak{ display:flex; align-items:center; gap:6px; color:var(--accent-text); font-weight:800; }
+.today .streak svg{ width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+.today h3{ margin:6px 0 10px; font-size:var(--fs-lg); }
+.chips{ display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.chip{ min-height:var(--tap-lg); border:1px solid var(--line); background:var(--bg); border-radius:var(--r-md); padding:8px 10px; text-decoration:none; color:var(--ink);
+  display:flex; flex-direction:column; justify-content:center; font-weight:750; font-size:var(--fs-sm); line-height:1.2; }
+.chip small{ color:var(--mute); font-weight:600; font-size:var(--fs-xs); }
+.chip.done{ border-color:color-mix(in srgb, var(--good) 60%, var(--line)); } .chip.done small{ color:var(--good); }
+/* card previews: CSS only, small HTML strings in nav.js */
+.pv .mt{ width:26px; height:26px; border-radius:7px; display:grid; place-items:center; font-weight:850; font-size:13px; color:var(--tile-ink);
+  background:hsl(var(--h,40) var(--tile-s) var(--tile-l)); box-shadow:inset 0 -2px 0 rgba(0,0,0,.18); }
+.pv .mt.lo{ background:var(--tile-lo); } .pv .mt.lo2{ background:var(--tile-lo2); }
+.pv .mg{ display:grid; gap:4px; }
+.pv .md{ width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-weight:850; font-size:11px; color:var(--tile-ink); background:var(--h2,var(--cell)); }
+.pv .sq9{ display:grid; grid-template-columns:repeat(3,18px); gap:2px; padding:3px; border-radius:6px; background:var(--line); }
+.pv .sq9 span{ height:18px; display:grid; place-items:center; background:var(--panel); font-size:11px; font-weight:750; color:var(--ink); border-radius:2px; }
+.pv .sq9 span.c{ color:var(--cool); }
+.pv .eq{ display:flex; gap:4px; align-items:center; font-weight:850; font-size:13px; }
+.pv .eq .op{ color:var(--mute); }
+.pv .pips{ display:grid; grid-template-columns:repeat(3,4px); gap:2px; margin-top:2px; }
+.pv .pips i{ width:4px; height:4px; border-radius:50%; background:var(--tile-ink); opacity:.75; }
+.foot-note{ color:var(--faint); font-size:var(--fs-xs); text-align:center; margin:22px 0 4px; }
+:root[data-motion="full"]{ --anim:var(--m-slide); }
+:root[data-motion="reduced"]{ --anim:0ms; }
+.tro-none{ margin:8px 0 4px; color:var(--mute); font-size:var(--fs-sm); }
+.tro-pills{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
+.tro-pills[hidden]{ display:none; }
+/* ===== end copied block ===== */
+/* Sudoku additions to the copied block. The nav preview's given digits carry class "c", which is also this page's cell
+   class: keep the preview plain. The how-to pictures: a selected cell, a key, pencil notes and a red clash. */
+.pv .sq9 span{ box-shadow:none; cursor:inherit; }
+.pv .sq9 span.s{ outline:2px solid var(--accent); outline-offset:-2px; }
+.pv .sq9 span.x{ color:var(--bad); background:color-mix(in srgb, var(--bad) 22%, var(--panel)); }
+.pv .sq9 span.n{ font-size:7px; line-height:1; color:var(--mute); font-weight:600; letter-spacing:.5px; }
+.pv .sq9 span.u{ color:var(--digit); }
+.pv .hw{ display:flex; align-items:center; gap:10px; }
+.pv .key{ width:24px; height:28px; display:grid; place-items:center; border-radius:6px; background:var(--panel); border:1px solid var(--line-2);
+  font-weight:800; font-size:13px; color:var(--ink); }
+details.how .how-more{ display:flex; justify-content:center; margin:0 14px 12px; }

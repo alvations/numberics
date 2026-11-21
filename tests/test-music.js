@@ -132,7 +132,7 @@ t("per-game map covers every live game in games.json (and Two by both ids) with 
 const BAN1 = new Set([679042920, 1821658341, 2082623414, 817898526, 3298217274, 3473247979, 2692686076, 3581587211, 1435889680, 2783497579, 536233787, 1498040325, 3440259439, 1385804191, 125391006, 153747053, 879813784, 1890618769, 1842540828, 3366080637, 3615056524, 2704678631, 3613923152, 975158294, 1796020153, 2506926520]);
 const BAN2 = new Set([2708981093, 2018153108, 1825702373, 530270355, 4255431911, 2896317320]);
 const fnv = s => { let h = 0x811c9dc5; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h; };
-const SCAN = ["shared/music.js", "tools/render-music.cjs", "tools/music-measure.cjs", "tests/emu/shared-music.cjs", "tests/fixtures/music.html",
+const SCAN = ["shared/music.js", "tools/render-music.cjs", "tools/music-measure.cjs", "tests/emu/shared-music.cjs", "tests/fixtures/music.html", "tests/fixtures/music-lazy.html",
   "docs/design/MUSIC.md", "docs/design/MUSIC-PANEL.md"];
 t("no style, copy, code or doc names another game, franchise or composer", () => SCAN.forEach(f => {
   const p = path.join(root, f); if (!fs.existsSync(p)) throw new Error("missing " + f);
@@ -234,6 +234,6 @@ t("live: shared-bus contract: unlock() then musicBus(); no own context; hidden p
   F.w.vis(false); F.run(10); ok(!m.state().paused, "resumes");
 });
 
-require("./conventions")(t, ok, ["shared/music.js", "tools/render-music.cjs", "tools/music-measure.cjs", "tests/emu/shared-music.cjs", "tests/fixtures/music.html",
+require("./conventions")(t, ok, ["shared/music.js", "tools/render-music.cjs", "tools/music-measure.cjs", "tests/emu/shared-music.cjs", "tests/fixtures/music.html", "tests/fixtures/music-lazy.html",
   "docs/design/MUSIC.md", "docs/design/MUSIC-PANEL.md"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

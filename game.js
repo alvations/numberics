@@ -1,14 +1,24 @@
 /* SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 alvations (Melon Lab)
  * Numberics Two: browser client. The engine (engine.js) owns every rule;
- * this file only draws, listens, and remembers. */
+ * this file only draws, listens, and remembers.
+ * Motion (docs/design/REDESIGN.md 5.3): like the original 2048, every tile keeps its element (NumbericsMotion.layer,
+ * keyed by an id per cell that lives only here, never in the engine or the save) and slides by transform; a merged
+ * tile pops on top after the slide, a spawned tile appears after it. A new input finishes the running animation and
+ * is applied at once (5.11). Sounds play inside a generation-guarded timeline, so a new input drops pending ones. */
 (function () {
   "use strict";
-  var N = window.Numberics, K = window.NumbericsKit, P = window.NumbericsPower;
+  var N = window.Numberics, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
+  // optional modules: a missing one costs a nicety, never the game
+  function A(name, arg) { try { var a = window.NumbericsAudio; if (a && typeof a[name] === "function") a[name](arg); } catch (e) { /* silent */ } }
+  function buzz(kind) { A("buzz", kind); }
+  function trophy(event, data) {
+    try { var T = window.NumbericsTrophies; return T && T.report ? T.report("two", event, data) || [] : []; } catch (e) { return []; }
+  }
+  function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
   // storage goes through NumbericsKit.store: every localStorage call is in try/catch, memory fallback
   // Two was called Endless; the key is kept so saved games load (REDESIGN.md 4.2). Never rename it.
   var store = K.store("numberics_endless_v1");
-  var ANIM = K.reducedMotion() ? 0 : 110;
   var freshSeed = K.freshSeed;
   // a fine pointer with hover means a keyboard is likely: only then mention Esc and the arrow keys
   var desk = false;
@@ -22,36 +32,35 @@
       typeof s.score === "number" && isFinite(s.score) && int(s.top) && int(s.moves) && typeof s.seed === "number";
   }
   function valid(s) { return core(s) && s.size === 4 && (s.prev == null || core(s.prev)); }
+  // the run record (REDESIGN.md 8.2, 8.4): only lets trophies see how a run went, never changes a rule.
+  // used: power-ups used this run; stuckUse: the move count when one was used while no move was possible.
+  function freshRun() { return { used: 0, stuckUse: null }; }
+  function validRun(r) {
+    return r && typeof r === "object" && int(r.used) ? { used: r.used, stuckUse: int(r.stuckUse) ? r.stuckUse : null } : freshRun();
+  }
 
   var saved = store.load();
   var best = { score: (saved && +saved.bestScore) || 0, top: (saved && +saved.bestTop) || 0 };
-  var state = saved && valid(saved.state) ? saved.state : N.newGame(freshSeed());
+  var loaded = !!(saved && valid(saved.state));
+  var state = loaded ? saved.state : N.newGame(freshSeed());
+  var run = loaded ? validRun(saved.run) : freshRun();
   // the best score before this run began, so the end screen can say "New best."
   var bestBefore = saved && typeof saved.bestBefore === "number" ? saved.bestBefore
     : (state.score > 0 && state.score >= best.score ? 0 : best.score);
+  var bestRung = bestBefore > 0 && state.score > bestBefore; // the New best moment plays once per run (8.5)
   var targeting = null;           // {name, picks:[]} while a power-up waits for a target
   var cur = -1, kbd = false;      // keyboard aiming cursor (cell), shown once a key aims
   var note = "";                  // a tray explanation in the hint line, until the next action
-  var timer = null, pendingFx = null, newArmed = null;
+  var newArmed = null, endIds = [];
   // Round 3 end-card pattern: the locked board shows undimmed for HOLD ms, then the card; "See the board" hides
   // the card again (a tap on the board, Esc or Enter brings it back). A run that loads already over shows the card.
-  var HOLD = 1500, holding = false, holdT = null, viewing = false, wasOver = !!state.over;
-  var els = [];                   // cell index -> tile element
+  var HOLD = 1500, holding = false, holdT = null, viewing = false, wasOver = !!state.over, cardUp = false;
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), tilesEl = $("tiles"), cellsEl = $("cells");
   for (var i = 0; i < 16; i++) cellsEl.appendChild(document.createElement("div"));
 
-  function persist() {
-    best.score = Math.max(best.score, state.score); best.top = Math.max(best.top, state.top);
-    store.save({ state: state, bestScore: best.score, bestTop: best.top, bestBefore: bestBefore });
-    // the card summary (shared/progress.js): what the Games list and the cards on other pages show for Two
-    var NP = window.NumbericsProgress;
-    if (NP) NP.put("two", { best: best.score > 0 ? "Best " + K.fmt(best.score) : "", live: !state.over && state.moves > 0,
-      liveText: "Score " + K.fmt(state.score) });
-  }
-  var fmt = K.fmt;
-
+  // ---- the keyed tile layer ----
   function setLabel(el, level) {
     var l = N.label(level);
     el.textContent = "";
@@ -62,29 +71,72 @@
     } else { el.textContent = l; el.setAttribute("data-len", String(l.length)); }
     el.setAttribute("aria-label", "tile " + (l.indexOf("2^") === 0 ? "2 to the " + l.slice(2) : l));
   }
-  function place(el, cell) { el.style.setProperty("--r", Math.floor(cell / 4)); el.style.setProperty("--c", cell % 4); }
+  var layer = M.layer(tilesEl, {
+    cols: 4, rows: 4,
+    make: function () {
+      var t = document.createElement("div"), f = document.createElement("div");
+      f.className = "face"; t.appendChild(f); return t;
+    },
+    paint: function (node, t) {
+      node.style.setProperty("--h", ((t.lv * 43 + 30) % 360)); // the palette: hue cycles forever
+      node.classList.toggle("lo", t.lv === 1); node.classList.toggle("lo2", t.lv === 2);
+      setLabel(node.firstChild, t.lv);
+    }
+  });
+  var ids = [], nextId = 1;       // ids[cell]: the identity of the tile in that cell (client only)
+  function tilesOf() {
+    var out = [];
+    state.grid.forEach(function (lv, cell) { if (lv) out.push({ id: ids[cell], cell: cell, lv: lv }); });
+    return out;
+  }
+  // Undo, load, New game and a forced state: every tile gets a fresh id, so nodes swap without a slide
+  function rekey(fx) {
+    var rk = M.rekey(state.grid, nextId); ids = rk.ids; nextId = rk.next;
+    layer.sync(tilesOf(), fx || {});
+  }
+  var snd = M.seq();              // sounds and the ring, at their visual moment; a new input drops what is pending
+  var ringNode = null, ringT = null;
+  function clearRing() { clearTimeout(ringT); ringT = null; if (ringNode) ringNode.classList.remove("ring"); ringNode = null; }
+  function ring(node) {
+    clearRing(); if (!node) return;
+    ringNode = node; node.classList.add("ring");
+    ringT = setTimeout(clearRing, M.T.slide + M.T.pop + 420 + 40);
+  }
+  function plus(n) { // the score "+N" floats up and fades (640 ms; opacity only under reduced motion)
+    var box = $("score").parentNode, old = box.querySelector(".plus");
+    if (old) box.removeChild(old);
+    var p = document.createElement("span"); p.className = "plus"; p.setAttribute("aria-hidden", "true"); p.textContent = "+" + fmt(n);
+    box.appendChild(p);
+    setTimeout(function () { if (p.parentNode) p.parentNode.removeChild(p); }, M.T.plus + 40);
+  }
+  function bestMoment() { // a gold ring on the Best stat (opacity, 420 ms) and the best() chime, once per run
+    var box = $("best").parentNode;
+    box.classList.remove("rung"); void box.offsetWidth; box.classList.add("rung");
+    setTimeout(function () { box.classList.remove("rung"); }, 460);
+  }
 
-  function render(fx) {
-    tilesEl.textContent = ""; els = [];
-    state.grid.forEach(function (lv, cell) {
-      if (!lv) return;
-      var el = document.createElement("div");
-      el.className = "tile" + (lv === 1 ? " lo" : lv === 2 ? " lo2" : "");
-      el.style.setProperty("--h", ((lv * 43 + 30) % 360)); // endless palette: hue cycles forever
-      place(el, cell); setLabel(el, lv);
-      if (fx && fx.merged && fx.merged[cell]) el.classList.add("pop");
-      if (fx && fx.spawned === cell) el.classList.add("new");
-      tilesEl.appendChild(el); els[cell] = el;
-    });
+  function persist() {
+    best.score = Math.max(best.score, state.score); best.top = Math.max(best.top, state.top);
+    store.save({ state: state, bestScore: best.score, bestTop: best.top, bestBefore: bestBefore, run: run });
+    // the card summary (shared/progress.js): what the Games list and the cards on other pages show for Two
+    var NP = window.NumbericsProgress;
+    if (NP) NP.put("two", { best: best.score > 0 ? "Best " + K.fmt(best.score) : "", live: !state.over && state.moves > 0,
+      liveText: "Score " + K.fmt(state.score) });
+  }
+  var fmt = K.fmt;
+
+  // render(): everything but the tiles (stats, tray, hint, aiming marks, the end card). The tiles are the layer's.
+  function render() {
     $("score").textContent = fmt(state.score);
     var bs = Math.max(best.score, state.score), bestEl = $("best");
     bestEl.textContent = bs ? fmt(bs) : "none"; bestEl.classList.toggle("none", !bs); // R11: an empty stat says none
     renderTray();
     var aim = targeting && kbd ? cur : -1;
+    Array.prototype.forEach.call(tilesEl.querySelectorAll(".tile.sel,.tile.cur"), function (n) { n.classList.remove("sel", "cur"); });
     Array.prototype.forEach.call(cellsEl.children, function (c, i) {
-      var sel = !!(targeting && targeting.picks.indexOf(i) >= 0);
+      var sel = !!(targeting && targeting.picks.indexOf(i) >= 0), node = state.grid[i] ? layer.get(ids[i]) : null;
       c.classList.toggle("sel", sel); c.classList.toggle("cur", i === aim);
-      if (els[i]) { els[i].classList.toggle("sel", sel); els[i].classList.toggle("cur", i === aim); }
+      if (node) { node.classList.toggle("sel", sel); node.classList.toggle("cur", i === aim); }
     });
     boardEl.classList.toggle("targeting", !!targeting);
     var topEl = $("top");
@@ -103,8 +155,12 @@
     if (state.over) {
       $("over-text").textContent = "Top tile " + N.label(state.top) + " · Score " + fmt(state.score);
       $("over-best").hidden = !(state.score > 0 && state.score > bestBefore);
-      if (!over.hidden && !was) { try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ } }
+      if (!over.hidden && !was) {
+        var TR = window.NumbericsTrophies; if (TR && TR.pills) TR.pills($("over-pills"), endIds);
+        try { $("again").focus({ preventScroll: true }); } catch (e) { /* focus is a nicety */ }
+      }
     }
+    if (cardUp !== !over.hidden) { cardUp = !over.hidden; duck(cardUp); } // the music steps back under the card
   }
   // "See the board" hides the card; a tap on the board, Esc or Enter brings it back (or skips the hold)
   function view(on) {
@@ -147,28 +203,30 @@
       earn: EARN,
       disabled: trayWhy,
       onUse: activate,
-      onInfo: function (id, text) { flush(); targeting = null; note = text; render(); }
+      onInfo: function (id, text) { flush(); targeting = null; note = text; if (!state.power[id]) A("bad"); render(); }
     });
   }
 
   function toast(msg, kind) { K.toast(msg, kind); }
 
-  // ---- animation: slide the old tiles, then redraw authoritatively ----
-  function flush() { if (timer !== null) { clearTimeout(timer); timer = null; finalize(); } }
-  function finalize() { var fx = pendingFx; pendingFx = null; render(fx); }
+  // ---- input during motion: end the running animation now (end state at once), then apply the new input ----
+  function flush() { layer.finish(); snd.cancel(); clearRing(); }
+
+  // the run just ended on this action: report it and keep the trophies for the card's pills
+  function ended(ids0) {
+    endIds = (ids0 || []).concat(trophy("end", { score: state.score, top: state.top, run: run }));
+    snd.at(M.ms("slide") + M.ms("pop"), function () { A("lose"); buzz("lose"); });
+  }
 
   function doMove(dir) {
     flush();
     if (targeting) return;
-    var r = N.move(state, dir);
+    var top0 = state.top, r = N.move(state, dir);
     if (!r.moved) return;
     note = "";
-    var merged = {};
-    r.trace.forEach(function (t) {
-      var el = els[t.from]; if (el) place(el, t.to);
-      if (t.merge) merged[t.to] = true;
-    });
-    state = r.state; pendingFx = { merged: merged, spawned: r.spawned };
+    state = r.state;
+    var fx = M.track(ids, r.trace, r.spawned, nextId); ids = fx.ids; nextId = fx.next;
+    layer.sync(tilesOf(), { merges: fx.merges, spawns: fx.spawns });
     // only reward-sized tiles are news (round 2: "New tile 4, 8, 16" was noise before the rewards begin)
     var top = r.milestones.length ? r.milestones[r.milestones.length - 1] : 0;
     // R7: when the move ends the run, the end card is the only message
@@ -181,18 +239,43 @@
     }
     renderTray(); // the tray and hint follow the move at once, so a quick tap meets the final buttons
     persist();
-    if (ANIM) { var gen = state.moves; timer = setTimeout(function () { if (state.moves === gen) { timer = null; finalize(); } }, ANIM); }
-    else finalize();
+    render();
+    // beats (5.3): the slide sound now, the join at the end of the slide, the ring and chime on a new highest tile
+    if (r.gained) plus(r.gained);
+    A("slide");
+    var slide = M.ms("slide"), hi = r.merges.length ? Math.max.apply(null, r.merges) : 0;
+    if (hi) snd.at(slide, function () { A("merge", hi); buzz("merge"); });
+    if (top >= N.AWARD_FROM_LEVEL && state.top > top0) {
+      var m = fx.merges.filter(function (x) { return state.grid[x.to] === top; })[0];
+      ring(m ? layer.get(m.id) : null);
+      snd.at(slide + M.ms("pop"), function () { A("best"); buzz("big"); });
+      if (r.awarded.length) snd.at(slide + M.ms("pop") + 240, function () { A("power"); });
+    }
+    if (!bestRung && bestBefore > 0 && state.score > bestBefore) {
+      bestRung = true; bestMoment();
+      if (!(top >= N.AWARD_FROM_LEVEL)) snd.at(slide, function () { A("best"); });
+    }
+    var got = trophy("move", { top: state.top, score: state.score, merges: r.merges.length, grid: state.grid.slice(),
+      moves: state.moves, stuck: !N.canMove(state), run: run });
+    if (state.over) ended(got);
   }
 
   // ---- power-ups ----
+  function used(name, stuck) {
+    run.used++; if (stuck) run.stuckUse = state.moves;
+    trophy("power", { name: name, stuck: stuck, run: run });
+  }
   function activate(name) {
     flush(); note = "";
     if (targeting && targeting.name === name) { targeting = null; return render(); }
     targeting = null;
     if (name === "undo") {
-      var u = N.use(state, "undo");
-      if (u.ok) { state = u.state; persist(); toast("Rewound one move"); }
+      var stuck0 = !N.canMove(state), u = N.use(state, "undo");
+      if (u.ok) {
+        state = u.state; used("undo", stuck0); persist();
+        rekey({ fade: true }); // Undo cross-fades (opacity, 120 ms)
+        toast("Rewound one move");
+      }
       return render();
     }
     if (!state.power[name] || state.over) return render();
@@ -215,13 +298,21 @@
     targeting.picks.push(cell);
     var need = targeting.name === "swap" ? 2 : 1;
     if (targeting.picks.length < need) return render();
-    var name = targeting.name, top0 = state.top;
-    var res = N.use(state, name, targeting.picks[0], targeting.picks[1]);
+    var name = targeting.name, top0 = state.top, a = targeting.picks[0], b = targeting.picks[1];
+    var stuck0 = !N.canMove(state), res = N.use(state, name, a, b);
     if (res.ok) {
-      state = res.state; targeting = null; persist();
+      state = res.state; targeting = null; used(name, stuck0); persist();
+      // Smash fades the tile out; Swap slides both tiles to each other's cells; Boost pops the tile
+      var fx = {};
+      if (name === "smash") { fx.out = [ids[a]]; ids = ids.slice(); ids[a] = 0; }
+      else if (name === "swap") { ids = ids.slice(); var t = ids[a]; ids[a] = ids[b]; ids[b] = t; }
+      else if (name === "boost") fx.pop = [ids[a]];
+      layer.sync(tilesOf(), fx);
       if (!state.over) toast(name === "boost" && state.top > top0 ? "Boosted to " + N.label(state.top) + ". Boosted tiles earn no reward." : PW[name] + "!");
+      else ended([]);
     } else {
       targeting.picks = [];
+      A("bad");
       toast(name === "swap" ? "Pick two cells, at least one with a tile." : "Pick a tile, not an empty cell.", "bad");
     }
     render();
@@ -241,14 +332,17 @@
   }
 
   // ---- input ----
+  function sheetOpen() { try { return !!(window.NumbericsUI && window.NumbericsUI.open && window.NumbericsUI.open()); } catch (e) { return false; } }
   var KEYS = { ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down", a: "left", d: "right", w: "up", s: "down" };
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (sheetOpen()) return; // a sheet (Games, Trophies, Settings, How to play) owns the keys while it is open
     var tag = e.target && e.target.tagName;
     // R17: a key typed into a field belongs to the field; Enter or Space on a focused button or link
     // activates that control (a link navigates), never a game action
     if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
     if ((e.key === "Enter" || e.key === " ") && (tag === "BUTTON" || tag === "A")) return;
+    if (tag === "SUMMARY" && (e.key === "Enter" || e.key === " ")) return;
     if (state.over && (viewing || holding) && (e.key === "Escape" || e.key === "Enter" || e.key === " ")) { e.preventDefault(); return view(false); }
     if (e.key === "Escape") { if (targeting) { targeting = null; render(); } return; }
     var pi = ["1", "2", "3", "4"].indexOf(e.key);
@@ -277,8 +371,8 @@
   // ---- new game: two-step instead of a blocking confirm() dialog ----
   function startNew() {
     flush(); targeting = null; note = "";
-    bestBefore = best.score;
-    state = N.newGame(freshSeed()); persist(); render();
+    bestBefore = best.score; bestRung = false; run = freshRun(); endIds = [];
+    state = N.newGame(freshSeed()); persist(); rekey(); render();
   }
   $("new").addEventListener("click", function () {
     var b = $("new");
@@ -290,16 +384,44 @@
   $("again").addEventListener("click", startNew);
   $("over-view").addEventListener("click", function () { view(true); });
 
-  render();
+  // ---- how to play (REDESIGN.md 1.3, 9.1): three steps in a sheet; it opens by itself once, on a first visit ----
+  var STEPS = [
+    ['<div class="mg" style="grid-template-columns:repeat(2,26px)"><span class="mt lo">2</span><span class="mt lo">2</span></div>',
+      "Swipe, or press an arrow key. Every tile slides as far as it can."],
+    ['<div class="eq"><span class="mt lo">2</span><span class="op">+</span><span class="mt lo">2</span><span class="op">=</span><span class="mt lo2">4</span></div>',
+      "Two tiles with the same number join into one."],
+    ['<span class="mt" style="--h:245;width:40px;height:40px;font-size:15px">32</span>',
+      "Make a new biggest tile from 32 up to earn a power-up. There is no top tile."]
+  ];
+  function howto() {
+    var UI = window.NumbericsUI; if (!UI || !UI.sheet) return;
+    try { if (window.NumbericsProgress) window.NumbericsProgress.markHowto("two"); } catch (e) { /* a nicety */ }
+    UI.sheet("howto", function (body) {
+      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
+        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
+      }).join("") + "</div>";
+    }, { title: "How to play Two" });
+  }
+  $("how-steps").addEventListener("click", howto);
+  // Never for a player who has a Two save (numberics_endless_v1), and only once (NumbericsProgress.seenHowto)
+  var firstVisit = !saved;
+  document.addEventListener("DOMContentLoaded", function () {
+    var NP = window.NumbericsProgress;
+    if (firstVisit && NP && !NP.seenHowto("two") && state.moves === 0) howto();
+  });
+
+  rekey(); render();
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
     flush(); targeting = null; note = "";
+    try { if (sheetOpen()) window.NumbericsUI.close(); } catch (e) { /* no sheet */ }
     var s = N.newGame(2026), dirs = ["left", "down", "right", "down"];
     for (var k = 0; k < 120 && !s.over; k++) s = N.move(s, dirs[k % 4]).state;
     s.power = { undo: 1, smash: 2, swap: 1, boost: 1 };
-    state = s; render();
+    state = s; rekey(); render();
   };
-  window.__numberics = { get state() { return state; }, set state(s) { state = s; render(); }, render: render,
+  window.__numberics = { get state() { return state; }, set state(s) { flush(); state = s; rekey(); render(); }, render: render,
     get targeting() { return targeting; }, get cursor() { return cur; }, get bestBefore() { return bestBefore; },
-    get viewing() { return viewing; }, get holding() { return holding; }, showCard: function () { view(false); } };
+    get viewing() { return viewing; }, get holding() { return holding; }, get run() { return run; },
+    get ids() { return ids.slice(); }, get layer() { return layer; }, showCard: function () { view(false); } };
 })();

@@ -3,6 +3,10 @@
 "use strict";
 module.exports = async function ({ browser, url, ck, shot }) {
   const page = url + "nine/";
+  // the how-to sheet opens by itself on a first visit (REDESIGN.md 1.3); contexts other than the first mark it seen
+  const seen = (c) => c.addInitScript(() => { try { const k = "numberics_progress_v1";
+    const o = JSON.parse(localStorage.getItem(k) || "null") || { v: 1, games: {}, howto: {}, daily: {} };
+    o.howto = o.howto || {}; o.howto.nine = true; localStorage.setItem(k, JSON.stringify(o)); } catch (e) { /* storage blocked */ } });
   const S = (p) => p.evaluate(() => window.__nine.state);
   const forge = (p, o) => p.evaluate((o) => {
     const s = window.__nine.state;
@@ -18,6 +22,25 @@ module.exports = async function ({ browser, url, ck, shot }) {
   let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(page);
+  // How to play: first visit opens the three steps once; the row under the board always reaches them
+  await p.waitForSelector("#sh-howto:not([hidden])", { timeout: 3000 }).catch(() => {});
+  ck("first visit: the how-to sheet opens by itself", await p.locator("#sh-howto:not([hidden])").count() === 1);
+  ck("how-to: three steps, each a picture and the spec's sentence", JSON.stringify(await p.$$eval("#sh-howto .howto .step p", a => a.map(x => x.textContent))) ===
+     JSON.stringify(["Tap a tile, then choose how many to take.", "You and the computer take turns.", "Take the very last one to win the round."]) &&
+     await p.locator("#sh-howto .howto .step .pv").count() === 3);
+  await shot(p, "howto");
+  await p.click("#sh-howto .btn.primary");
+  ck("Play closes the how-to and it is remembered", await p.locator("#sh-howto:not([hidden])").count() === 0 && await p.evaluate(() => window.NumbericsProgress.seenHowto("nine")));
+  ck("first visit starts on Easy", (await S(p)).diff === "easy");
+  await p.reload();
+  ck("the how-to does not open again", await p.locator("#sh-howto:not([hidden])").count() === 0);
+  ck("How to play is a collapsed row under the board", await p.locator("details.how:not([open]) > summary").textContent() === "How to play");
+  await p.click("details.how > summary"); await p.click("#howto");
+  ck("the row's button opens the steps again", await p.locator("#sh-howto:not([hidden]) .howto .step").count() === 3);
+  await p.keyboard.press("Escape"); await p.click("details.how > summary");
+  ck("44 px targets: minus, plus, Take, difficulty, How to play", await p.evaluate(() => ["#less", "#more", "#take", "#diff button", "details.how > summary"].every(q => { const r = document.querySelector(q).getBoundingClientRect(); return r.height >= 44 && r.width >= 44; })));
+  ck("the take button is primary", await p.locator("#take.btn.primary").count() === 1);
+  ck("the games list is the cards, Nine marked as playing", await p.locator("#games.cards .card").count() === 10 && await p.locator('#games .card[aria-current="page"]').count() === 1);
   ck("three tiles on a fresh run", await p.locator(".heap.tile").count() === 3);
   ck("every tile shows its number and its pips", await p.evaluate(() => [...document.querySelectorAll(".heap.tile")].every(t => +t.querySelector(".num").textContent === t.querySelectorAll(".pips i.on").length)));
   ck("no horizontal scroll at 375px", await p.evaluate(() => document.documentElement.scrollWidth <= 375));
@@ -259,12 +282,15 @@ module.exports = async function ({ browser, url, ck, shot }) {
   p = await ctx.newPage(); const e2 = []; p.on("pageerror", e => e2.push(e.message));
   await p.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
   await p.goto(page);
+  await p.waitForTimeout(100);
+  ck("storage blocked: the how-to opens (nothing is remembered) and Esc closes it", await p.locator("#sh-howto:not([hidden])").count() === 1);
+  await p.keyboard.press("Escape");
   await p.locator(".heap.tile").first().click(); await p.click("#take");
   ck("runs with storage blocked", e2.length === 0 && (await S(p)).ply > 0, e2.join("|"));
   await ctx.close();
 
   // 6. reduced motion: still plays, the computer still answers
-  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" });
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" }); await seen(ctx);
   p = await ctx.newPage(); const e3 = []; p.on("pageerror", e => e3.push(e.message));
   await p.goto(page);
   await p.focus("#board"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("Enter");
@@ -272,5 +298,135 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("reduced motion plays a full turn", (await S(p)).ply >= 2 || !!(await S(p)).roundOver);
   ck("no animations under reduced motion", await p.evaluate(() => [...document.querySelectorAll(".heap")].every(h => getComputedStyle(h).animationName === "none")));
   ck("no page errors (reduced motion)", e3.length === 0, e3.join("|"));
+  await ctx.close();
+  // 7. motion (REDESIGN.md 5.7, 5.11, 5.12): pips leave one by one, a tile at 0 fades, the computer's ring
+  const pipAnims = (p) => p.evaluate(() => document.getAnimations().filter(a => a.effect && a.effect.target && a.effect.target.matches(".pips i")).map(a => {
+    const k = a.effect.getKeyframes(), t = a.effect.getTiming();
+    return { motion: k.some(f => f.transform && f.transform !== "none"), delay: t.delay, dur: t.duration };
+  }));
+  const motionAnims = (p) => p.evaluate(() => document.getAnimations().filter(a => a.effect && a.effect.getKeyframes().some(f => f.transform && f.transform !== "none" && f.transform !== "scale(1)")).length);
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 } }); await seen(ctx);
+  p = await ctx.newPage(); const e4 = []; p.on("pageerror", e => e4.push(e.message));
+  await p.goto(page);
+  await forge(p, { heaps: [5, 3, 7] });
+  await p.locator('.heap[data-i="2"]').click(); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); // take 3 from the 7
+  await p.click("#take");
+  let pa = await pipAnims(p);
+  ck("a take: three pips leave, 30 ms apart, 180 ms each, with motion", pa.length === 3 && pa.every(a => a.motion && a.dur === 180) && JSON.stringify(pa.map(a => a.delay).sort((a, b) => a - b)) === "[0,30,60]", JSON.stringify(pa));
+  ck("the number counts down with the pips (not straight to 4)", [5, 6].includes(+(await p.textContent('.heap[data-i="2"] .num'))), await p.textContent('.heap[data-i="2"] .num'));
+  ck("the state is already final when the motion starts", (await S(p)).heaps[2] === 4);
+  await p.waitForTimeout(40); await shot(p, "mid-take");
+  await p.waitForTimeout(300);
+  ck("after the motion the tile shows its new number and pips", +(await p.textContent('.heap[data-i="2"] .num')) === 4 && await p.locator('.heap[data-i="2"] .pips i.on').count() === 4);
+  // the computer's take: same motion after its pause, plus a one-shot cool ring
+  await p.waitForFunction(() => document.querySelector(".heap .ring"), null, { timeout: 3000 }).catch(() => {});
+  ck("the computer's take flashes a cool ring", await p.locator(".heap .ring").count() === 1);
+  await cpuDone(p); await p.waitForTimeout(500);
+  ck("the ring is gone after its 420 ms", await p.locator(".heap .ring").count() === 0);
+  // a tile taken to zero: it stays on top of its empty slot, shrinks and fades
+  await forge(p, { heaps: [4, 3, 6] });
+  await p.locator('.heap[data-i="1"]').click(); await p.locator('.heap[data-i="1"] .pips i[data-k="0"]').click(); await p.click("#take");
+  ck("a tile taken to zero: the slot is empty at once, the old tile fades on top of it", await p.locator(".heap.gone > .heap.fx").count() === 1 && await p.locator(".heap.tile[data-i]").count() === 2);
+  await p.waitForTimeout(220); await shot(p, "mid-zero");
+  await p.waitForTimeout(400);
+  ck("the faded tile is removed once its fade ends", await p.locator(".heap.fx").count() === 0);
+  // 5.11: input during an animation is applied at once (the computer's take is animating, you take straight away)
+  await cpuDone(p);
+  await forge(p, { heaps: [4, 5, 6], s: { turn: "cpu" } });
+  await p.waitForFunction(() => window.__nine.state.turn === "you", null, { timeout: 3000 });
+  const busy = await p.evaluate(() => document.getAnimations().length > 0);
+  const ply0 = (await S(p)).ply;
+  await p.focus("#board"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("Enter");
+  s = await S(p);
+  ck("two quick keys during the computer's animation give a move (5.11)", busy && s.ply === ply0 + 1 && s.turn !== "you", JSON.stringify({ busy, ply0, ply: s.ply }));
+  ck("finish() ended the computer's motion: no stray nodes", await p.locator(".heap .ring, .heap.fx").count() === 0);
+  // rapid input: a take every 45 ms; frames, and the node count returns to the board's
+  await forge(p, { heaps: [9, 9, 9, 9, 9, 9, 9] });
+  const base = await p.evaluate(() => document.getElementById("heaps").getElementsByTagName("*").length);
+  const perf = await p.evaluate(() => new Promise((res) => {
+    const dts = []; let last = performance.now(), on = true, maxNodes = 0, n = 0;
+    (function f(t) { dts.push(t - last); last = t; if (on) requestAnimationFrame(f); })(last);
+    const iv = setInterval(() => {
+      const s = window.__nine.state; s.turn = "you"; s.roundOver = null;
+      if (s.heaps.every(v => v < 2)) s.heaps = [9, 9, 9, 9, 9, 9, 9];
+      window.__nine.state = s;
+      const i = s.heaps.findIndex(v => v > 1), b = document.querySelector('.heap[data-i="' + i + '"]');
+      b.click(); b.click(); document.getElementById("take").click();
+      maxNodes = Math.max(maxNodes, document.getElementById("heaps").getElementsByTagName("*").length);
+      if (++n >= 60) { clearInterval(iv); setTimeout(() => { on = false; window.__nine.finish(); dts.shift(); dts.sort((a, b) => a - b);
+        res({ n, p95: dts[Math.floor(dts.length * 0.95)], max: dts[dts.length - 1], maxNodes, after: document.getElementById("heaps").getElementsByTagName("*").length }); }, 400); }
+    }, 45);
+  }));
+  ck("60 rapid takes: p95 frame within 17.5 ms (headless vsync jitter, B2)", perf.p95 <= 17.5, JSON.stringify(perf));
+  ck("60 rapid takes: nodes stay within the board + 8, and return to it", perf.maxNodes <= base + 8 && perf.after === base, JSON.stringify({ base, perf }));
+  ck("no page errors (motion)", e4.length === 0, e4.join("|"));
+  await ctx.close();
+
+  // 8. reduced motion via the OS and via the in-app setting; the setting's Full beats the OS
+  for (const mode of [{ os: "reduce", set: null, red: true, name: "OS reduce" }, { os: "no-preference", set: "reduced", red: true, name: "setting Less" },
+                      { os: "reduce", set: "full", red: false, name: "OS reduce + setting Full" }]) {
+    ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: mode.os }); await seen(ctx);
+    if (mode.set) await ctx.addInitScript((m) => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, motion: m })); } catch (e) { /* blocked */ } }, mode.set);
+    p = await ctx.newPage(); const e5 = []; p.on("pageerror", e => e5.push(e.message));
+    await p.goto(page);
+    await forge(p, { heaps: [5, 3, 7] });
+    await p.locator('.heap[data-i="2"]').click(); await p.locator('.heap[data-i="2"] .pips i[data-k="4"]').click(); await p.click("#take");
+    pa = await pipAnims(p);
+    const mo = await motionAnims(p), num = +(await p.textContent('.heap[data-i="2"] .num'));
+    if (mode.red) ck(mode.name + ": pips fade together (no motion, at most 160 ms) and the number changes at once",
+      pa.length === 3 && pa.every(a => !a.motion && a.delay === 0 && a.dur <= 160) && mo === 0 && num === 4, JSON.stringify({ pa, mo, num }));
+    else ck(mode.name + ": the pips move", pa.length === 3 && pa.every(a => a.motion) && num > 4 && num < 7, JSON.stringify({ pa, num })); // counting down, not yet 4
+    await cpuDone(p); await p.waitForTimeout(50);
+    if (mode.red) ck(mode.name + ": the computer's take has no motion either", await motionAnims(p) === 0);
+    ck("no page errors (" + mode.name + ")", e5.length === 0, e5.join("|"));
+    await ctx.close();
+  }
+
+  // 9. trophies (REDESIGN.md 8.4): every Nine trophy on a scripted line, real booleans, pills on the end card
+  ctx = await browser.newContext({ viewport: { width: 375, height: 812 } }); await seen(ctx);
+  p = await ctx.newPage(); const e6 = []; p.on("pageerror", e => e6.push(e.message));
+  await p.goto(page);
+  await p.evaluate(() => { const T = window.NumbericsTrophies, orig = T.report; window.__ev = [];
+    T.report = function (g, ev, d) { window.__ev.push({ g, ev, d: JSON.parse(JSON.stringify(d)) }); return orig.apply(T, arguments); }; });
+  const has = (p, id) => p.evaluate((id) => window.NumbericsTrophies.has(id), id);
+  const takeAll = async (p, i, n) => { await p.locator('.heap[data-i="' + i + '"]').click(); for (let k = 1; k < n; k++) await p.click("#more"); await p.click("#take"); };
+  await forge(p, { heaps: [0, 2, 0], s: { score: { you: 0, cpu: 0 } } });
+  await takeAll(p, 1, 2); await card(p);
+  ck("nine_round: a won round", await has(p, "nine_round"));
+  ck("nine_ones not earned by a round with a take of 2", !(await has(p, "nine_ones")));
+  ck("the end card shows the trophy as a pill", (await p.textContent("#over-pills")).includes("Trophy: Last one's mine") && await p.isVisible("#over-pills .trophy"));
+  await shot(p, "pill");
+  await p.click("#again");
+  await forge(p, { heaps: [0, 0, 1], s: { score: { you: 1, cpu: 0 } } });
+  await takeAll(p, 2, 1); await card(p);
+  ck("nine_ones (secret): a round won with takes of one", await has(p, "nine_ones"));
+  await p.click("#again");
+  await forge(p, { heaps: [0, 0, 1], s: { score: { you: 2, cpu: 0 } } });
+  await takeAll(p, 2, 1); await card(p);
+  ck("nine_match: a won match, pill on the match card", await has(p, "nine_match") && (await p.textContent("#over-pills")).includes("Best of five"));
+  await shot(p, "match-pill");
+  ck("not nine_hard / nine_misere / nine_nine on a Medium 3-tile match", !(await has(p, "nine_hard")) && !(await has(p, "nine_misere")) && !(await has(p, "nine_nine")));
+  await p.click("#again");
+  await forge(p, { heaps: [0, 0, 1], s: { diff: "hard", score: { you: 2, cpu: 0 } } });
+  await takeAll(p, 2, 1); await card(p);
+  ck("nine_hard: a won match on Hard", await has(p, "nine_hard"));
+  await p.click("#again");
+  await forge(p, { heaps: [0, 1, 1], s: { misere: true, diff: "easy", score: { you: 2, cpu: 0 } } });
+  await takeAll(p, 1, 1); await card(p); // the computer must take the last one, and loses
+  ck("nine_misere: a won Misere match", await has(p, "nine_misere"), JSON.stringify((await S(p)).matchOver));
+  await p.click("#again");
+  await forge(p, { heaps: [0, 0, 0, 0, 0, 0, 0, 0, 1], s: { misere: false, score: { you: 2, cpu: 0 } } });
+  await takeAll(p, 8, 1); await card(p);
+  ck("nine_nine: a won match with nine tiles", await has(p, "nine_nine"));
+  await p.click("#again");
+  for (let k = 0; k < 10; k++) { await forge(p, { heaps: [2, 1, 0] }); await takeAll(p, 0, 1); }
+  ck("nine_calm (secret): ten takes in a row that leave a nim-sum of 0", await has(p, "nine_calm") && (await p.evaluate(() => window.__nine.run.zeroRun)) >= 10);
+  const evs = await p.evaluate(() => window.__ev);
+  const bools = evs.every(e => e.g === "nine" && (e.ev === "take" ? typeof e.d.zeroAfter === "boolean" && Number.isInteger(e.d.amount) && e.d.run && Number.isInteger(e.d.run.zeroRun) :
+    e.ev === "round" ? typeof e.d.won === "boolean" && typeof e.d.onlyOnes === "boolean" :
+    e.ev === "match" ? typeof e.d.won === "boolean" && typeof e.d.misere === "boolean" && Number.isInteger(e.d.tiles) && ["easy", "medium", "hard"].includes(e.d.diff) : false));
+  ck("events take, round and match carry exactly the 8.4 fields with real booleans", bools && ["take", "round", "match"].every(n => evs.some(e => e.ev === n)), JSON.stringify(evs.slice(0, 4)));
+  ck("progress: the card summary is written on persist", await p.evaluate(() => { const g = window.NumbericsProgress.get("nine"); return g && /^Won \d+, lost \d+$/.test(g.best) && typeof g.live === "boolean"; }));
+  ck("no page errors (trophies)", e6.length === 0, e6.join("|"));
   await ctx.close();
 };

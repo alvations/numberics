@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Numberics Sudoku</title>
-<meta name="description" content="Classic Sudoku with pencil notes, free undo, earned power-ups and three difficulties. Every puzzle has exactly one solution.">
+<meta name="description" content="Classic Sudoku with pencil notes, free undo, earned power-ups, three difficulties and a Daily. Every puzzle has exactly one solution.">
 <meta name="theme-color" content="#12131a">
 <script src="../shared/boot.js"></script>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314151c'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' font-family='sans-serif' font-weight='700' fill='%23f2b84b'%3E9%3C/text%3E%3C/svg%3E">
@@ -33,6 +33,7 @@
       <h2>Solved</h2>
       <p id="win-text"></p>
       <p id="win-best" class="best" hidden></p>
+      <div id="win-pills" class="tro-pills" hidden></div>
       <div class="row">
         <button id="win-view" class="btn" type="button">See the board</button>
         <button id="again" class="btn primary" type="button">New puzzle</button>
@@ -48,10 +49,16 @@
   <div id="pad" class="pad" role="group" aria-label="Number pad"></div>
 
   <div class="row"><button id="new" class="btn" type="button">New puzzle</button></div>
-  <p class="how">Fill every row, column and 3x3 box with 1 to 9. Keys: 1-9, arrows, Backspace, N notes, U undo,
-     H reveal, C check, F candidates. Every 9 cells with no clash earns a power-up.</p>
+  <details class="how" id="how">
+    <summary>How to play</summary>
+    <p>Fill every row, column and 3x3 box with 1 to 9. Keys: 1-9, arrows, Backspace, N notes, U undo,
+       H reveal, C check, F candidates. Every 9 cells with no clash earns a power-up.</p>
+    <p>Daily is one puzzle a day, the same for everyone. It is Easy Monday to Thursday,
+       Medium on Friday and Saturday, and Hard on Sunday.</p>
+    <p class="how-more"><button id="how-steps" class="btn" type="button">See the three steps</button></p>
+  </details>
 
-  <nav id="games" class="games" data-root="../" data-current="sudoku" aria-label="Numberics games"></nav>
+  <div id="games" class="cards" data-root="../" data-current="sudoku" aria-label="Numberics games"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

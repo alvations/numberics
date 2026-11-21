@@ -1,41 +1,47 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * Seven: only what shared/theme.css does not cover. A 7x7 well of round discs. */
+ * Seven: only what shared/theme.css does not cover. A 7x7 well of round discs (REDESIGN.md 2.1 discs, 5.5, 9.7). */
 .cells,.discs{ position:absolute; inset:var(--gap); }
 .discs{ pointer-events:none; }
 .cells{ display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(7,1fr); gap:calc(var(--gap) * .6); }
-.cells div{ background:var(--cell); border-radius:50%; transition:background-color 120ms; }
+/* the holes use the dark well token (9.7), sunk into the board */
+.cells div{ background:var(--well); border-radius:50%; box-shadow:inset 0 3px 6px rgba(0,0,0,.45); transition:background-color 120ms; }
 .cells div.col{ background:#2f3346; }
 .board:not(.targeting) .cells div.top.col{ box-shadow:0 0 0 2px var(--accent) inset; }
-/* a disc: the Endless tile, made round. --r/--c place it, --h colours it. Placed with the translate property, not
-   transform, so the appear and pop scale animations scale the disc in its own cell (with transform the scale also
-   shrank the offset, and a new disc flew in from the top left: craft nit 5, round 3) */
-.disc{ position:absolute; left:0; top:0; border-radius:50%;
-  width:calc((100% - 6 * var(--gap) * .6) / 7); height:calc((100% - 6 * var(--gap) * .6) / 7);
-  translate:calc(var(--c) * (100% + var(--gap) * .6)) calc(var(--r) * (100% + var(--gap) * .6));
-  transition:translate 140ms ease-in, opacity 140ms; font-size:7.4cqw; }
-.disc.egg{ background:#8b8d9e; box-shadow:inset 0 -3px 0 rgba(0,0,0,.18); }
-.disc.cracked{ background:#8b8d9e center/70% no-repeat
-  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 9 L7 12 L10 7 L13 12 L17 8' fill='none' stroke='%2315151d' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"); }
+/* the disc layer is NumbericsMotion's keyed layer (shared/motion.js): its --gap is the well's own gap (.6 of the board
+   gap, the board token values 10px and 8px written out so motion.js can read the pitch as a plain length) and the
+   layer clips, so a falling disc starts out of sight one slot above the top row */
+.discs{ --gap:6px; inset:10px; }
+@media (max-width:520px){ .discs{ --gap:4.8px; inset:8px; } }
+.discs > .disc > .face{ border-radius:50%; font-size:7.4cqw;
+  --own:hsl(var(--h,40) var(--tile-s) var(--tl)); --hi:hsl(var(--h,40) calc(var(--tile-s) + 6%) calc(var(--tl) + 14%));
+  background:radial-gradient(circle at 35% 30%, var(--hi), var(--own) 62%);
+  box-shadow:inset 0 -1cqw 0 rgba(0,0,0,.2), 0 .6cqw 1.2cqw rgba(0,0,0,.35); }
+:root[data-contrast="high"] .discs > .disc > .face{ box-shadow:inset 0 -1cqw 0 rgba(0,0,0,.2), 0 .6cqw 1.2cqw rgba(0,0,0,.35), inset 0 0 0 2px rgba(0,0,0,.55); }
+.discs > .disc.egg > .face,.discs > .disc.cracked > .face{ --own:#8b8d9e; --hi:#b7b9c6; }
+.discs > .disc.cracked > .face{ background:center/70% no-repeat
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 9 L7 12 L10 7 L13 12 L17 8' fill='none' stroke='%2315151d' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"),
+  radial-gradient(circle at 35% 30%, var(--hi), var(--own) 62%); }
+/* the rising row: the whole stack moves up one pitch over 180 ms (5.5), not the 110 ms slide */
+.discs.rising > .disc{ transition-duration:180ms; transition-timing-function:var(--e-out); }
+/* the preview (an outline, never a filled disc: it must not be counted in a line, cold #14) and the targeting marks
+   are plain nodes in the layer, placed on the same pitch as the discs */
+.disc.ghost,.disc.aim{ position:absolute; left:0; top:0; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  width:calc((100% - 6 * var(--gap)) / 7); height:calc((100% - 6 * var(--gap)) / 7);
+  transform:translate(calc(var(--c) * (100% + var(--gap))), calc(var(--r) * (100% + var(--gap)))); }
 .disc.ghost{ background:none; box-shadow:none; color:hsl(var(--h,40) 62% 66%); border:2px dashed hsl(var(--h,40) 62% 60%);
-  font-size:5.2cqw; opacity:.8; }
+  font-size:5.2cqw; font-weight:800; opacity:.8; }
 .disc.ghost.egg,.disc.ghost.cracked{ background:none; border-color:#8b8d9e; }
-/* the preview is a dashed outline with its number, never a filled disc: it must not be counted in a line (cold #14, round 3) */
-.disc.popping{ animation:sv-pop 150ms ease-out forwards; }
-.disc.gone{ opacity:0; }
-.disc.flash{ animation:sv-flash 220ms ease-out; }
-@keyframes sv-pop{ 40%{ scale:1.18; } 100%{ scale:.2; opacity:0; } }
-@keyframes sv-flash{ 50%{ scale:1.1; filter:brightness(1.25); } }
 .board.targeting .disc:not(.ghost){ cursor:crosshair; }
 /* targeting marks (Smash aim, the eggs a Crack would crack) and the discs pushed out at the end */
-.disc.aim{ background:none; box-shadow:0 0 0 3px var(--accent); pointer-events:none; transition:none; }
-.disc.out{ box-shadow:0 0 0 3px var(--bad); }
+.disc.aim{ background:none; box-shadow:0 0 0 3px var(--accent); pointer-events:none; z-index:3; }
+.disc.out > .face{ box-shadow:0 0 0 3px var(--bad); }
 /* the next disc in a stat pill, and the held disc in the Hold button */
 .mini{ font-style:normal; display:inline-flex; align-items:center; justify-content:center; width:1.45em; height:1.45em; border-radius:50%;
   font-weight:800; font-size:.95rem; color:#15151d; background:hsl(var(--h,40) 62% 60%); vertical-align:middle; line-height:1; }
 .mini.egg,.mini.cracked{ background:#8b8d9e; box-shadow:inset 0 -2px 0 rgba(0,0,0,.18); }
 .mini.cracked{ background:#8b8d9e center/70% no-repeat
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 9 L7 12 L10 7 L13 12 L17 8' fill='none' stroke='%2315151d' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"); }
-.stat b.next{ display:flex; justify-content:center; align-items:center; height:1.54rem; }
+.stat b.next{ display:flex; justify-content:center; align-items:center; height:1.54rem; overflow:clip; }
 .stat b.next .mini{ width:1.5rem; height:1.5rem; font-size:.95rem; }
 /* an egg in the Next pill is named, so it never reads as an empty or broken disc (craft #3, cold #3) */
 .stat b.next .mini.egg{ font-size:.66rem; font-weight:700; letter-spacing:.02em; }
@@ -46,9 +52,14 @@
 .pips i.used{ background:var(--line); }
 .over .row{ margin:4px 0 0; }
 .over .btn[hidden]{ display:none; }
-@media (prefers-reduced-motion:reduce){
-  .disc{ transition:opacity 140ms; }
-  .disc.popping,.disc.flash{ animation:none; }
-}
+/* how to play: the steps' small wells (the sheet) and the key list in the collapsed row */
+.howto .pv .md.ring{ box-shadow:0 0 0 2px var(--accent); }
+.howto .pv .md.egg{ background:#8b8d9e; }
+.howto .pv .md.cracked{ background:#8b8d9e center/70% no-repeat
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 9 L7 12 L10 7 L13 12 L17 8' fill='none' stroke='%2315151d' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E"); }
+.howto .pv .md.col{ background:var(--line-2); }
+.howto .pv .to{ color:var(--mute); font-weight:800; font-size:13px; }
+details.how .keys{ color:var(--faint); }
+details.how .row{ margin:0 14px 12px; }
 /* the main phone size (390x844) fits without scrolling (craft F15) */
 .pips{ margin-top:6px; } #app > .row{ margin:8px 0 4px; } .how{ margin:6px 0; }

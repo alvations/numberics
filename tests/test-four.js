@@ -481,6 +481,49 @@ const M4 = require("../tools/measure-four.js");
 t("balance: the careful player beats Easy 70%+ of the time", () => { const r = M4.measure("easy", "careful", 200).rate; ok(r >= 0.68, "easy " + r); });
 t("balance: the careful player beats Medium about 40-50% of the time", () => { const r = M4.measure("medium", "careful", 100).rate; ok(r >= 0.33 && r <= 0.57, "medium " + r); });
 
+// ---- Redesign D-Four: the trophy event fields (REDESIGN.md 8.4) and the client's wiring ----
+const fs = require("fs"), path = require("path");
+// the client's `how` and `lastSlot`, exactly as four/game.js derives them from the winning drop
+function endEvent(s, r) {
+  return { won: s.over.winner === 1, level: s.level, how: r.win ? (r.win.both ? "both" : r.win.type) : "colour",
+    lastSlot: s.over.winner === 1 && s.own.every(Boolean), used: s.used[0] };
+}
+const TRO = require("../shared/trophies.js");
+const fires = ev => TRO.REG.filter(x => x.game === "four" && x.test(ev, { fam: {}, hour: 12, today: "20261120" })).map(x => x.id).sort();
+t("trophy events: a colour win, a ten win, one disc making both, and the very last slot", () => {
+  let s = board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1]], { level: "easy", next: [1, 1] }); s.turn = 1;
+  let r = F.drop(s, 3); eq(fires(endEvent(r.state, r)), ["four_colour", "four_win"]);
+  s = board([[0, 0, 2, 4], [0, 1, 1, 1], [0, 2, 2, 2]], { level: "hard", next: [3, 1] }); s.turn = 1;
+  r = F.drop(s, 3); eq(fires(endEvent(r.state, r)), ["four_hard", "four_pure", "four_ten", "four_win"]);
+  s = board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1], [0, 4, 2, 1], [0, 5, 1, 2], [0, 6, 2, 1], [1, 4, 2, 4], [1, 5, 2, 2], [1, 6, 1, 2],
+    [2, 5, 1, 3], [2, 6, 2, 1], [3, 6, 2, 2]], { level: "medium", next: [1, 1] }); s.turn = 1;
+  r = F.drop(s, 3); ok(r.win.both, "both"); eq(endEvent(r.state, r).how, "both");
+  eq(fires(endEvent(r.state, r)), ["four_both", "four_colour", "four_medium", "four_ten", "four_win"]);
+  const LASTO = [1, 2, 2, 1, 2, 2, 1, 1, 1, 2, 2, 2, 1, 1, 1, 2, 1, 1, 2, 2, 2, 2, 2, 1, 2, 1, 1, 1, 1, 1, 2, 2, 1, 1, 2, 2, 1, 1, 2, 2, 2];
+  s = board(LASTO.map((w, i) => [Math.floor(i / C), i % C, w, 1]), { level: "medium", next: [1, 1] }); s.turn = 1;
+  ok(!s.over && F.legal(s).length === 1, "one slot left");
+  r = F.drop(s, 6); ok(r.state.over && r.state.over.winner === 1, "won"); ok(endEvent(r.state, r).lastSlot === true, "lastSlot");
+  ok(fires(endEvent(r.state, r)).includes("four_last"));
+  s = board([[0, 0, 1, 1], [0, 1, 1, 1], [0, 2, 1, 1]], { level: "hard", next: [1, 1] }); s.turn = 1; s.used = [1, 0];
+  r = F.drop(s, 3); ok(!fires(endEvent(r.state, r)).includes("four_pure"), "a power-up used: not bare hands");
+  const ev = endEvent(r.state, r);
+  ok(typeof ev.won === "boolean" && typeof ev.lastSlot === "boolean" && ["colour", "ten", "both"].includes(ev.how), "real booleans, three values");
+});
+t("client: keyed disc layer, first visit on Easy, quiet trophy report with pills, progress, music duck", () => {
+  const g = fs.readFileSync(path.join(__dirname, "../four/game.js"), "utf8");
+  ok(/M\.layer\(discsEl/.test(g) && /falls: \[\{ id: ids\[r\.cell\]/.test(g), "layer + falls");
+  ok(!/slot\.textContent = ""/.test(g) && !/createElement\("div"\)[^\n]*disc/.test(g.split("function renderBoard")[1].split("function render()")[0]), "renderBoard never creates discs");
+  ok(/: "easy";/.test(g), "first visit Easy");
+  ok(/TR\.report\("four", "end", \{ won:/.test(g) && /\{ quiet: true \}/.test(g) && /TR\.pills\(\$\("tro"\)/.test(g), "trophies");
+  ok(/NP\.put\("four"/.test(g) && /seenHowto\("four"\)/.test(g) && /markHowto\("four"\)/.test(g), "progress + how-to");
+  ok(/NumbericsMusic\.duck\(on\)/.test(g) && /duck\(true\)/.test(g) && /duck\(false\)/.test(g), "music duck");
+  ok(!/K\.reducedMotion\(\)/.test(g) && !/ANIM\s*=/.test(g), "motion read at animation time");
+  const h = fs.readFileSync(path.join(__dirname, "../four/index.html"), "utf8");
+  ok(/<details class="how">/.test(h) && /id="games" class="cards/.test(h) && /class="tro-pills"/.test(h) && !/<nav id="games"/.test(h), "page");
+  const c = fs.readFileSync(path.join(__dirname, "../four/style.css"), "utf8");
+  ok(!/(transition|@keyframes)[^}]*\b(width|height|top|left|margin|padding)\b\s*[\s:]/.test(c.replace(/\/\*[\s\S]*?\*\//g, "")) && !/four-fall/.test(c), "css animates transform/opacity only");
+});
+
 require("./conventions")(t, ok, ["four/engine.js", "four/game.js", "four/index.html", "four/style.css"]);
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

@@ -42,7 +42,8 @@ const KEY = "numberics_settings_v1";
 
 t("defaults match REDESIGN.md 6.1", () => {
   const S = load().NumbericsSettings;
-  ok(JSON.stringify(S.get()) === JSON.stringify({ v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "dark", text: "normal", contrast: "normal" }));
+  ok(JSON.stringify(S.get()) === JSON.stringify({ v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "dark", text: "normal", contrast: "normal",
+    music: true, musicVolume: 0.5, musicStyle: "auto" }), "with the music fields of MUSIC.md");
   ok(S.KEY === KEY);
 });
 t("malformed fields fall back to the default one by one", () => {
@@ -110,13 +111,33 @@ t("another tab saving the settings updates this page", () => {
   c.listeners.storage.forEach(f => f({ key: "numberics_other", newValue: "1" })); ok(seen.length === 1);
 });
 
+t("music fields (MUSIC.md): normalised one by one, saved, announced", () => {
+  const S = load({ stored: { [KEY]: JSON.stringify({ music: "no", musicVolume: 3, musicStyle: "disco" }) } }).NumbericsSettings;
+  let s = S.get(); ok(s.music === true && s.musicVolume === 1 && s.musicStyle === "auto", JSON.stringify(s));
+  ok(S.normalize({ musicVolume: 0.333 }).musicVolume === 0.33 && S.normalize({ musicVolume: -2 }).musicVolume === 0 && S.normalize({ musicVolume: NaN }).musicVolume === 0.5);
+  ["auto", "chill", "drift", "pocket", "quest", "blocks", "pulse", "epic"].forEach(id => ok(S.normalize({ musicStyle: id }).musicStyle === id, id));
+  ok(S.normalize({ music: false }).music === false && S.normalize({ musicStyle: "Chill" }).musicStyle === "auto");
+  const c = load(), T = c.NumbericsSettings, seen = [];
+  T.on("change", (x, k) => seen.push(k.join(",")));
+  T.set({ music: false, musicVolume: 0.8, musicStyle: "epic" });
+  ok(seen[0] === "music,musicVolume,musicStyle", seen[0]);
+  const ev = c.events[c.events.length - 1]; ok(ev.type === "numberics:settings" && ev.detail.music === false && ev.detail.musicStyle === "epic", "event carries them");
+  const saved = JSON.parse(c.localStorage.getItem(KEY)); ok(saved.musicVolume === 0.8 && saved.musicStyle === "epic", "stored");
+});
+t("the style list in settings.js matches music.js (ids, names, blurbs, menu order)", () => {
+  const M = require("../shared/music.js"), S = load().NumbericsSettings;
+  ok(JSON.stringify(S.STYLES.map(x => x.id)) === JSON.stringify(M.ORDER), "order");
+  S.STYLES.forEach(x => ok(M.STYLES[x.id].name === x.name && M.STYLES[x.id].blurb === x.blurb, x.id));
+});
+
 // ---- Memory ----
 const SAVES = {
   numberics_endless_v1: JSON.stringify({ grid: [1, 2, 3], score: 1136, seed: 42 }),
   numberics_sudoku_v1: JSON.stringify({ best: { easy: 301 }, note: "café ✓ 数字" }),
   numberics_trophies_v1: JSON.stringify({ got: { fam_first: 20261120 } }),
   numberics_progress_v1: "{\"two\":{\"best\":\"Best 2048\"}}",
-  [KEY]: JSON.stringify({ v: 1, sound: false, volume: 0.25, haptics: true, motion: "reduced", theme: "light", text: "large", contrast: "high" })
+  [KEY]: JSON.stringify({ v: 1, sound: false, volume: 0.25, haptics: true, motion: "reduced", theme: "light", text: "large", contrast: "high",
+    music: false, musicVolume: 0.3, musicStyle: "pulse" })
 };
 t("the blob is the melon-eight keystream XOR (FNV-1a seed of 'numberics', xorshift) and round-trips UTF-8", () => {
   const M = load().NumbericsSettings.memory, obj = { a: "café 数", n: [1, 2, 3] };
@@ -139,6 +160,7 @@ t("Save -> Load round-trips every numberics_* key byte for byte, and only those"
   ok(b.localStorage.getItem("other_app") === null, "foreign keys are not saved");
   ok(b.localStorage.getItem("numberics_six_v1") === "{\"untouched\":1}", "keys the file does not hold are left alone");
   ok(b.NumbericsSettings.get().theme === "light" && b.NumbericsSettings.get().volume === 0.25, "settings come with the save");
+  const g = b.NumbericsSettings.get(); ok(g.music === false && g.musicVolume === 0.3 && g.musicStyle === "pulse", "the music fields too " + JSON.stringify(g));
 });
 t("Save with storage blocked still carries the in-memory settings", () => {
   const c = load({ blocked: true }); c.NumbericsSettings.set({ text: "large" });

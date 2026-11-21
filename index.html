@@ -37,6 +37,7 @@
       <h2>No moves left</h2>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-pills" class="tro-pills" hidden></div>
       <div class="row">
         <button id="over-view" class="btn" type="button">See the board</button>
         <button id="again" class="btn primary" type="button">New game</button>
@@ -47,9 +48,12 @@
   <div class="row">
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up.
+  <details class="how"><summary>How to play</summary>
+    <p>Slide with arrow keys, WASD or a swipe. Equal tiles merge. Every new highest tile from 32 up earns a power-up.
      Swapped and boosted tiles never earn a reward, and neither does the move right after a Smash, Swap or Boost.
      Keys 1 to 4 use the power-ups. Merge past 2048 and keep going.</p>
+    <p><button id="how-steps" class="btn" type="button">Show the three steps</button></p>
+  </details>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <aside class="side" aria-labelledby="more">

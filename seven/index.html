@@ -43,6 +43,7 @@
       <h2 id="over-title">The well overflowed</h2>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden>New best.</p>
+      <div id="over-pills" class="tro-pills" hidden></div>
       <div class="row">
         <button id="over-end" class="btn" type="button" hidden>End the run</button>
         <button id="over-undo" class="btn primary" type="button" hidden>Undo the last drop</button>
@@ -54,8 +55,14 @@
   <div id="pips" class="pips" role="img"></div>
 
   <div class="row"><button id="new" class="btn" type="button">New game</button></div>
-  <p class="how">Drop the Next disc: tap a column, or use Left/Right and Enter. A disc pops when its number equals the
+  <details class="how" id="how"><summary>How to play</summary>
+    <p>Drop the Next disc: tap a column, or use Left/Right and Enter. A disc pops when its number equals the
      length of its line across or down. A grey disc is an egg: a pop beside it cracks it, a second opens it into a number.</p>
+    <p>A chain of 3 waves or a Lucky Seven earns a power-up. A power-up never earns one: the drop right after Smash,
+     Hold or Crack still scores, but pays no power-up.</p>
+    <p class="keys">Keys: Left and Right pick a column. Enter, Space or Down drops. 1 to 4 use a power-up, U is Undo, Esc cancels.</p>
+    <div class="row"><button id="how-steps" class="btn" type="button">Show the steps</button></div>
+  </details>
   <nav id="games" class="games" data-root="../" data-current="seven" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>

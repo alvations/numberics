@@ -443,5 +443,37 @@ t("state is plain JSON (saveable)", () => {
   eq(JSON.parse(JSON.stringify(s)), s);
 });
 
+// D-Nine (REDESIGN.md 5.7, 8.4, 9.8): static checks on the client and the page
+const fs = require("fs"), path = require("path");
+const G = fs.readFileSync(path.join(__dirname, "..", "nine", "game.js"), "utf8");
+const H = fs.readFileSync(path.join(__dirname, "..", "nine", "index.html"), "utf8");
+const C = fs.readFileSync(path.join(__dirname, "..", "nine", "style.css"), "utf8");
+t("D-Nine: trophy events are exactly take, round and match with the 8.4 fields", () => {
+  const evs = [...G.matchAll(/report\("(\w+)", \{([^}]*)\}/g)].map(m => [m[1], m[2].match(/(\w+):/g).map(x => x.slice(0, -1))]);
+  eq(evs.map(e => e[0]).sort(), ["match", "round", "take"]);
+  eq(evs.find(e => e[0] === "take")[1], ["amount", "zeroAfter", "run"]);
+  eq(evs.find(e => e[0] === "round")[1], ["won", "onlyOnes"]);
+  eq(evs.find(e => e[0] === "match")[1], ["won", "diff", "misere", "tiles"]);
+  ok(/zeroAfter = N\.nimSum\(state\.heaps\) === 0/.test(G), "zeroAfter from the engine's own nim-sum helper");
+});
+t("D-Nine: motion uses the shared tokens (pipOut, pipStagger), every input finishes the running motion first", () => {
+  ok(/M\.T\.pipOut/.test(G) && /M\.T\.pipStagger/.test(G) && /M\.reduced\(\)/.test(G), "tokens and the live reduced read");
+  ok(!/K\.reducedMotion\(\)\s*\?\s*0/.test(G) && !/ANIM\s*=/.test(G), "no cached ANIM constant");
+  const handlers = (G.match(/fxFinish\(\)/g) || []).length; ok(handlers >= 10, "fxFinish calls: " + handlers);
+  ok(!/"\s*cpu new"/.test(G), "the computer's tile no longer uses the old CSS appear class");
+});
+t("D-Nine: how-to row, the three steps, end-card pills, cards, music duck, progress", () => {
+  ok(/<details class="how"[^>]*><summary>How to play<\/summary>/.test(H), "collapsed How to play row");
+  ok(/On Hard the computer can also Pass and Add\./.test(H.replace(/\s+/g, " ")), "rules text kept word for word");
+  ["Tap a tile, then choose how many to take.", "You and the computer take turns.", "Take the very last one to win the round."].forEach(x => ok(G.includes(x), x));
+  ok(/<div id="over-pills" class="tro-pills" hidden><\/div>/.test(H) && /class="over"[\s\S]*over-pills/.test(H), "pills inside the end card");
+  ok(/id="games" class="cards"/.test(H), "the games cards at the page foot");
+  ok(/NumbericsMusic\.duck\(up\)/.test(G) && !/music\.js/.test(H), "music ducks with the card; music.js is never loaded here");
+  ok(/PR\.put\("nine"/.test(G) && /seenHowto\("nine"\)/.test(G) && /markHowto\("nine"\)/.test(G), "progress and the how-to memory");
+});
+t("D-Nine: the style animates nothing but transform and opacity", () => {
+  ok(!/transition:[^;}]*(width|height|top|left|margin|padding)/.test(C) && !/@keyframes/.test(C), "no layout transitions or keyframes");
+});
+
 require("./conventions")(t, ok, ["nine/engine.js", "nine/game.js", "nine/index.html", "nine/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

@@ -21,10 +21,12 @@
 .pips i.p{ background:var(--accent); border-color:var(--accent); }
 .pips i.c{ background:var(--mute); border-color:var(--mute); }
 .pips i.now{ box-shadow:0 0 0 2px var(--ink); }
-.fx{ position:absolute; inset:0; pointer-events:none; }
-.fly{ position:absolute; font-size:12cqw; transition:translate 200ms ease-in, scale 200ms ease-in, opacity 200ms ease-in; z-index:2; }
-.ghost{ position:absolute; font-size:17cqw; animation:five-burst 320ms ease-out forwards; z-index:2; }
-@keyframes five-burst{ to{ opacity:0; scale:1.45; } }
+.fx{ position:absolute; inset:0; pointer-events:none; overflow:visible; }
+/* REDESIGN.md 5.6: the flying copy and the burst are driven by NumbericsMotion (transform and opacity only) */
+.fly{ position:absolute; font-size:12cqw; z-index:2; will-change:transform; }
+.ghost{ position:absolute; font-size:17cqw; z-index:2; }
+.shard{ position:absolute; z-index:3; border-radius:1px; background:hsl(var(--h,40) var(--tile-s) var(--tile-l)); }
+.shard.lo{ background:var(--tile-lo); } .shard.lo2{ background:var(--tile-lo2); }
 /* round 3 (craft #2): the burst that decides the round stays lit for the whole 1.5 s hold, then the card */
 .ghost.final{ animation:five-final 1500ms ease-out forwards; box-shadow:0 0 0 3px var(--accent), 0 0 26px hsl(var(--h) 80% 60% / .6); }
 @keyframes five-final{ 0%{ scale:1; } 18%{ scale:1.12; } 75%{ opacity:1; } 100%{ opacity:.25; scale:1.12; } }
@@ -32,14 +34,18 @@
 .slot.last .tile{ box-shadow:0 0 0 2px var(--cool); }
 .slot.dead.last::after{ border-color:var(--cool); }
 .over h2{ color:var(--ink); }
-@media (prefers-reduced-motion:reduce){
-  .slot .tile{ transition:none; }
-  .slot.sel .tile{ translate:none; }
-  .fly{ transition:opacity 200ms; }
-  .ghost{ animation:five-fade 320ms ease-out forwards; }
-  .ghost.final{ animation:five-final-fade 1500ms ease-out forwards; }
-}
-@keyframes five-fade{ to{ opacity:0; } }
+/* reduced motion follows html[data-motion] (the in-app setting first, then the device), not the media query */
+:root[data-motion="reduced"] .slot .tile{ transition:none; }
+:root[data-motion="reduced"] .slot.sel .tile{ translate:none; }
+:root[data-motion="reduced"] .ghost.final{ animation:five-final-fade 1500ms ease-out forwards; }
 @keyframes five-final-fade{ 75%{ opacity:1; } 100%{ opacity:.25; } }
 .slot.dead.hit::after{ border-color:var(--accent); } /* R13: the tile that burst to end the round */
 .over .row{ margin:4px 0 0; }
+/* the how-to steps (REDESIGN.md 9.5) */
+details.how p .btn{ min-height:var(--tap); }
+.howto .five-burst{ color:var(--accent-text); font-size:18px; font-weight:850; }
+.howto .eq .mt{ width:30px; height:30px; }
+.five-pv3{ display:flex; align-items:center; gap:8px; }
+.five-out{ width:28px; height:28px; border-radius:7px; border:2px dashed var(--line-2); }
+.five-pips{ display:flex; gap:3px; margin-left:4px; }
+.five-pips i{ width:8px; height:8px; border-radius:50%; background:var(--accent); }

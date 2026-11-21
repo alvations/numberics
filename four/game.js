@@ -1,9 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Numberics Four: browser client. four/engine.js owns every rule (and the computer);
- * this file only draws, listens, and remembers. */
+ * this file only draws, listens, and remembers.
+ * Motion (docs/design/REDESIGN.md 5.5): every disc is a keyed node in a NumbericsMotion layer. A dropped disc (yours
+ * or the computer's) falls from one slot above the board with gravity and settles; Pop drops the discs above by one
+ * slot; the winning line is drawn through the four centres. A new input finishes the running animation first and is
+ * applied at once; sounds sit on a timeline that a new input drops. */
 (function () {
   "use strict";
-  var F = window.NumbericsFour, K = window.NumbericsKit, P = window.NumbericsPower;
+  var F = window.NumbericsFour, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
+  var A = window.NumbericsAudio, TR = window.NumbericsTrophies, NP = window.NumbericsProgress;
   var store = K.store("numberics_four_v1");
   var COLS = F.COLS, ROWS = F.ROWS;
   var THINK = 380, OVER_DELAY = 1500; // the winning line stays in view before the result card
@@ -22,6 +27,11 @@
   var NAMES = { undo: "Undo", pop: "Pop", hold: "Hold", tune: "Tune" };
   var LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
+  // sounds and haptics never break the page (a missing module costs a nicety)
+  function sfx(name, arg) { try { if (A && typeof A[name] === "function") A[name](arg); } catch (e) { /* silent */ } }
+  function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* silent */ } }
+  function sheetOpen() { try { return !!(window.NumbericsUI && window.NumbericsUI.open()); } catch (e) { return false; } }
+
   function okArr(a, max) { return Array.isArray(a) && a.length === COLS * ROWS && a.every(function (v) { return Number.isInteger(v) && v >= 0 && v <= max; }); }
   function okStock(p) { return p && F.POWERS.every(function (n) { return Number.isInteger(p[n]) && p[n] >= 0 && p[n] <= F.CAP; }); }
   function valid(s) {
@@ -37,22 +47,117 @@
 
   var saved = store.load();
   var rec = okRec(saved && saved.rec);
-  var level = saved && F.LEVELS.indexOf(saved.level) >= 0 ? saved.level : "medium";
+  // REDESIGN.md 1.3: a first visit (no saved state) starts on Easy; a saved choice is always kept
+  var level = saved && F.LEVELS.indexOf(saved.level) >= 0 ? saved.level : "easy";
   var state = saved && valid(saved.state) ? saved.state : F.newGame(K.freshSeed(), { level: level });
   var counted = !!(saved && saved.counted);       // this game's result is already in the record
   var cursor = 3, targeting = null;               // {name}
   var popCur = -1, note = "";                     // Pop's keyboard cursor (a cell); a tray explanation (R5)
-  var cpuTimer = null, overTimer = null, fx = null, fxUntil = 0;
+  var cpuTimer = null, overTimer = null;
   var viewing = false;                            // R13: the end card is hidden to look at the board
+  var lineShown = !!state.over;                   // the winning line (ring, dim, SVG line) shows once the disc lands
+  var troIds = [], troSaid = false;               // trophies earned by this game's end, shown as pills on the card
 
   var $ = function (id) { return document.getElementById(id); };
-  var boardEl = $("board"), gridEl = $("grid"), slots = [];
+  var boardEl = $("board"), gridEl = $("grid"), discsEl = $("discs"), lineEl = $("winline"), slots = [];
   // grid is drawn top row first; slots[cell] with cell = r*7+c, r = 0 the bottom
   for (var vr = ROWS - 1; vr >= 0; vr--) for (var c = 0; c < COLS; c++) {
     var d = document.createElement("div"); d.className = "slot"; gridEl.appendChild(d); slots[vr * COLS + c] = d;
   }
+  // the aimed column's preview disc: one node, moved between slots, never rebuilt
+  var ghostEl = document.createElement("div"); ghostEl.className = "disc p1 ghost"; ghostEl.setAttribute("aria-hidden", "true");
 
-  function persist() { store.save({ state: state, level: level, rec: rec, counted: counted }); }
+  // ---- the keyed disc layer (NumbericsMotion). ids[cell] is the client's identity map, never in the save ----
+  var ids = [], nextId = 1;
+  var layer = M.layer(discsEl, {
+    cols: COLS, rows: ROWS, clip: true,
+    make: function () {
+      var t = document.createElement("div"), f = document.createElement("div");
+      f.className = "face"; t.appendChild(f); return t;
+    },
+    paint: function (node, t) {
+      var f = node.firstChild;
+      f.className = "face disc p" + t.who; f.textContent = t.n;
+      f.setAttribute("aria-label", (t.who === 1 ? "your " : "computer ") + t.n);
+    }
+  });
+  function tilesOf() {
+    var out = [];
+    for (var cell = 0; cell < COLS * ROWS; cell++) if (state.own[cell])
+      out.push({ id: ids[cell], r: ROWS - 1 - Math.floor(cell / COLS), c: cell % COLS, who: state.own[cell], n: state.num[cell] });
+    return out;
+  }
+  // every disc gets a fresh identity (New game, load, a forged state): the layer swaps nodes without a fall
+  function rekey(fade) {
+    ids = [];
+    for (var cell = 0; cell < COLS * ROWS; cell++) if (state.own[cell]) ids[cell] = nextId++;
+    layer.sync(tilesOf(), { fade: !!fade });
+  }
+  // the slots travelled: from one slot above the top row down to the landing row
+  function rowsTo(cell) { return ROWS - Math.floor(cell / COLS); }
+  // Pop at a cell: the popped disc fades out, every disc above it drops one slot. Returns the fx parts.
+  function popIds(cell) {
+    var col = cell % COLS, out = [], falls = [];
+    if (ids[cell]) out.push(ids[cell]);
+    for (var r = Math.floor(cell / COLS); r < ROWS; r++) {
+      var up = r + 1 < ROWS ? ids[(r + 1) * COLS + col] : 0;
+      ids[r * COLS + col] = up || 0;
+      if (up) falls.push({ id: up, rows: 1 });
+    }
+    return { out: out, falls: falls };
+  }
+
+  // ---- timelines: `beats` holds visual steps (a new input runs them now), `sounds` holds sounds (a new input drops them) ----
+  var beats = M.seq(), sounds = M.seq(), lineAnim = null;
+  function settle() { // REDESIGN.md 5.11: the end state now, then the new input is applied
+    layer.finish(); beats.finish(); sounds.cancel();
+    if (lineAnim) { try { lineAnim.finish(); } catch (e) { /* gone */ } lineAnim = null; }
+  }
+  // a disc lands after its fall: the land sound and tap at impact; the reward chime; the line for a winning drop
+  function landed(rows, r) {
+    var t = M.reduced() ? 0 : M.fallMs(rows);
+    sounds.at(t, function () { sfx("land"); sfx("buzz", "tap"); if (r.award) sfx("power"); });
+    if (r.win || (state.over && state.over.winner === 0)) {
+      lineShown = false;
+      beats.at(t, function () {
+        lineShown = true; renderBoard(); drawLine(true);
+        if (state.over && state.over.winner === 1) { sfx("win"); sfx("buzz", "win"); }
+        else if (state.over && state.over.winner === 2) { sfx("lose"); sfx("buzz", "lose"); }
+      });
+    }
+  }
+
+  // ---- the winning line: an SVG line through the four disc centres, drawn once the disc has landed ----
+  function hideLine() { lineEl.setAttribute("hidden", ""); lineEl.textContent = ""; }
+  function drawLine(animate) {
+    var o = state.over;
+    if (!o || !o.winner || !o.line || o.line.length < 2) return hideLine();
+    // one measurement per line (REDESIGN.md 5.13): the grid, its gap and the board width
+    var W = gridEl.clientWidth, H = gridEl.clientHeight, gap = parseFloat(getComputedStyle(gridEl).columnGap) || 0, B = boardEl.clientWidth;
+    if (!W || !H) return hideLine();
+    var sw = (W - (COLS - 1) * gap) / COLS, sh = (H - (ROWS - 1) * gap) / ROWS;
+    var pts = o.line.map(function (cell) {
+      var col = cell % COLS, vrow = ROWS - 1 - Math.floor(cell / COLS);
+      return [col * (sw + gap) + sw / 2, vrow * (sh + gap) + sh / 2];
+    });
+    var a = pts[0], b = pts[pts.length - 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    lineEl.setAttribute("viewBox", "0 0 " + W + " " + H);
+    lineEl.innerHTML = '<line x1="' + a[0] + '" y1="' + a[1] + '" x2="' + b[0] + '" y2="' + b[1] + '"/>';
+    var ln = lineEl.firstChild;
+    ln.style.strokeWidth = (B * 0.009).toFixed(2) + "px"; ln.style.strokeDasharray = len; ln.style.strokeDashoffset = "0";
+    lineEl.removeAttribute("hidden");
+    if (animate) lineAnim = M.play(ln, [{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: M.T.line, easing: M.E.out },
+      [{ opacity: 0 }, { opacity: 1 }]);
+  }
+
+  function bestText() {
+    var r = rec[level];
+    return r.w || r.l || r.d ? LEVEL_NAMES[level] + " " + r.w + "-" + r.l + (r.d ? "-" + r.d : "") : "";
+  }
+  function persist() {
+    store.save({ state: state, level: level, rec: rec, counted: counted, run: { used: state.used[0] } });
+    try { if (NP) NP.put("four", { best: bestText(), live: inProgress(), liveText: LEVEL_NAMES[state.level] + " game" }); } catch (e) { /* progress is a nicety */ }
+  }
   // discs are filled by owner (gold yours, cool the computer's); the number is printed on them
   function mini(el, n) { el.textContent = n ? String(n) : "none"; el.classList.toggle("none", !n); }
   function landing(col) { var h = F.height(state.own, col); return h < ROWS ? h * COLS + col : -1; }
@@ -63,7 +168,8 @@
     var th = F.threats(state); return th.filter(function (x) { return landing(x % COLS) === x; }).length;
   }
 
-  function render() {
+  // the board's marks: slot classes and the disc classes. Touches classes only; never creates a disc.
+  function renderBoard() {
     var over = state.over, winCells = {};
     if (over && over.line) over.line.forEach(function (x) { winCells[x] = 1; });
     var ghost = myTurn() && !targeting ? landing(cursor) : -1, popping = targeting && targeting.name === "pop";
@@ -71,32 +177,32 @@
     if (SHOW_THREATS[state.level] && !over) F.threats(state).forEach(function (x) { threat[x] = 1; });
     Object.keys(marks).forEach(function (c) { risky[landing(+c)] = 1; });
     if (ghost >= 0 && marks[cursor]) marks[cursor].cells.forEach(function (x) { opened[x] = 1; });
+    var lit = lineShown && over;
     slots.forEach(function (slot, cell) {
-      slot.textContent = ""; slot.className = "slot";
-      if (threat[cell]) slot.classList.add("threat");
-      if (risky[cell]) slot.classList.add("risky");
-      if (opened[cell]) slot.classList.add("opens");
+      var cls = "slot" + (threat[cell] ? " threat" : "") + (risky[cell] ? " risky" : "") + (opened[cell] ? " opens" : "") +
+        (!targeting && myTurn() && cell % COLS === cursor ? " aim" : "") + (popping && cell === popCur ? " cur" : "") +
+        (popping && state.own[cell] && F.canPop(state, cell) ? " pick" : "");
+      if (slot.className !== cls) slot.className = cls;
       var say = threat[cell] ? "the computer's next disc wins here" : risky[cell] ? "dropping here lets the computer win"
         : opened[cell] ? "your drop would let the computer win here" : "";
       if (say) slot.setAttribute("aria-label", say); else slot.removeAttribute("aria-label");
-      if (!targeting && myTurn() && cell % COLS === cursor) slot.classList.add("aim");
-      if (popping && cell === popCur) slot.classList.add("cur");
-      var who = state.own[cell], n = state.num[cell];
-      if (!who && cell !== ghost) return;
-      var disc = document.createElement("div");
-      if (who) {
-        disc.className = "disc p" + who; disc.textContent = n;
-        disc.setAttribute("aria-label", (who === 1 ? "your " : "computer ") + n);
-        if (fx && fx.cell === cell && !K.reducedMotion()) { disc.classList.add("fall"); disc.style.setProperty("--drop", ROWS - Math.floor(cell / COLS)); }
-        if (winCells[cell]) disc.classList.add("win"); else if (over && over.winner) disc.classList.add("dim");
-        if (popping && F.canPop(state, cell)) slot.classList.add("pick");
-      } else {
-        disc.className = "disc p1 ghost"; disc.textContent = state.next[0];
+      var id = state.own[cell] && ids[cell], node = id ? layer.get(id) : null;
+      if (node) {
+        var f = node.firstChild;
+        f.classList.toggle("win", !!(lit && winCells[cell]));
+        f.classList.toggle("dim", !!(lit && over.winner && !winCells[cell]));
+        f.classList.toggle("pick", !!(popping && slot.classList.contains("pick")));
       }
-      slot.appendChild(disc);
     });
-    if (fx) fxUntil = Date.now() + 260;
-    fx = null;
+    if (ghost >= 0) {
+      ghostEl.textContent = state.next[0];
+      if (ghostEl.parentNode !== slots[ghost]) slots[ghost].appendChild(ghostEl);
+    } else if (ghostEl.parentNode) ghostEl.parentNode.removeChild(ghostEl);
+  }
+
+  function render() {
+    var over = state.over;
+    renderBoard();
     mini($("next"), state.next[0]); mini($("held"), state.held[0]); mini($("cnext"), state.next[1]);
     var r = rec[level], none = !(r.w || r.l || r.d);
     $("rec").textContent = none ? "none" : r.w + "-" + r.l + (r.d ? "-" + r.d : "");
@@ -114,7 +220,7 @@
         return false;
       },
       onUse: activate,
-      onInfo: function (id, text) { targeting = null; note = text; render(); },
+      onInfo: function (id, text) { targeting = null; note = text; sfx("bad"); render(); },
     });
     boardEl.classList.toggle("targeting", !!targeting);
     $("new").style.visibility = over ? "hidden" : ""; // the card's New game is the one; the space is kept
@@ -139,7 +245,7 @@
       h.appendChild(box); return;
     }
     if (state.over) { if (viewing) h.textContent = "Tap the board for the summary."; return; }
-    if (state.turn === 2) { h.textContent = state.moves ? "The computer is thinking\u2026" : "The computer opens this game."; return; }
+    if (state.turn === 2) { h.textContent = state.moves ? "The computer is thinking…" : "The computer opens this game."; return; }
     if (!SHOW_THREATS[state.level]) { h.textContent = RULE; return; }
     var marks = warn(), m = marks[cursor], reach = ringsInReach();
     h.textContent = m ? (m.above ? MARK.above : MARK.any) : reach >= 2 ? MARK.two
@@ -157,7 +263,8 @@
     var r = rec[state.level] || rec[level];
     $("over-title").textContent = title;
     // R16: the tally reads "You 2 : 1 Computer" (this level's record)
-    $("over-text").textContent = how + " \u00b7 You " + r.w + " : " + r.l + " Computer" + (r.d ? " \u00b7 " + r.d + " drawn" : "");
+    $("over-text").textContent = how + " · You " + r.w + " : " + r.l + " Computer" + (r.d ? " · " + r.d + " drawn" : "");
+    try { if (TR) TR.pills($("tro"), troIds); } catch (e) { /* trophies are a nicety */ }
     var gen = state.moves;
     clearTimeout(overTimer);
     // R13: the winning line shows on the bare board first, then the card
@@ -165,19 +272,31 @@
   }
   function card() { // one end-card pattern: the card shows and its primary button takes the focus
     $("over").hidden = false; $("again").focus({ preventScroll: true });
+    duck(true);
+    if (troIds.length && !troSaid) { // the unlock moment, on the card (R7: never a toast over it)
+      troSaid = true; sfx("trophy"); sfx("buzz", "big");
+      try { if (window.NumbericsUI) window.NumbericsUI.dot(true); } catch (e) { /* silent */ }
+    }
   }
   function view(on) { // R13: "See the board" hides the card; a tap on the board or Esc brings it back
     viewing = on; note = "";
     if (!on) { clearTimeout(overTimer); overTimer = null; }
     render();
     if (!on && state.over) card();
-    else boardEl.focus();
+    else { duck(false); boardEl.focus(); }
   }
-  function finish() {
+  // the game's result: counted once in the record, and reported once to the trophies (REDESIGN.md 8.4)
+  function finish(r) {
     if (!state.over || counted) return;
-    var r = rec[state.level] || rec[level];
-    if (state.over.winner === 1) r.w++; else if (state.over.winner === 2) r.l++; else r.d++;
+    var o = state.over, rr = rec[state.level] || rec[level];
+    if (o.winner === 1) rr.w++; else if (o.winner === 2) rr.l++; else rr.d++;
     counted = true; // R7: the result card is the one channel for the result (no toast)
+    var how = r && r.win ? (r.win.both ? "both" : r.win.type) : (o.type === "ten" ? "ten" : "colour");
+    try {
+      troIds = TR ? TR.report("four", "end", { won: o.winner === 1, level: state.level, how: how,
+        lastSlot: o.winner === 1 && state.own.every(Boolean), used: state.used[0] }, { quiet: true }) : [];
+    } catch (e) { troIds = []; }
+    troSaid = false;
   }
 
   // ---- turns ----
@@ -185,22 +304,26 @@
     if (!myTurn() || targeting) return;
     var r = F.drop(state, col);
     note = "";
-    if (!r.ok) return;
-    state = r.state; fx = { cell: r.cell };
+    if (!r.ok) { sfx("bad"); return; }
+    settle();
+    state = r.state; ids[r.cell] = nextId++;
+    layer.sync(tilesOf(), { falls: [{ id: ids[r.cell], rows: rowsTo(r.cell) }] });
+    landed(rowsTo(r.cell), r);
     var what = r.earned === "block" ? "Blocked! " : "Ten threat! ";
     if (r.award) K.toast(what + "+" + NAMES[r.award]);
     else if (r.free) K.toast(what + "No reward right after a power-up.", "info"); // R2
     else if (r.full) K.toast(what + "Power-ups full", "info"); // R15
-    after();
+    after(r);
   }
-  function after() {
-    if (state.over) { finish(); persist(); render(); showOver(); return; }
+  function after(r) {
+    if (state.over) { finish(r); persist(); render(); showOver(); return; }
     persist(); render();
     if (state.turn === 2) scheduleCpu();
   }
   function scheduleCpu() {
     clearTimeout(cpuTimer);
     var gen = state.moves, seed = state.seed;
+    // the think pause is a pause, not motion: kept under reduced motion (REDESIGN.md 5.5)
     cpuTimer = setTimeout(function () {
       cpuTimer = null;
       if (state.turn !== 2 || state.over || state.moves !== gen || state.seed !== seed) return; // stale
@@ -210,21 +333,43 @@
   function cpuMove() {
     var r = F.computerTurn(state);
     if (!r.actions.length) return;
+    settle();
     var used = r.actions.filter(function (a) { return a.type !== "drop"; }).map(function (a) { return NAMES[a.type]; });
-    state = r.state; fx = { cell: r.drop.cell };
+    var fx = { out: [], falls: [] };
+    r.actions.forEach(function (a) { // Hard's computer may Pop first: its column drops, then its disc falls
+      if (a.type !== "pop") return;
+      var p = popIds(a.arg); fx.out = fx.out.concat(p.out); fx.falls = fx.falls.concat(p.falls);
+    });
+    state = r.state; ids[r.drop.cell] = nextId++;
+    fx.falls.push({ id: ids[r.drop.cell], rows: rowsTo(r.drop.cell) });
+    layer.sync(tilesOf(), fx);
+    if (fx.out.length) sfx("pop", 1);
+    landed(rowsTo(r.drop.cell), r.drop);
     note = used.length ? "The computer used " + used.join(" and ") + "." : ""; // R14: announced in the hint line
-    after();
+    after(r.drop);
   }
   function flushCpu() { if (cpuTimer !== null) { clearTimeout(cpuTimer); cpuTimer = null; if (state.turn === 2 && !state.over) cpuMove(); } }
 
   // ---- power-ups ----
   function activate(name) {
-    flushCpu(); note = "";
+    flushCpu(); note = ""; sfx("tick");
     if (targeting && targeting.name === name) { targeting = null; return render(); }
     targeting = null;
     if (name === "undo") { // R1: the engine refuses Undo once the game has a result, so a result is counted once
       var u = F.use(state, "undo");
-      if (u.ok) { state = u.state; persist(); K.toast("Took back both moves"); }
+      if (u.ok) {
+        settle();
+        var old = state; state = u.state;
+        // the discs that stay keep their nodes; the two taken back fade out
+        var out = [];
+        for (var cell = 0; cell < COLS * ROWS; cell++) {
+          var keep = state.own[cell] && old.own[cell] === state.own[cell] && old.num[cell] === state.num[cell];
+          if (ids[cell] && !keep) { out.push(ids[cell]); ids[cell] = 0; }
+          if (state.own[cell] && !ids[cell]) ids[cell] = nextId++;
+        }
+        layer.sync(tilesOf(), { out: out, fade: true });
+        persist(); K.toast("Took back both moves");
+      }
       return render();
     }
     if (!myTurn() || !state.power[0][name]) return render();
@@ -234,24 +379,32 @@
       return render();
     }
     targeting = { name: name }; K.clearToast(); // the aiming instruction is never under a toast (craft #1)
-    if (name === "pop") { var h = F.height(state.own, cursor); popCur = (h ? h - 1 : 0) * COLS + cursor; }
+    if (name === "pop") { var hh = F.height(state.own, cursor); popCur = (hh ? hh - 1 : 0) * COLS + cursor; }
     render();
   }
   function tune(n) {
     var r = F.use(state, "tune", n);
-    if (r.ok) { state = r.state; targeting = null; persist(); K.toast("Next disc: " + n); render(); }
+    if (r.ok) { state = r.state; targeting = null; persist(); sfx("place"); K.toast("Next disc: " + n); render(); }
   }
   function pop(cell) {
     if (!state.own[cell]) return;
     var r = F.use(state, "pop", cell);
-    if (r.ok) { state = r.state; targeting = null; persist(); K.toast("Pop!"); }
-    else K.toast("That pop would complete a line", "bad");
+    if (r.ok) {
+      settle();
+      var p = popIds(cell);
+      state = r.state; targeting = null;
+      layer.sync(tilesOf(), { out: p.out, falls: p.falls }); // the popped disc fades; the column drops one slot
+      sfx("pop", 1);
+      if (p.falls.length) sounds.at(M.reduced() ? 0 : M.fallMs(1), function () { sfx("land"); });
+      persist(); K.toast("Pop!");
+    } else { sfx("bad"); K.toast("That pop would complete a line", "bad"); }
     render();
   }
   function movePop(dc, dr) { // R9: the Pop cursor walks the cells; Enter pops the disc under it
     var c = (popCur % COLS + dc + COLS) % COLS, r = Math.max(0, Math.min(ROWS - 1, Math.floor(popCur / COLS) + dr));
-    popCur = r * COLS + c; render();
+    popCur = r * COLS + c; renderBoard();
   }
+  function aim(col) { cursor = col; renderBoard(); renderHint(); } // the aim changes marks and the hint only
 
   // ---- input ----
   function where(ev) {
@@ -262,22 +415,23 @@
   }
   boardEl.addEventListener("click", function (ev) {
     if (ev.target.closest(".over")) return;
-    if (state.over) { if (viewing) view(false); return; }
+    if (state.over) { if (viewing) { sfx("tick"); view(false); } return; }
     var w = where(ev); if (!w) return;
     if (targeting && targeting.name === "pop") { if (w.cell >= 0) pop(w.cell); return; }
     if (targeting) return;
     cursor = w.col; drop(w.col);
   });
   boardEl.addEventListener("mousemove", function (ev) {
-    if (targeting || !myTurn() || Date.now() < fxUntil) return; // never restart a falling disc
-    var w = where(ev); if (w && w.col !== cursor) { cursor = w.col; render(); }
+    if (targeting || !myTurn()) return;
+    var w = where(ev); if (w && w.col !== cursor) aim(w.col);
   });
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (sheetOpen()) return; // no key reaches the game while a sheet is open
     var tag = (e.target && e.target.tagName) || "";
     if (e.key === "Escape") { if (targeting) { targeting = null; render(); } else if (viewing) view(false); return; }
     // R17: a key on a focused link or form control belongs to that control (Enter on a games-row link navigates)
-    if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "SUMMARY") return;
     if (viewing && (e.key === "Enter" || e.key === " ") && tag !== "BUTTON") { e.preventDefault(); view(false); return; }
     var digit = ["1", "2", "3", "4"].indexOf(e.key);
     if (targeting && targeting.name === "tune" && digit >= 0) { tune(digit + 1); return; }
@@ -292,8 +446,8 @@
       return;
     }
     if (targeting) return;
-    if (e.key === "ArrowLeft" || e.key === "a") { e.preventDefault(); cursor = (cursor + COLS - 1) % COLS; render(); }
-    else if (e.key === "ArrowRight" || e.key === "d") { e.preventDefault(); cursor = (cursor + 1) % COLS; render(); }
+    if (e.key === "ArrowLeft" || e.key === "a") { e.preventDefault(); aim((cursor + COLS - 1) % COLS); }
+    else if (e.key === "ArrowRight" || e.key === "d") { e.preventDefault(); aim((cursor + 1) % COLS); }
     else if (e.key === "ArrowDown" || e.key === "s" || ((e.key === "Enter" || e.key === " ") && tag !== "BUTTON")) { e.preventDefault(); drop(cursor); }
   });
 
@@ -303,20 +457,23 @@
   function inProgress() { return !state.over && (mine() || !!state.prev || state.used[0] > 0); }
   function startNew(lv) {
     clearTimeout(cpuTimer); cpuTimer = null; clearTimeout(overTimer); overTimer = null;
+    settle();
     // R12: quitting a live game you have dropped in counts as a loss (on the level it was played at)
     var quit = inProgress() && !counted;
     if (quit) { (rec[state.level] || rec[level]).l++; counted = true; }
     // the opener alternates only after a game that counted, so New game can never re-roll who opens
     var first = state.over || counted ? 3 - (state.first || 1) : (state.first || 1);
     targeting = null; note = ""; level = lv || level; counted = false; cursor = 3; viewing = false;
+    troIds = []; troSaid = false; lineShown = false; hideLine(); duck(false);
     state = F.newGame(K.freshSeed(), { level: level, first: first });
+    rekey(false);
     persist(); render();
     if (quit) K.toast("Counted as a loss", "bad");
     if (state.turn === 2) scheduleCpu();
   }
   var QUIT = "Sure? Counts as a loss";
-  K.twoStep($("new"), inProgress, function () { startNew(); }, QUIT);
-  $("again").addEventListener("click", function () { startNew(); });
+  K.twoStep($("new"), inProgress, function () { sfx("tick"); startNew(); }, QUIT);
+  $("again").addEventListener("click", function () { sfx("tick"); startNew(); });
   // R10/R12: a level switch mid-game uses the same two-step "Sure?" as New game. The level button is too narrow
   // for the whole warning at 320px, so it says "Sure?" and the hint line says what it costs.
   var LEVEL_QUIT = "Sure? Switching level counts this game as a loss.", levelNoteT = null;
@@ -330,30 +487,63 @@
       }
       return risky;
     }, function () {
+      sfx("tick");
       if (lv === level && !state.over) return;
       startNew(lv);
     }, "Sure?");
   });
-  $("over-view").addEventListener("click", function () { view(true); });
+  $("over-view").addEventListener("click", function () { sfx("tick"); view(true); });
 
+  // ---- how to play (REDESIGN.md 1.3, 9.4): three drawn steps in a sheet; opens by itself once on a first visit ----
+  function md(n, who) { return '<span class="md" style="--h2:' + (who === 1 ? "var(--accent)" : who === 2 ? "var(--cool)" : "var(--cell)") + '">' + (n || "") + "</span>"; }
+  function well(cells) { return '<div class="mg" style="grid-template-columns:repeat(5,20px)">' + cells.map(function (x) { return md(x[0], x[1]); }).join("") + "</div>"; }
+  var STEPS = [
+    [well([[0, 0], [0, 0], [3, 1], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [2, 2], [1, 1], [0, 0], [0, 0]]),
+      "Tap a column to drop your disc."],
+    [well([[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [1, 2], [0, 0], [2, 2], [0, 0], [1, 1], [3, 1], [2, 1], [1, 1], [4, 2]]),
+      "Win with four of your colour in a row."],
+    [well([[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [1, 1], [0, 0], [0, 0], [0, 0], [4, 1], [1, 2], [2, 1], [3, 2]]),
+      "Or four in a row that add up to ten, two of them yours."]
+  ];
+  function howto() {
+    var U = window.NumbericsUI; if (!U || !U.sheet) return;
+    U.sheet("howto", function (body) {
+      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
+        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
+      }).join("") + "</div>";
+    }, { title: "How to play" });
+  }
+  $("howto-open").addEventListener("click", function () { sfx("tick"); howto(); });
+
+  rekey(false);
   render();
-  if (state.over) { showOver(); clearTimeout(overTimer); overTimer = null; card(); }
+  if (state.over) { lineShown = true; renderBoard(); drawLine(false); showOver(); clearTimeout(overTimer); overTimer = null; card(); }
   else if (state.turn === 2) scheduleCpu();
+  if (!saved) { // a first visit: the how-to opens by itself, once (after ui.js, which loads last, has run)
+    var first = function () { try { if (NP && !NP.seenHowto("four") && window.NumbericsUI) { NP.markHowto("four"); howto(); } } catch (e) { /* a nicety */ } };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", first); else setTimeout(first, 0);
+  }
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
-    clearTimeout(cpuTimer); cpuTimer = null; targeting = null;
+    try { if (window.NumbericsUI && window.NumbericsUI.open()) window.NumbericsUI.close(); } catch (e) { /* no sheet */ }
+    clearTimeout(cpuTimer); cpuTimer = null; targeting = null; settle();
     var s = F.newGame(2051, { level: "medium" }), mine = [3, 1, 3, 4, 3, 6, 4]; // a seed whose whole line plays out
     for (var k = 0; k < mine.length && !s.over; k++) {
       var r = F.drop(s, mine[k]); if (!r.ok || r.state.over) break; s = r.state;
       if (s.turn === 2) { var t = F.computerTurn(s); if (t.state.over) break; s = t.state; }
     }
     s.power[0] = { undo: 1, pop: 1, hold: 1, tune: 2 }; s.held[0] = 4;
-    state = s; level = "medium"; cursor = 5; render();
+    state = s; level = "medium"; cursor = 5; lineShown = false; hideLine(); rekey(false); render();
   };
   window.__four = {
     get state() { return state; },
-    set state(s) { clearTimeout(cpuTimer); cpuTimer = null; state = s; targeting = null; render(); if (!s.over && s.turn === 2) scheduleCpu(); },
+    set state(s) {
+      clearTimeout(cpuTimer); cpuTimer = null; settle(); state = s; targeting = null;
+      lineShown = !!s.over; rekey(false); hideLine(); render();
+      if (!s.over && s.turn === 2) scheduleCpu();
+    },
     render: render, cpu: flushCpu, get viewing() { return viewing; }, get rec() { return rec; },
+    get trophies() { return troIds.slice(); }, layer: layer, get ids() { return ids.slice(); },
   };
 })();

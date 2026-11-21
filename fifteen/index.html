@@ -35,11 +35,13 @@
   <div id="board" class="board" tabindex="0" aria-label="The numbers 1 to 9. Arrow keys move, Enter claims.">
     <div id="hash" class="hash" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div id="tiles" class="tiles"></div>
+    <svg id="wl" class="wl" aria-hidden="true"><line></line></svg>
     <div id="over" class="over" hidden>
       <h2 id="over-title">Round over</h2>
       <div id="trio" class="trio" role="img"></div>
       <p id="over-text"></p>
       <p id="over-best" class="best" hidden></p>
+      <div id="pills" class="tro-pills" hidden></div>
       <div class="acts">
         <button id="over-view" class="btn" type="button">See the board</button>
         <button id="next" class="btn primary" type="button">Next round</button>
@@ -55,10 +57,13 @@
     </div>
     <button id="new" class="btn" type="button">New game</button>
   </div>
-  <p class="how">Three numbers that make 15 win a round. A win without Erase, Double or Peek earns a power-up.
+  <details id="how" class="how"><summary>How to play</summary>
+    <p>Three numbers that make 15 win a round. A win without Erase, Double or Peek earns a power-up.
      On Hard a draw gives you an Erase, so perfect play wins; the computer can Erase and Double.
      Keys: arrows, Enter, V, 1-4.</p>
-  <nav id="games" class="games" data-root="../" data-current="fifteen" aria-label="Numberics games"></nav>
+    <p class="how-more"><button id="how-steps" class="btn" type="button">Show the three steps</button></p>
+  </details>
+  <div id="games" class="cards" data-root="../" data-current="fifteen" aria-label="Numberics games"></div>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 </main>
 <script src="../shared/kit.js"></script>

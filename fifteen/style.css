@@ -8,9 +8,11 @@
 .ft{ position:absolute; left:0; top:0; width:calc((100% - (var(--k) - 1)*var(--gap))/var(--k)); height:calc((100% - (var(--rows) - 1)*var(--gap))/var(--rows));
   display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0;
   border:0; border-radius:var(--tile-radius); background:var(--cell); color:var(--ink); font:inherit; padding:0; cursor:pointer;
-  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap))));
-  transition:transform 380ms cubic-bezier(.3,.7,.2,1), width 380ms cubic-bezier(.3,.7,.2,1), height 380ms cubic-bezier(.3,.7,.2,1),
-    opacity 200ms, box-shadow 200ms, background-color 200ms; }
+  transform:translate(calc(var(--c)*(100% + var(--gap))),calc(var(--r)*(100% + var(--gap)))); transform-origin:0 0;
+  /* the view switch is a FLIP of translate + scale in game.js (REDESIGN.md 5.8, 5.13): no width, height or transform
+     transition here, so nothing lays out per frame */
+  transition:opacity 200ms; will-change:transform; }
+.ft b,.ft small{ position:relative; z-index:1; }
 .ft b{ font-size:15cqw; font-weight:800; line-height:1; font-variant-numeric:tabular-nums; }
 .ft small{ font-size:3.2cqw; font-weight:700; letter-spacing:.12em; text-transform:uppercase; min-height:1.2em; margin-top:.4cqw; }
 .board:not(.grid) .ft small{ font-size:2.6cqw; letter-spacing:.04em; }   /* the narrower Numbers tiles still fit "computer" */
@@ -19,15 +21,28 @@
 /* ownership is the fill (craft N1): yours gold, the computer's cool, free tiles neutral; dark ink on both */
 .ft.mine{ background:var(--accent); color:#1b1b22; cursor:default; }
 .ft.theirs{ background:var(--cool); color:#111a28; cursor:default; }
+/* a claim fills the tile from its centre in the owner's colour; the number turns dark at half time (REDESIGN.md 5.8) */
+.ft.claiming{ background:var(--cell); animation:ft-ink 120ms step-end; }
+.ft.claiming::after{ content:""; position:absolute; inset:0; border-radius:inherit; background:var(--accent);
+  clip-path:circle(75% at 50% 50%); animation:ft-claim 240ms cubic-bezier(.2,.8,.2,1); }
+.ft.claiming.theirs::after{ background:var(--cool); }
+@keyframes ft-claim{ from{ clip-path:circle(0% at 50% 50%); } }
+@keyframes ft-ink{ from{ color:var(--ink); } }
 .ft.fresh{ animation:ft-in 260ms ease-out; }
 @keyframes ft-in{ from{ opacity:.25; } }
 .ft.dim{ opacity:.32; }
-.ft.win{ z-index:1; animation:ft-win 900ms ease-in-out 2; }
+.ft.win{ z-index:1; animation:ft-win 900ms ease-in-out 240ms 2; }
 .ft.win.mine{ box-shadow:0 0 14px 2px var(--accent); }
 .ft.win.theirs{ box-shadow:0 0 14px 2px var(--cool); }
 @keyframes ft-win{ 50%{ filter:brightness(1.15); } }
 /* under the round-end scrim the board rests evenly (craft N3); the chips carry the winning three */
-.board.ended .ft{ opacity:.35; box-shadow:none; animation:none; }   /* under the card the ghost digits stay faint (craft round 2 #6) */
+.board.ended .ft{ opacity:.35; box-shadow:none; animation:none; }
+/* Grid view: a line drawn through the winning three (as Four, REDESIGN.md 5.8) */
+.wl{ position:absolute; left:var(--gap); top:var(--gap); width:calc(100% - 2*var(--gap)); height:calc(100% - 2*var(--gap));
+  pointer-events:none; overflow:visible; z-index:2; }
+.wl line{ stroke:var(--ink); stroke-width:.9cqw; stroke-linecap:round; fill:none; }
+.wl[hidden]{ display:none; }
+.board.ended .wl{ opacity:.35; }   /* under the card the ghost digits stay faint (craft round 2 #6) */
 .ft.peek{ box-shadow:inset 0 0 0 3px var(--accent); }
 .ft.blocked{ opacity:.45; cursor:not-allowed; }
 .ft.target{ cursor:crosshair; box-shadow:inset 0 0 0 4px var(--accent), inset 0 0 0 6px #111a28; }
@@ -43,6 +58,7 @@
 .board.targeting{ cursor:default; }
 /* the view choice is a quiet segment like the difficulty row, so it never reads as an action beside New game
    (craft round 3 #2) */
+details.how .how-more{ text-align:center; }
 .views{ margin:0; }
 .views button{ padding:9px 14px; }
 /* round and match end (R8): the winning three as chips in their owner's fill */
@@ -57,8 +73,6 @@
 .over .acts{ display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
 /* an empty record uses the shared .stat .none style (TRIAGE3) */
 @media (max-width:380px){ .stat{ min-width:52px; padding:6px 8px; } .views button{ padding:9px 10px; } }
-@media (prefers-reduced-motion:reduce){
-  .ft{ transition:opacity 200ms, box-shadow 200ms, background-color 200ms; } /* no sliding between views */
-  .ft.win{ animation:none; }
-  .ft.fresh{ animation:ft-in 260ms ease-out; } /* opacity is not motion */
-}
+/* reduced motion (Settings "Less", or the device): html[data-motion] drives it, so the in-app setting wins (5.12) */
+:root[data-motion="reduced"] .ft.win{ animation:none; }
+:root[data-motion="reduced"] .ft.claiming::after{ clip-path:none; animation:ft-in 160ms linear; } /* opacity is not motion */

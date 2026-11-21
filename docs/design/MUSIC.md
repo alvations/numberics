@@ -100,10 +100,10 @@ MIDI note, velocity, start and end seconds) for one pass. It is pure and tested 
 ### Performance (measured)
 On headless Chromium (`tests/emu/shared-music.cjs`): no long task (over 50 ms) while the music starts, plays and
 switches through every style. Compiling a style costs 0.3 to 5 ms, once per style and variant (cached). The one big cost on the first tap
-is the browser's own `new AudioContext()` (about 21 ms here); `shared/audio.js` makes a second one on the same tap,
-which is why a shared context (below) is worth doing.
+is the browser's own `new AudioContext()` (about 21 ms here). With the shared context (below) the tap makes only the
+SFX one; the music plugs into it.
 
-### One context, shared with `shared/audio.js` (decided)
+### One context, shared with `shared/audio.js` (built)
 SFX and music share **one AudioContext**, owned by `audio.js`. Why: every `new AudioContext()` costs about 21 ms on
 the tap that makes it (measured), so two contexts double the work of the first tap; one context is one audio thread
 on low-end phones; and both outputs then go through the same compressor, so a loud SFX over the music can never clip.
@@ -128,7 +128,7 @@ it owns one context and suspends it while hidden (the fallback, also tested, so 
 |---|---|---|
 | Each style at unity (mix 1) | **-20 LUFS integrated** (BS.1770, K-weighted, gated), within +-1 LU of each other | the per-style `level`, derived by `node tools/render-music.cjs --raw` (it prints the level that hits the target), checked by the render report |
 | Peaks at unity | **<= -1 dBFS sample peak, no clipped samples** | render report |
-| Shipped music | `unity * musicVolume * SCALE`, `SCALE = 0.016` | at the default sliders (music 0.5, SFX 0.5) the loudest music peak sits **at least 6 dB under the SFX `merge` peak** (the most frequent reward sound); the render report measures both and fails otherwise |
+| Shipped music | `unity * musicVolume * SCALE`, `SCALE = 0.07` | at the default sliders (music 0.5, SFX 0.5) the loudest music peak sits **at least 6 dB under the SFX `merge` peak** (the most frequent reward sound); the render report measures both and fails otherwise |
 
 The rule comes from melon-eight's AUDIO.md lesson: SFX are transients that must peak clearly above a steady bed; never
 RMS-match an SFX to the music. The SFX are the reference; the music is set under them.
@@ -137,22 +137,23 @@ Measured (`tools/render-music.cjs`, one full pass each, 44.1 kHz stereo; "shippe
 
 | Style | `level` | Unity LUFS | Unity peak dBFS | Crest dB | Centroid Hz | Shipped LUFS | Shipped peak dBFS |
 |---|---|---|---|---|---|---|---|
-| Chill | 0.39 | -20.06 | -6.99 | 15.1 | 679 | -62.0 | -48.9 |
-| Drift | 0.49 | -20.06 | -10.99 | 10.8 | 340 | -62.0 | -52.9 |
-| Pocket | 0.55 | -20.00 | -7.54 | 14.6 | 2548 | -61.9 | -49.5 |
-| Quest | 0.40 | -19.93 | -7.58 | 14.4 | 1548 | -61.9 | -49.5 |
-| Blocks | 0.55 | -19.99 | -6.04 | 15.8 | 3106 | -61.9 | -48.0 |
-| Pulse | 0.72 | -20.05 | -4.86 | 17.2 | 1696 | -62.0 | -46.8 |
-| Epic | 0.39 | -19.90 | -6.13 | 15.1 | 684 | -61.8 | -48.1 |
+| Chill | 0.39 | -20.06 | -6.99 | 15.1 | 679 | -49.2 | -36.1 |
+| Drift | 0.49 | -20.06 | -10.99 | 10.8 | 340 | -49.2 | -40.1 |
+| Pocket | 0.55 | -20.00 | -7.54 | 14.6 | 2548 | -49.1 | -36.7 |
+| Quest | 0.40 | -19.93 | -7.58 | 14.4 | 1548 | -49.0 | -36.7 |
+| Blocks | 0.55 | -19.99 | -6.04 | 15.8 | 3106 | -49.1 | -35.2 |
+| Pulse | 0.72 | -20.05 | -4.86 | 17.2 | 1696 | -49.2 | -34.0 |
+| Epic | 0.39 | -19.90 | -6.13 | 15.1 | 684 | -49.0 | -35.2 |
 
-Spread across styles 0.16 LU; no clipped samples; loudest shipped music peak -46.8 dBFS against the `merge` SFX at
--39.3 dBFS: **7.5 dB of headroom** (need 6). Unmatched (every `level` 1) the styles spread 4.8 LU and Chill, Quest and
-Epic clipped, which is why `level` exists.
+Spread across styles 0.16 LU; no clipped samples; loudest shipped music peak -34.0 dBFS against the `merge` SFX at
+-26.5 dBFS: **7.5 dB of headroom** (need 6; the tool's SCALE for 6.5 dB is 0.0784, so 0.07 keeps a margin).
+Unmatched (every `level` 1) the styles spread 4.8 LU and Chill, Quest and Epic clipped, which is why `level` exists.
 
-**The SFX are quiet today.** At the default volume the `merge` SFX peaks at -39 dBFS and `tick` at -45 dBFS (sound
-in most web games peaks around -12 to -18 dBFS). The music is set under that, so at defaults it plays at about
--62 LUFS: the right balance, but faint on a phone speaker. The SFX notes below give new gains (merge +13.3 dB);
-`SCALE` goes from 0.016 to 0.07 in the same commit, which puts the music at about -49 LUFS at defaults, with its loudest peak 8 dB under the lifted merge.
+**The SFX lift (applied).** Before it, at the default volume the `merge` SFX peaked at -39 dBFS and `tick` at -45 dBFS,
+and the music sat under that at about -62 LUFS (`SCALE = 0.016`): the right balance, but faint on a phone speaker.
+The SFX notes below set new gains (merge +13.3 dB), and the same change set `SCALE = 0.07`: the music now plays at
+about -49 LUFS at defaults with its loudest peak 7.5 dB under the lifted merge. SFX peaks at the default volume after
+the lift (render report): merge -26.5, land -26.1, place -32.0, tick -32.2, best -21.1, win -20.2 dBFS.
 
 Reproduce:
 ```bash
@@ -202,10 +203,23 @@ game in `games.json` has no style.
 Events: it listens for `numberics:settings` (fields `music`, `musicVolume`, `musicStyle`; a missing field keeps its
 value) and fires `numberics:music` (`{ style, key }`) whenever a style starts.
 
+### Loading (lazy, built into `shared/audio.js`)
+Pages do **not** load `music.js` (46 KB) and need no script tag or `start()` call. `shared/audio.js`, which every page
+already loads, sets a small stub `window.NumbericsMusic` at load: `play`, `start`, `stop`, `duck`, `dip`, `setStyle`,
+`enable` and `key` (0) are no-ops; it keeps the latest `duck` state, a `start(id)` game id and a `stop()`.
+`NumbericsMusic.stub` is true until the real module replaces it. After the first trusted `pointerdown`, `keydown`,
+`touchend` or `click`, if Music is on, it appends one same-origin script element for `music.js` (next to `audio.js`,
+`onload` / `onerror`, nothing written into the document stream); on load it sets the game (`start(id)` if a page called it, else
+`#games[data-current]`, `endless` read as `two`, `two` when there is none), replays the duck, starts the music and calls
+`unlock()` (the gesture already happened), so the music plays on the SFX context. With Music off nothing loads; turning
+it on later in Settings (a `numberics:settings` event with `music: true`) loads it then. A failed load leaves the stub
+(no retry loop). A page that does load `music.js` itself (the test fixture) gets the real module, and the loader stays out.
+Initial page weight: about +2 KB (the loader, the key shift and the Settings controls), measured with `tools/perf.cjs`.
+
 ### Wiring a page
-After `shared/audio.js`: `<script src="../shared/music.js"></script>`, then once on load `NumbericsMusic.start("seven")`
-(or `start()` to read `data-current`). When an end card shows: `NumbericsMusic.duck(true)`; when it closes or a new
-game starts: `duck(false)`.
+Nothing to add for the music to play. When an end card shows: `NumbericsMusic.duck(true)`; when it closes or a new game
+starts: `duck(false)`. Call it as `window.NumbericsMusic && NumbericsMusic.duck(true)`; it works before and after the
+module loads (the stub keeps the state).
 
 ## Settings fields (for `shared/settings.js`)
 
@@ -220,7 +234,7 @@ Add to `DEF`, `FIELDS` and `normalize()` in `numberics_settings_v1`:
 Keep the list of ids in `settings.js` itself (do not read it from `music.js`, which may load later). The **Sound**
 switch stays the SFX switch; Music has its own. Erase keeps these (they live in the settings key).
 
-## SFX notes (for `shared/audio.js`): recommended gains
+## SFX notes (for `shared/audio.js`): recommended gains (applied)
 
 The lead measured the SFX peaks at **100 % volume** with the spec's gains (REDESIGN.md 7.3). They span 27 dB (slide
 -48 to win -21 dBFS), and the everyday sounds sit near -38 dBFS: under any music they would vanish first, and on a phone
@@ -244,6 +258,11 @@ the recipes (waves, envelopes, notes) stay as they are.
 | `lose` | .060 | -24.4 | end, soft | .13 (-18) | **.11** (.05) |
 | `trophy` | .087 | -21.2 | big | .20 (-14) | **.16** (.07) |
 | `win` | .088 | -21.1 | big | .20 (-14) | **.18** (.08) |
+
+Applied in `shared/audio.js` as listed; the second partials keep their ratios (power's 1976 Hz sine .135, trophy's held
+chord .09, burst's `merge(9)` .25 so burst lands at its target, measured -20.3 dBFS at 100 %). Measured at 100 % after
+the change: tick -26.1, slide -29.5, merge -20.5, land -20.3, burst -20.3, pip -25.9, place -26.0, best -15.1,
+power -16.9, trophy -14.2, win -14.2, lose -17.8, bad -26.7 dBFS. Notes 1, 3 and 4 below are built; note 5 is not.
 
 New gain = old gain x target / measured peak (each sound scales linearly; the compressor only acts above -18 dBFS, so
 the big three land a little under their targets, which is the point). Spread after: 15 dB (slide to win) instead of 27.

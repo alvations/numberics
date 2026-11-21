@@ -1,24 +1,34 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Four: only what shared/theme.css does not cover. The board is the shared .board panel, made 7x6. */
-.board.four{ aspect-ratio:7/6; cursor:pointer; }
+.board.four{ aspect-ratio:7/6; cursor:pointer; --bgap:var(--gap); --sg:calc(var(--gap) * .7); }
 .board.four.targeting{ cursor:crosshair; }
 .grid{ position:absolute; inset:var(--gap); display:grid; grid-template-columns:repeat(7,1fr); grid-template-rows:repeat(6,1fr);
-  gap:calc(var(--gap) * .7); }
-.slot{ position:relative; background:var(--cell); border-radius:50%; }
-.slot.aim{ background:#2e3244; }
+  gap:var(--sg); }
+.slot{ position:relative; background:var(--well); border-radius:50%; box-shadow:inset 0 .45cqw .9cqw rgba(0,0,0,.45); }
+.slot.aim{ background:var(--cell); }
+/* the keyed disc layer (shared/motion.js) sits over the holes on the same grid; clicks go through to the board.
+   A falling disc is clipped at the top edge of the grid (REDESIGN.md 5.5). */
+.board.four > .discs{ inset:var(--bgap); --gap:var(--sg); z-index:1; pointer-events:none; }
+.board.four > .discs > .tile{ background:none; box-shadow:none; border-radius:50%; }
+.board.four > .discs > .tile > .face{ position:absolute; inset:7%; width:auto; height:auto; border-radius:50%;
+  transition:opacity 200ms linear; }
+/* the winning line: one SVG line through the four disc centres, drawn over the discs */
+.winline{ position:absolute; inset:var(--bgap); width:calc(100% - 2 * var(--bgap)); height:calc(100% - 2 * var(--bgap));
+  z-index:2; pointer-events:none; overflow:visible; }
+.winline[hidden]{ display:none; }
+.winline line{ stroke:var(--ink); stroke-linecap:round; fill:none; }
 /* a disc: filled by owner (gold yours, cool the computer's) so ownership reads at a glance (round 1: craft R1,
    cold 23); the number is printed dark on it */
 .disc{ position:absolute; inset:7%; border-radius:50%; display:flex; align-items:center; justify-content:center;
-  font-weight:800; font-size:7.4cqw; line-height:1; color:#15151d; font-variant-numeric:tabular-nums;
-  background:var(--own); box-shadow:inset 0 -.6cqw 0 rgba(0,0,0,.18); }
-.disc.p1{ --own:var(--accent); } .disc.p2{ --own:var(--cool); }
+  font-weight:850; font-size:7.4cqw; line-height:1; color:var(--tile-ink); font-variant-numeric:tabular-nums; letter-spacing:0;
+  background:radial-gradient(circle at 35% 30%, var(--hi), var(--own) 62%);
+  box-shadow:inset 0 -.8cqw 0 rgba(0,0,0,.2), 0 .5cqw 1cqw rgba(0,0,0,.3); }
+.disc.p1{ --own:var(--accent); --hi:var(--accent-2); } .disc.p2{ --own:var(--cool); --hi:var(--cool-2); }
 .disc.ghost{ opacity:.38; }
 .disc.dim{ opacity:.3; }
-.disc.fall{ animation:four-fall 230ms cubic-bezier(.5,0,.9,.6); }
-@keyframes four-fall{ from{ transform:translateY(calc(var(--drop) * -118%)); } }
 /* the winning line: a white ring on its four discs, every other disc dimmed; nothing grows or moves */
 .disc.win{ outline:3px solid var(--ink); outline-offset:2px; }
-.slot.pick .disc{ outline:3px dashed var(--ink); outline-offset:2px; }
+.disc.pick{ outline:3px dashed var(--ink); outline-offset:2px; }
 .slot.cur{ box-shadow:0 0 0 3px var(--accent); }
 /* round 2 (cold #5): Easy and Medium ring a hole where the computer's shown next disc would win */
 .slot.threat{ box-shadow:inset 0 0 0 3px var(--cool); }
@@ -40,17 +50,18 @@
 .over .row{ margin:4px 0 0; }
 /* Tune: the number choice sits in the hint line */
 .hint .pick{ display:inline-flex; gap:8px; margin-left:8px; vertical-align:middle; }
-.hint .pick button{ width:2em; height:2em; border-radius:50%; border:0; font:inherit; font-weight:800; color:#15151d; cursor:pointer;
+.hint .pick button{ width:var(--tap); height:var(--tap); border-radius:50%; border:0; font:inherit; font-weight:800; color:#15151d; cursor:pointer;
   background:var(--accent); }
 .hint .pick button:disabled{ opacity:.35; cursor:default; }
 .hint .pick button:focus-visible{ outline:2px solid var(--ink); outline-offset:3px; }
 /* round 3 (craft #2): the band holds two lines, so status copy never pushes the board down */
-.hint{ min-height:2.8em; line-height:1.4; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; }
-@media (prefers-reduced-motion:reduce){
-  .disc.fall{ animation:none; }
-}
+.hint{ min-height:max(2.8em, calc(var(--tap) + 4px)); line-height:1.4; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; }
+/* the games cards at the page foot (REDESIGN.md 3.1) */
+.foot-cards{ margin:22px 0 8px; }
 /* round 3 (craft #3): at 320px the four pills stay on one row (RECORD no longer sits alone) */
 @media (max-width:360px){
+  /* Tune's 44 px choices wrap under their label here: the band keeps room for both, so the board never moves */
+  .hint{ min-height:calc(var(--tap) + 1.4em + 6px); }
   .stats{ flex-wrap:nowrap; gap:6px; }
   .stat{ min-width:0; padding:6px 7px; }
   .stat > span{ letter-spacing:.03em; font-size:.62rem; }

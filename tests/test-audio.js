@@ -90,7 +90,7 @@ t("graph: master = volume * 0.5 into the compressor (-18 dB, 4:1, 3 ms, 120 ms) 
   ok(master.gain.value === 0.25, "master " + master.gain.value);
 });
 t("every sound plays after the gesture, each with attack-decay envelopes peaking at or under its table gain", () => {
-  const PEAK = { tick: .05, slide: .04, merge: .08, land: .10, pop: .08, burst: .09, pip: .035, place: .05, best: .07, power: .05, trophy: .07, win: .08, lose: .05, bad: .04 };
+  const PEAK = { tick: .21, slide: .35, merge: .36, land: .43, pop: .36, burst: .28, pip: .22, place: .21, best: .16, power: .27, trophy: .16, win: .18, lose: .11, bad: .20 }; // MUSIC.md, SFX notes
   A.NAMES.forEach(n => {
     const { w, api, m } = win(); w.fire("pointerdown");
     const before = m.all.length;
@@ -187,6 +187,93 @@ t("nothing plays and nothing vibrates while the tab is hidden", () => {
   doc.hidden = true; doc.visibilityState = "hidden";
   ok(o.api.tick() === false && o.api.buzz("tap") === false && got.length === 0);
   doc.hidden = false; doc.visibilityState = "visible"; ok(o.api.tick() === true);
+});
+t("musicBus(): null before the context, then one { context, input } straight into the compressor", () => {
+  const S = { sound: true, volume: 0.5 }, { w, api, m } = win({ settings: settingsOf(S) });
+  ok(api.musicBus() === null, "null before a gesture");
+  w.fire("pointerdown");
+  const b = api.musicBus(), comp = m.all.find(n => n.kind === "comp"), master = m.all.find(n => n.kind === "gain" && n.outs[0] === comp && n !== b.input);
+  ok(b && b.context === m.Ctx.made[0] && b.input.kind === "gain" && b.input.gain.value === 1, "context + gain 1");
+  ok(b.input.outs.length === 1 && b.input.outs[0] === comp, "input -> compressor, not the SFX master");
+  ok(api.musicBus() === b && m.Ctx.made.length === 1, "the same object, one context");
+  S.sound = false; w.fire("numberics:settings"); ok(b.input.gain.value === 1 && master.gain.calls.length > 0, "Sound off moves the SFX master only");
+});
+t("SFX follow the music's key: numberics:music shifts the ladder and the fixed chords; taps never move", () => {
+  const first = (api, m, n, k) => { const b = m.all.length; api[n](k); return m.all.slice(b).filter(x => x.kind === "osc").map(x => x.frequency.calls[0][1]); };
+  const { w, api, m, clock } = win(); w.fire("pointerdown");
+  const base = { merge: first(api, m, "merge", 3), best: first(api, m, "best"), win: first(api, m, "win"), lose: first(api, m, "lose"), tick: first(api, m, "tick"), trophy: (clock.ms += 100, first(api, m, "trophy")) };
+  w.fire("numberics:music", { style: "quest", key: -2 }); ok(api.key() === -2, "key");
+  clock.ms += 100; const r = Math.pow(2, -2 / 12);
+  ["merge", "best", "win", "lose"].forEach(n => { const f = first(api, m, n, 3); ok(f.length === base[n].length && f.every((x, i) => near(x, base[n][i] * r, 1e-6)), n + " shifted " + f); });
+  ok(near(first(api, m, "tick")[0], base.tick[0]), "tick stays");
+  clock.ms += 100; const tr = first(api, m, "trophy"); ok(tr.length === 5 && tr.every((x, i) => near(x, base.trophy[i] * r, 1e-6)), "trophy arpeggio and held chord shifted " + tr);
+  w.fire("numberics:music", { key: 9 }); ok(api.key() === 0, "out of range -> 0");
+  w.fire("numberics:music", {}); ok(api.key() === 0, "missing -> 0");
+});
+t("the shifted ladder sits in every style's scale (one note off in harmonic minor at most)", () => {
+  const M = require("../shared/music.js");
+  M.ORDER.forEach(id => {
+    const st = M.STYLES[id], k = M.sfxKey(st), scale = M.MODES[st.mode].map(x => (st.root + x) % 12);
+    const off = [0, 2, 4, 7, 9].map(x => ((x + k) % 12 + 12) % 12).filter(pc => scale.indexOf(pc) < 0).length;
+    ok(off <= (st.mode === "harmonic" ? 1 : 0), id + " key " + k + ": " + off + " off");
+  });
+});
+t("best, power and trophy dip the music; nothing else does; a missing or throwing music is survived", () => {
+  const { w, api, clock } = win(); w.fire("pointerdown");
+  let dips = 0; w.NumbericsMusic = { dip() { dips++; return true; } };
+  A.NAMES.forEach(n => { clock.ms += 100; api[n](2); });
+  ok(dips === 3, "dips " + dips);
+  w.NumbericsMusic = { dip() { throw new Error("x"); } }; clock.ms += 100; ok(api.best() === true, "throwing dip");
+  delete w.NumbericsMusic; clock.ms += 100; ok(api.power() === true, "no music");
+});
+// a window with a document that records appended scripts, for the lazy loader
+function lazyWin(o) {
+  o = o || {};
+  const L = {}, added = [], games = o.game === undefined ? { getAttribute: () => "four" } : o.game;
+  const d = { currentScript: { src: "http://h/x/shared/audio.js?v=2" }, head: { appendChild(el) { added.push(el); } },
+    createElement: tag => ({ tag }), querySelector: s => (s === "#games[data-current]" ? games : null) };
+  const S = { music: o.music !== false };
+  const w = { document: d, NumbericsSettings: { get: () => Object.assign({}, S) }, addEventListener(n, f) { (L[n] = L[n] || []).push(f); },
+    fire(n, e) { (L[n] || []).forEach(f => f(e || {})); } };
+  A.lazyMusic(w);
+  // what music.js does when it runs: replace the stub with the real module (a recorder here)
+  const real = () => { const calls = []; const m = {}; ["game", "duck", "start", "unlock", "play", "stop", "dip"].forEach(k => m[k] = (...a) => { calls.push([k].concat(a)); return true; }); w.NumbericsMusic = m; return calls; };
+  return { w, S, added, real };
+}
+t("lazy music: a stub at load, nothing fetched before a trusted gesture, music.js injected after it", () => {
+  const { w, added, real } = lazyWin();
+  const st = w.NumbericsMusic; ok(st.stub && ["play", "start", "stop", "duck", "dip", "setStyle", "enable", "key"].every(k => typeof st[k] === "function"), "stub API");
+  ok(st.dip() === false && st.key() === 0 && st.start("four") === false, "no-ops");
+  ok(st.duck(true) === true && st.duck(false) === false && st.duck(true) === true, "the latest duck state is kept");
+  w.fire("numberics:settings", { detail: { music: true } }); ok(added.length === 0, "settings before a gesture load nothing");
+  w.fire("pointerdown", { isTrusted: false }); ok(added.length === 0, "untrusted");
+  w.fire("pointerdown", { isTrusted: true }); ok(added.length === 1 && added[0].tag === "script", "one script element");
+  ok(added[0].src === "http://h/x/shared/music.js" && added[0].async === true && typeof added[0].onload === "function" && typeof added[0].onerror === "function", added[0].src);
+  w.fire("keydown", { isTrusted: true }); w.fire("click", { isTrusted: true }); ok(added.length === 1, "loaded once");
+  const calls = real(); added[0].onload();
+  const names = calls.map(c => c[0]);
+  ok(JSON.stringify(calls.find(c => c[0] === "duck")) === '["duck",true]', "duck replayed " + JSON.stringify(calls));
+  ok(JSON.stringify(calls.find(c => c[0] === "start")) === '["start","four"]' && names.indexOf("unlock") > names.indexOf("start"), "started with the page's game, then unlocked");
+  ok(names.indexOf("duck") < names.indexOf("start"), "duck before start, so it starts ducked");
+});
+t("lazy music: Music off loads nothing; turning it on later loads it then; stop() before load keeps it quiet", () => {
+  const o = lazyWin({ music: false });
+  o.w.fire("pointerdown", { isTrusted: true }); ok(o.added.length === 0, "off: nothing");
+  o.w.fire("numberics:settings", { detail: { music: false } }); ok(o.added.length === 0);
+  o.S.music = true; o.w.fire("numberics:settings", { detail: { music: true } }); ok(o.added.length === 1, "on later: loads");
+  const p = lazyWin(); p.w.NumbericsMusic.stop(); p.w.fire("click", { isTrusted: true });
+  const calls = p.real(); p.added[0].onload(); ok(!calls.some(c => c[0] === "start"), "stopped: no start");
+});
+t("lazy music: game id from #games[data-current], endless -> two, none -> two; a failed load is survived", () => {
+  [[{ getAttribute: () => "endless" }, "two"], [null, "two"], [{ getAttribute: () => "seven" }, "seven"]].forEach(([g, want]) => {
+    const o = lazyWin({ game: g }); o.w.fire("touchend", { isTrusted: true }); const calls = o.real(); o.added[0].onload();
+    ok(calls.find(c => c[0] === "start")[1] === want, want);
+  });
+  const o = lazyWin(); o.w.NumbericsMusic.start("sudoku"); o.w.fire("click", { isTrusted: true }); const calls = o.real(); o.added[0].onload();
+  ok(calls.find(c => c[0] === "start")[1] === "sudoku", "a page's own start() id wins");
+  const f = lazyWin(); f.w.fire("click", { isTrusted: true }); f.added[0].onerror(); f.w.fire("click", { isTrusted: true });
+  ok(f.added.length === 1 && f.w.NumbericsMusic.stub && f.w.NumbericsMusic.duck(true), "error: the stub stays, no retry loop");
+  const r = lazyWin(); r.real(); r.w.fire("click", { isTrusted: true }); ok(r.added.length === 0, "music.js already on the page: no second copy");
 });
 t("module footprint: no localStorage, no timers, no network", () => {
   const s = require("fs").readFileSync(require("path").join(__dirname, "../shared/audio.js"), "utf8");

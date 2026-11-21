@@ -397,7 +397,7 @@ t("R5/R17 client: number keys click the tray slot; Enter on a link or button is 
   ok(/closest\("a, button"\)/.test(g), "link and button guard");
 });
 t("how-to copy: 'at 5 or more' and 'you can always win', no jargon", () => {
-  const h = fs.readFileSync(path.join(__dirname, "..", "five/index.html"), "utf8"), how = h.match(/<p class="how">([\s\S]*?)<\/p>/)[1];
+  const h = fs.readFileSync(path.join(__dirname, "..", "five/index.html"), "utf8"), how = h.match(/<details class="how"><summary>How to play<\/summary>\s*<p>([\s\S]*?)<\/p>/)[1];
   ok(/5 or more bursts/.test(how) && /you can always win/.test(how) && !/seat|solved|perfect play/i.test(how), how);
   ok(/<span>Record<\/span>/.test(h) && !/Matches/.test(h), "R16 pill names");
 });

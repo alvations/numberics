@@ -1,12 +1,27 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Numberics Seven: browser client. engine.js owns every rule; this file draws, listens and remembers.
- * A drop returns a wave-by-wave trace; the client plays it one step at a time (instantly under reduced motion). */
+ * A drop returns a wave-by-wave trace; the client plays it on NumbericsMotion's keyed layer (REDESIGN.md 5.5): the disc
+ * falls with gravity and settles, each wave pops, cracks its eggs and lets the column above fall, the rising row slides
+ * up. Every disc keeps its node (identity-keyed, never rebuilt per drop). A new input finishes the running animation
+ * (end state at once, pending sounds dropped) and is applied at once. Under reduced motion (Settings, then the OS, read
+ * at each drop) the settled well shows at once and new discs fade in. */
 (function () {
   "use strict";
-  var N = window.NumbericsSeven, K = window.NumbericsKit, P = window.NumbericsPower;
-  var W = N.W, H = N.H;
+  var N = window.NumbericsSeven, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
+  var A = window.NumbericsAudio, TR = window.NumbericsTrophies, PG = window.NumbericsProgress;
+  var W = N.W, H = N.H, T = M.T, E = M.E;
   var store = K.store("numberics_seven_v1");
-  var STEP = K.reducedMotion() ? 0 : 170;
+  // sounds and haptics (REDESIGN.md 6.4, 7.3), called at the visual moment from inside the motion timeline; while
+  // finish() runs the pending steps at once, `skipping` drops their sounds instead of bunching them
+  var skipping = false;
+  function sfx(name, arg) { if (skipping || !A || typeof A[name] !== "function") return; try { A[name](arg); } catch (e) { /* silent */ } }
+  function buzz(kind) { if (skipping || !A || typeof A.buzz !== "function") return; try { A.buzz(kind); } catch (e) { /* silent */ } }
+  function duck(on) { try { if (window.NumbericsMusic && window.NumbericsMusic.duck) window.NumbericsMusic.duck(on); } catch (e) { /* silent */ } }
+  function trophy(ev, data) {
+    if (!TR || !TR.report) return [];
+    try { var got = TR.report("seven", ev, data) || []; got.forEach(function (id) { if (runTro[mode].indexOf(id) < 0) runTro[mode].push(id); }); return got; }
+    catch (e) { return []; }
+  }
   var REVEAL = 1500; // R13: the final well stays in view, undimmed, this long before the end card
   // a fine pointer with hover means a keyboard is likely: only then mention Esc and the arrow keys
   var desk = false;
@@ -29,7 +44,7 @@
       !!s.power && N.POWERS.every(function (p) { return Number.isInteger(s.power[p]) && s.power[p] >= 0 && s.power[p] <= P.CAP; }) &&
       (s.prev === null || s.prev === undefined || (!inner && validState(s.prev, true)));
   }
-  var saved = store.load() || {};
+  var loaded = store.load(), saved = loaded || {};
   var runs = {}, best = { classic: 0, blitz: 0, daily: 0 }, start = {};
   var today = K.daySeed();
   var sameDay = saved.day === today; // the Daily best is today's best: a new day starts it at 0
@@ -40,41 +55,74 @@
     var a = saved.start && saved.start[m]; start[m] = typeof a === "number" && a >= 0 && a <= best[m] ? a : best[m];
   });
   var mode = N.MODES.indexOf(saved.mode) >= 0 ? saved.mode : "classic";
+  // the Today card's chip links here with ?mode=daily (REDESIGN.md 3.4): open the Daily (every mode keeps its own run)
+  try { if (/(^|[?&])mode=daily(&|$)/.test(window.location.search)) mode = "daily"; } catch (e) { /* no location */ }
+  // the trophies earned in each mode's current run, shown as pills on its end card (8.1)
+  var runTro = { classic: [], blitz: [], daily: [] };
+  N.MODES.forEach(function (m) {
+    var a = saved.tro && saved.tro[m];
+    if (Array.isArray(a) && runs[m]) runTro[m] = a.filter(function (id) { return typeof id === "string"; }).slice(0, 20);
+  });
   function fresh(m) { return N.newGame(m === "daily" ? today : K.freshSeed(), m); }
   // a tab left open past midnight: the next Daily is today's, with today's best
   function checkDay() {
     var d = K.daySeed(); if (d === today) return;
     today = d; delete runs.daily; best.daily = 0; start.daily = 0;
   }
-  function newRun(m) { if (m === "daily") checkDay(); start[m] = best[m]; return fresh(m); }
+  function newRun(m) { if (m === "daily") checkDay(); start[m] = best[m]; runTro[m] = []; return fresh(m); }
   var state = runs[mode] || newRun(mode);
   var cursor = 3, targeting = null, aim = -1, viewing = false, note = "", revealing = false, revealT = null, carded = false;
-  var timers = [], busy = false, gen = 0, shownScore = state.score, shownBest = Math.max(best[mode], state.score);
+  var seq = M.seq(), gen = 0, fxAnims = [], shownScore = state.score, shownBest = Math.max(best[mode], state.score), shownNext = null, ducked = false;
+  function busy() { return seq.busy(); }
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), discsEl = $("discs"), cellsEl = $("cells");
   for (var i = 0; i < W * H; i++) { var d = document.createElement("div"); if (i < W) d.className = "top"; cellsEl.appendChild(d); }
-  var els = {};
 
   function persist() {
     runs[mode] = state;
     if (!state.overflow) best[mode] = Math.max(best[mode], state.score); // a run on the brink is not a result yet
-    store.save({ mode: mode, runs: runs, best: best, start: start, day: today });
+    store.save({ mode: mode, runs: runs, best: best, start: start, day: today, tro: runTro });
+    // the card summary (REDESIGN.md 3.5): the best of Classic and Blitz (the Daily best is only today's), and this run
+    var b = Math.max(best.classic, best.blitz), live = state.drops > 0 && !state.over;
+    try { if (PG && PG.put) PG.put("seven", { best: b ? "Best " + K.fmt(b) : "", live: live, liveText: live ? "Score " + K.fmt(state.score) : "" }); }
+    catch (e) { /* the card is a nicety */ }
   }
 
   // ---- drawing ----
+  // a ghost or aim mark: a plain node in the layer (not a disc: the layer never touches it)
   function paint(el, v) {
-    el.classList.remove("egg", "cracked", "tile");
+    el.classList.remove("egg", "cracked");
     el.textContent = "";
-    if (v === N.EGG) { el.classList.add("egg"); el.setAttribute("aria-label", "egg"); }
-    else if (v === N.CRACKED) { el.classList.add("cracked"); el.setAttribute("aria-label", "cracked egg"); }
-    else { el.classList.add("tile"); el.style.setProperty("--h", K.hue(v)); el.textContent = String(v); el.setAttribute("aria-label", "disc " + v); }
+    if (v === N.EGG) el.classList.add("egg");
+    else if (v === N.CRACKED) el.classList.add("cracked");
+    else { el.style.setProperty("--h", K.hue(v)); el.textContent = String(v); }
   }
   function place(el, cell) { el.style.setProperty("--r", Math.floor(cell / W)); el.style.setProperty("--c", cell % W); }
   function makeDisc(v, cell, cls) {
     var el = document.createElement("div"); el.className = "disc" + (cls ? " " + cls : "");
     paint(el, v); place(el, cell); discsEl.appendChild(el); return el;
   }
+  // ---- the discs: NumbericsMotion's keyed layer. ids[cell] is the client's identity map (never in the save) ----
+  function makeNode() {
+    var n = document.createElement("div"), f = document.createElement("div");
+    n.className = "disc"; f.className = "face"; n.appendChild(f); return n;
+  }
+  function paintNode(n, t) {
+    var v = t.v, f = n.firstChild;
+    n.classList.toggle("egg", v === N.EGG); n.classList.toggle("cracked", v === N.CRACKED);
+    if (v >= 1 && v <= 7) { n.style.setProperty("--h", K.hue(v)); f.textContent = String(v); n.setAttribute("aria-label", "disc " + v); }
+    else { f.textContent = ""; n.setAttribute("aria-label", v === N.EGG ? "egg" : "cracked egg"); }
+  }
+  var layer = M.layer(discsEl, { cols: W, rows: H, clip: true, make: makeNode, paint: paintNode });
+  var ids = [], nextId = 1;
+  function tilesOf(grid, map) { var out = []; for (var c = 0; c < W * H; c++) if (grid[c]) out.push({ id: map[c], cell: c, v: grid[c] }); return out; }
+  function rekey(grid) { var r = M.rekey(grid, nextId); ids = r.ids; nextId = r.next; }
+  function keyed(grid) { for (var c = 0; c < W * H; c++) if (!grid[c] !== !ids[c]) return false; return true; }
+  var drawn = "";
+  // while finish() runs the steps left, each lands without motion (no pitch read, no animation made and then cancelled)
+  function syncLayer(grid, fx) { drawn = grid.join(","); layer.sync(tilesOf(grid, ids), skipping ? {} : fx); }
+  function nodeAt(cell) { return ids[cell] ? layer.get(ids[cell]) : null; }
   function mini(v, cls) {
     var m = document.createElement("em"); m.className = "mini" + (v === N.EGG ? " egg" : v === N.CRACKED ? " cracked" : "") + (cls ? " " + cls : "");
     if (v >= 1 && v <= 7) { m.style.setProperty("--h", K.hue(v)); m.textContent = String(v); }
@@ -82,14 +130,20 @@
     m.setAttribute("aria-label", v === N.EGG ? "egg" : "disc " + v);
     return m;
   }
-  function drawGrid(grid) {
-    discsEl.textContent = ""; els = {};
-    grid.forEach(function (v, cell) { if (v) els[cell] = makeDisc(v, cell); });
+  // the settled well, without motion (fade: a re-keyed well cross-fades in, as after Undo or a New game)
+  function drawGrid(grid, fade) {
+    var same = !fade && keyed(grid) && drawn === grid.join(",");
+    if (fade || !keyed(grid)) rekey(grid);
+    Array.prototype.forEach.call(discsEl.querySelectorAll(".disc.out"), function (e) { e.classList.remove("out"); });
+    if (!same) syncLayer(grid, fade ? { fade: true } : {}); // an unchanged well keeps its nodes and their motion
     markOut(state.over ? state.out : state.overflow);
   }
   // the discs the rising eggs would push out of the top: ringed red on the final board
   function markOut(out) {
-    (out || []).forEach(function (c) { if (els[c]) { els[c].classList.add("out"); els[c].setAttribute("aria-label", els[c].getAttribute("aria-label") + ", pushed out"); } });
+    (out || []).forEach(function (c) {
+      var el = nodeAt(c); if (!el || el.classList.contains("out")) return;
+      el.classList.add("out"); el.setAttribute("aria-label", el.getAttribute("aria-label") + ", pushed out");
+    });
   }
   // targeting marks: the Smash aim (arrow keys) or the eggs a Crack would crack
   function drawAim() {
@@ -99,7 +153,7 @@
   }
   function drawGhost() {
     var old = discsEl.querySelector(".ghost"); if (old) old.remove();
-    if (state.over || state.overflow || targeting || busy) return;
+    if (state.over || state.overflow || targeting || busy()) return;
     var r = N.landing(state.grid, cursor); if (r < 0) return;
     var g = makeDisc(state.next, r * W + cursor, "ghost"); g.setAttribute("aria-hidden", "true");
   }
@@ -142,7 +196,7 @@
   }
   function renderTray() {
     P.tray($("tray"), DEFS, state.power, {
-      armed: targeting, disabled: why, onUse: activate, onInfo: function (id, t) { say(t); },
+      armed: targeting, disabled: why, onUse: function (id, k) { sfx("tick"); activate(id, k); }, onInfo: function (id, t) { say(t); },
     });
     var hb = $("tray").children[2];
     if (state.held) hb.insertBefore(mini(state.held, "held"), hb.firstChild);
@@ -168,7 +222,14 @@
   }
   function renderChrome() {
     showScore();
-    var nx = $("next"); nx.textContent = ""; nx.appendChild(mini(state.next, "label"));
+    var nx = $("next");
+    if (shownNext !== state.next || !nx.firstChild) {
+      var dropIn = shownNext !== null; shownNext = state.next;
+      nx.textContent = ""; var mn = mini(state.next, "label"); nx.appendChild(mn);
+      // the preview drops in from the top: it is the disc that will fall (9.7); reduced motion: a fade
+      if (dropIn) M.play(mn, [{ transform: "translateY(-120%)", opacity: 0 }, { transform: "translateY(0)", opacity: 1 }],
+        { duration: M.fallMs(1), easing: E.fall }, [{ opacity: 0 }, { opacity: 1 }]);
+    }
     var pips = $("pips"), total = N.dropsFor(state.mode, state.level); pips.textContent = "";
     for (var k = 0; k < total; k++) { var p = document.createElement("i"); if (k >= state.left) p.className = "used"; pips.appendChild(p); }
     pips.title = state.left + " drops until the eggs rise";
@@ -181,7 +242,7 @@
     // one end-card pattern (TRIAGE3): while a card shows, the page's New game is hidden with its space kept, and
     // focus moves to the card's primary button. On the brink (TRIAGE3 stuck-not-over) the card offers Undo or End.
     var brink = !!state.overflow, over = $("over");
-    over.hidden = !(brink || (state.over && !viewing)) || revealing;
+    over.hidden = !(brink || (state.over && !viewing)) || revealing || busy(); // the well settles before any card
     $("new").style.visibility = over.hidden ? "" : "hidden";
     $("over-undo").hidden = $("over-end").hidden = !brink;
     $("over-view").hidden = $("again").hidden = brink;
@@ -196,10 +257,21 @@
         " · score " + K.fmt(state.score);
       $("over-best").hidden = !(state.score > start[mode]);
     }
-    if (!over.hidden && !carded) { try { $(brink ? "over-undo" : "again").focus({ preventScroll: true }); } catch (e) { /* a nicety */ } }
+    // one pill per trophy earned in this run (8.1), on the end card only
+    if (TR && TR.pills) TR.pills($("over-pills"), state.over ? runTro[mode] : []); else $("over-pills").hidden = true;
+    if (!over.hidden && !carded) {
+      try { $(brink ? "over-undo" : "again").focus({ preventScroll: true }); } catch (e) { /* a nicety */ }
+      if (state.over) { // the end card's moment: a new best, a Daily finished, or the run over (7.3)
+        if (state.score > start[mode]) { sfx("best"); buzz("win"); }
+        else if (mode === "daily") { sfx("win"); buzz("win"); }
+        else { sfx("lose"); buzz("lose"); }
+      }
+    }
     carded = !over.hidden;
+    var duckNow = carded && !!state.over; // the music steps back while the end card shows
+    if (duckNow !== ducked) { ducked = duckNow; duck(duckNow); }
   }
-  function render() { drawGrid(state.grid); shownScore = state.score; shownBest = Math.max(best[mode], state.score); renderChrome(); }
+  function render(fade) { drawGrid(state.grid, fade); shownScore = state.score; shownBest = Math.max(best[mode], state.score); renderChrome(); }
 
   // ---- R13: a run that ends keeps the final well in view for REVEAL ms, then the end card shows ----
   function endReveal() {
@@ -217,60 +289,118 @@
     revealT = setTimeout(function () { if (g !== gen) return; endReveal(); }, REVEAL);
   }
 
-  // ---- playing a trace, one step at a time; every timer checks its generation ----
+  // ---- playing a trace on the keyed layer (REDESIGN.md 5.5). plan() is pure: it walks the engine's trace and gives
+  // each step the identity map before and after it, so the timeline only syncs the layer; finish() runs the steps
+  // left at once, in order, and the well lands on the engine's grid. ----
+  function plan(trace, from) {
+    var cur = from.slice(), out = [];
+    trace.forEach(function (step) {
+      var prev = cur, map = prev.slice(), extra = {};
+      if (step.type === "drop") { map[step.cell] = nextId++; extra.id = map[step.cell]; }
+      else if (step.type === "wave" || step.type === "smash") {
+        var gone = step.type === "wave" ? step.pops : [step.cell];
+        extra.gone = gone.map(function (c) { return prev[c]; });
+        if (step.cracks) extra.cracks = step.cracks.map(function (k) { return { id: prev[k.cell], v: k.to }; });
+        gone.forEach(function (c) { map[c] = 0; });
+        var moved = step.falls.map(function (f) { return { id: map[f.from], from: f.from, to: f.to }; });
+        moved.forEach(function (f) { map[f.from] = 0; });
+        moved.forEach(function (f) { map[f.to] = f.id; });
+        extra.falls = moved.map(function (f) { return { id: f.id, rows: Math.round((f.to - f.from) / W) }; });
+      } else if (step.type === "lucky" || step.type === "crack") {
+        extra.cracks = step.cracks.map(function (k) { return { id: prev[k.cell], v: k.to }; });
+      } else if (step.type === "rise" && !step.overflow) {
+        map = []; for (var c = 0; c < W * H; c++) map[c] = c < W * (H - 1) ? prev[c + W] : nextId++;
+      }
+      cur = map; out.push({ step: step, prev: prev, ids: map, x: extra });
+    });
+    return out;
+  }
+  // an egg cracking: the cracked face cross-fades in over 120 ms with a 1-shot 2% wobble (reduced: the fade only)
+  function crackFx(list) {
+    list.forEach(function (k) {
+      var n = layer.get(k.id); if (!n) return;
+      paintNode(n, { v: k.v });
+      var a = M.play(n.firstChild, [{ opacity: 0.35 }, { opacity: 1 }], { duration: 120, easing: "linear" }, [{ opacity: 0.35 }, { opacity: 1 }]);
+      var b = M.play(n.firstChild, [{ transform: "translateX(0)" }, { transform: "translateX(2%) rotate(2deg)", offset: 0.3 },
+        { transform: "translateX(-2%) rotate(-2deg)", offset: 0.65 }, { transform: "translateX(0)" }], { duration: 180, easing: E.out, composite: "add" });
+      if (a) fxAnims.push(a); if (b) fxAnims.push(b);
+    });
+  }
+  function popFx(idsGone) {
+    idsGone.forEach(function (id) {
+      var n = layer.get(id); if (!n) return;
+      var a = M.play(n.firstChild, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.18)", opacity: 1, offset: 0.4 },
+        { transform: "scale(.2)", opacity: 0 }], { duration: T.popOut, easing: E.out, fill: "forwards" }, [{ opacity: 1 }, { opacity: 0 }]);
+      if (a) fxAnims.push(a);
+    });
+  }
+  function maxRows(falls) { return falls.reduce(function (m, f) { return Math.max(m, f.rows); }, 0); }
+  function clearFx() {
+    fxAnims.forEach(function (a) { try { a.cancel(); } catch (e) { /* gone */ } }); fxAnims = [];
+    discsEl.classList.remove("rising");
+  }
+  // a new input: the running animation ends now (every pending step runs, its sounds dropped), then the input applies
   function flush() {
-    if (!busy) return;
-    timers.forEach(clearTimeout); timers = []; busy = false; gen++; settle(); // a skipped ending still holds the well in view
-  }
-  function moveFalls(falls) {
-    var next = {};
-    Object.keys(els).forEach(function (k) { next[k] = els[k]; });
-    falls.forEach(function (f) { delete next[f.from]; });
-    falls.forEach(function (f) { var el = els[f.from]; if (el) { next[f.to] = el; place(el, f.to); } });
-    els = next;
-  }
-  function applyCracks(cracks) {
-    cracks.forEach(function (c) { var el = els[c.cell]; if (el) { paint(el, c.to); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); } });
-  }
-  function stepIn(step) {
-    shownScore += step.points || 0; showScore();
-    if (step.type === "drop") { els[step.cell] = makeDisc(step.disc, step.cell, "new"); }
-    else if (step.type === "wave") {
-      step.pops.forEach(function (c) { if (els[c]) els[c].classList.add("popping"); });
-      applyCracks(step.cracks);
-      return function () {
-        step.pops.forEach(function (c) { if (els[c]) { els[c].remove(); delete els[c]; } });
-        moveFalls(step.falls);
-      };
-    }
-    else if (step.type === "lucky" || step.type === "crack") applyCracks(step.cracks);
-    else if (step.type === "smash") { if (els[step.cell]) { els[step.cell].remove(); delete els[step.cell]; } moveFalls(step.falls); }
-    else if (step.type === "rise" && step.overflow) markOut(step.out);
-    else if (step.type === "rise") {
-      var next = {};
-      Object.keys(els).forEach(function (k) {
-        var el = els[k], to = +k - W;
-        if (to < 0) { el.classList.add("gone"); return; }
-        next[to] = el; place(el, to);
-      });
-      for (var c = 0; c < W; c++) next[(H - 1) * W + c] = makeDisc(N.EGG, (H - 1) * W + c, "new");
-      els = next;
-    }
-    return null;
+    if (!busy()) return;
+    skipping = true;
+    try { seq.finish(); } finally { skipping = false; }
+    clearFx(); layer.finish();
   }
   function play(trace, done) {
-    var g = ++gen, queue = trace.slice(), half = Math.round(STEP * 0.55);
-    if (!STEP) { done(); return; }
-    busy = true;
+    var steps = plan(trace, ids), at = 0; gen++;
     var old = discsEl.querySelector(".ghost"); if (old) old.remove();
-    function next() {
-      if (g !== gen) return;
-      if (!queue.length) { busy = false; timers = []; done(); return; }
-      var finish = stepIn(queue.shift());
-      if (finish) timers.push(setTimeout(function () { if (g !== gen) return; finish(); timers.push(setTimeout(next, STEP - half)); }, half));
-      else timers.push(setTimeout(next, STEP));
+    if (M.reduced()) { // the settled well at once: new discs fade in, popped ones go, the score lands in one step
+      var last = steps.length ? steps[steps.length - 1] : null, top = 0, any = false;
+      steps.forEach(function (s) {
+        shownScore += s.step.points || 0;
+        if (s.step.type === "wave") top = Math.max(top, s.step.wave);
+        if (s.step.type === "drop" || (s.x.falls && s.x.falls.length)) any = true;
+      });
+      if (last) { ids = last.ids; syncLayer(last.step.grid || state.grid, { fade: true }); }
+      if (any) sfx("land");
+      if (top) { sfx("pop", top); buzz(top >= 3 ? "big" : "merge"); } else if (any) buzz("tap");
+      showScore(); done(); return;
     }
-    next();
+    function score(s) { shownScore += s.step.points || 0; showScore(); }
+    // the first beat is written inside the input handler (REDESIGN.md 10: input to first visual change <= 1 frame)
+    var seqAt = function (t, fn) { if (t === 0) fn(); else seq.at(t, fn); };
+    steps.forEach(function (s) {
+      var st = s.step, x = s.x, t0 = at;
+      if (st.type === "drop") {
+        var d = M.fallMs(st.row + 1);
+        seqAt(t0, function () { clearFx(); ids = s.ids; syncLayer(st.grid, { falls: [{ id: x.id, rows: st.row + 1 }] }); score(s); });
+        seqAt(t0 + d, function () { sfx("land"); buzz("tap"); });
+        at = t0 + d + T.settle;
+      } else if (st.type === "wave" || st.type === "smash") {
+        var fall = maxRows(x.falls), fd = fall ? M.fallMs(fall) : 0, out = st.type === "wave" ? T.popOut : T.fade;
+        seqAt(t0, function () {
+          clearFx();
+          if (st.type === "wave") { popFx(x.gone); sfx("pop", st.wave); buzz(st.wave >= 3 ? "big" : "merge"); }
+          if (x.cracks) crackFx(x.cracks);
+          score(s);
+          if (st.type === "smash") { ids = s.ids; syncLayer(st.grid, { out: x.gone, falls: x.falls }); }
+        });
+        if (st.type === "wave") seqAt(t0 + out, function () { ids = s.ids; syncLayer(st.grid, { falls: x.falls }); });
+        var landAt = (st.type === "wave" ? t0 + out : t0) + fd;
+        if (fall) seqAt(landAt, function () { sfx("land"); });
+        at = Math.max(t0 + out, landAt + (fall ? T.settle : 0)) + T.waveGap;
+      } else if (st.type === "lucky" || st.type === "crack") {
+        seqAt(t0, function () { clearFx(); crackFx(x.cracks); score(s); if (st.type === "lucky") buzz("big"); });
+        seqAt(t0 + 120, function () { ids = s.ids; syncLayer(st.grid, {}); });
+        at = t0 + 180 + T.waveGap;
+      } else if (st.type === "rise" && st.overflow) {
+        seqAt(t0, function () { clearFx(); markOut(st.out); score(s); buzz("lose"); });
+      } else if (st.type === "rise") {
+        // the whole stack moves up one pitch over 180 ms and the new egg row fades in (5.5)
+        seqAt(t0, function () {
+          clearFx(); discsEl.classList.add("rising"); ids = s.ids;
+          syncLayer(st.grid, { fade: true }); score(s); sfx("slide");
+        });
+        seqAt(t0 + 180, function () { discsEl.classList.remove("rising"); });
+        at = t0 + 180 + T.waveGap;
+      } else seqAt(t0, function () { score(s); });
+    });
+    seq.at(at, function () { clearFx(); done(); });
   }
   function announce(res) {
     var parts = [];
@@ -283,6 +413,7 @@
     if (res.unpaid.length) parts.push("No reward after a power-up.");
     else if (res.full.length) parts.push("Power-ups full.");
     if (parts.length) K.toast(parts.join("  "), plain ? "info" : undefined);
+    if (res.awarded.length) sfx("power");
   }
 
   // ---- actions ----
@@ -291,16 +422,42 @@
     var before = state.score, b = Math.max(best[mode], before);
     state = next; persist(); shownScore = before; shownBest = b;
   }
+  // ---- trophies (REDESIGN.md 8.4): reported when the drop has settled on screen, so a toast never beats the well ----
+  function dropEvent(res) {
+    var popped = [], g = null;
+    res.trace.forEach(function (st) {
+      if (st.type === "wave" && g) st.pops.forEach(function (c) { popped.push(g[c]); });
+      if (st.grid) g = st.grid;
+    });
+    return { waves: res.waves, popped: popped, sevens: popped.filter(function (v) { return v === 7; }).length,
+      left: res.state.grid.filter(Boolean).length };
+  }
+  function finishRun() { // the run just ended: the end event, and today's Daily for the Today card
+    trophy("end", { mode: mode, score: state.score, daily: mode === "daily" });
+    if (mode === "daily") { try { if (PG && PG.daily) PG.daily("seven", K.fmt(state.score)); } catch (e) { /* a nicety */ } }
+  }
+  function settled(res, wasOver) {
+    return function () {
+      if (res && res.trace[0] && res.trace[0].type === "drop") {
+        trophy("drop", dropEvent(res));
+        if (res.trace.some(function (st) { return st.type === "rise" && !st.overflow; })) trophy("level", { level: state.level, mode: mode });
+      }
+      if (!wasOver && state.over) finishRun();
+      persist(); settle();
+    };
+  }
   function doDrop(col) {
     flush(); note = "";
     if (targeting || state.over) return;
     if (state.overflow) { endReveal(); return; } // on the brink a drop is refused: the card asks Undo or End
     cursor = col;
     var res = N.drop(state, col);
-    if (!res.ok) { K.toast("That column is full", "bad"); return renderChrome(); }
+    if (!res.ok) { K.toast("That column is full", "bad"); sfx("bad"); return renderChrome(); }
+    var was = state.over;
     commit(res.state);
     announce(res);
-    play(res.trace, settle);
+    play(res.trace, settled(res, was));
+    if (busy()) renderChrome(); // the tray, hint and stats update in the same handler as the drop (5.11)
   }
   function activate(id, fromKey) {
     flush(); endReveal(); note = ""; kbd = !!fromKey;
@@ -313,19 +470,21 @@
     var u = N.use(state, id);
     if (!u.ok) return renderChrome();
     state = u.state; persist();
-    if (id === "undo") { K.toast("Took back one drop"); return render(); }
+    if (id === "undo") { K.toast("Took back one drop"); return render(true); }
     K.toast("Held " + (state.held >= 1 && state.held <= 7 ? state.held : "the egg")); renderChrome();
   }
   function crackNow() {
     var u = N.use(state, "crack"); targeting = null;
     if (!u.ok) return renderChrome();
-    commit(u.state); K.toast("Crack!"); renderChrome(); play(u.trace, settle);
+    var was = state.over;
+    commit(u.state); K.toast("Crack!"); play(u.trace, settled(null, was)); if (busy()) renderChrome();
   }
   function smashAt(cell) {
     var u = N.use(state, "smash", cell);
     if (!u.ok) { K.toast("Pick a disc", "bad"); return; }
+    var was = state.over;
     targeting = null; commit(u.state); K.toast("Smash!");
-    renderChrome(); play(u.trace, settle);
+    play(u.trace, settled(null, was)); if (busy()) renderChrome();
   }
   function moveAim(dc, dr) {
     if (aim < 0) aim = cursor;
@@ -342,18 +501,19 @@
   // ---- input ----
   boardEl.addEventListener("click", function (ev) {
     if (ev.target.closest && ev.target.closest(".over")) return;
-    if (state.over || state.overflow) { if (busy) return flush(); if (endReveal()) return; if (viewing) { viewing = false; note = ""; renderChrome(); } return; }
+    if (state.over || state.overflow) { if (busy()) return flush(); if (endReveal()) return; if (viewing) { viewing = false; note = ""; renderChrome(); } return; }
     var p = cellAt(ev);
     if (targeting === "smash") { flush(); note = ""; smashAt(p.r * W + p.c); return; }
     if (targeting === "crack") { flush(); note = ""; crackNow(); return; }
     doDrop(p.c);
   });
   boardEl.addEventListener("mousemove", function (ev) {
-    if (busy || targeting) return;
+    if (busy() || targeting) return;
     var c = cellAt(ev).c; if (c !== cursor) { cursor = c; drawCursor(); drawGhost(); }
   });
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (window.NumbericsUI && window.NumbericsUI.open && window.NumbericsUI.open()) return; // a sheet is open: no game keys
     var tag = (e.target && e.target.tagName) || "";
     // R17: Enter or Space on a focused link, button or field is that control's own action, never a drop
     if ((e.key === "Enter" || e.key === " ") && /^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(tag)) return;
@@ -368,13 +528,13 @@
     if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
       e.preventDefault();
       cursor = Math.max(0, Math.min(W - 1, cursor + (e.key === "ArrowLeft" ? -1 : 1)));
-      if (!busy) { drawCursor(); drawGhost(); }
+      if (!busy()) { drawCursor(); drawGhost(); }
       return;
     }
     var go = e.key === "Enter" || e.key === " " || e.key === "ArrowDown";
     if (!go) return;
     e.preventDefault();
-    if (state.over || state.overflow) { if (busy) return flush(); if (endReveal()) return; if (viewing) { viewing = false; renderChrome(); } return; }
+    if (state.over || state.overflow) { if (busy()) return flush(); if (endReveal()) return; if (viewing) { viewing = false; renderChrome(); } return; }
     note = "";
     if (targeting === "smash") { flush(); if (aim >= 0 && state.grid[aim]) smashAt(aim); else K.toast("Pick a disc", "bad"); return; }
     if (targeting === "crack") { flush(); return crackNow(); }
@@ -383,32 +543,63 @@
 
   function startNew() {
     flush(); endReveal(); targeting = null; viewing = false; note = "";
-    state = newRun(mode); persist(); render();
+    state = newRun(mode); persist(); render(true);
   }
   K.twoStep($("new"), function () { return state.drops > 0 && !state.over; }, startNew);
-  $("again").addEventListener("click", startNew);
+  $("again").addEventListener("click", function () { sfx("tick"); startNew(); });
   $("over-undo").addEventListener("click", function () {
     activate("undo"); try { boardEl.focus({ preventScroll: true }); } catch (e) { /* a nicety */ } // its button is gone
   });
   $("over-end").addEventListener("click", function () {
     var r = N.end(state); if (!r.ok) return renderChrome();
-    flush(); endReveal(); note = ""; state = r.state; persist(); carded = false; render();
+    flush(); endReveal(); note = ""; state = r.state; finishRun(); persist(); carded = false; render();
   });
   $("over-view").addEventListener("click", function () { viewing = true; note = ""; renderChrome(); boardEl.focus(); });
   Array.prototype.forEach.call($("modes").children, function (b) {
     b.addEventListener("click", function () {
       var m = b.getAttribute("data-mode"); if (m === mode) return;
+      sfx("tick");
       flush(); endReveal(); targeting = null; viewing = false; note = ""; persist();
       if (m === "daily") checkDay();
-      mode = m; state = runs[m] || newRun(m); persist(); render();
+      mode = m; state = runs[m] || newRun(m); persist(); render(true);
       K.toast(m === "daily" ? "Daily: the same well for everyone today" : m === "blitz" ? "Blitz: eggs rise every 5 drops" : "Classic");
     });
   });
 
   render();
 
+  // ---- how to play (REDESIGN.md 1.3, 9.7): three steps, each a small drawn well and one sentence, in the shared sheet.
+  // It opens by itself once, on a first visit with nothing saved; the How to play row under the board always has it. ----
+  function md(v, cls) {
+    var n = v >= 1 && v <= 7;
+    return '<span class="md' + (cls ? " " + cls : "") + '"' + (n ? ' style="--h2:hsl(' + K.hue(v) + ' 62% 60%)"' : "") + ">" + (n ? v : "") + "</span>";
+  }
+  function well(cols, cells) { return '<div class="mg" style="grid-template-columns:repeat(' + cols + ',20px)">' + cells.join("") + "</div>"; }
+  var STEPS = [
+    { t: "Tap a column to drop the Next disc.", pv: well(5, [md(0), md(0), md(4, "ring"), md(0), md(0), md(0), md(0), md(0, "col"), md(0), md(0),
+      md(2), md(0), md(0, "col"), md(6), md(5)]) },
+    { t: "A disc pops when its number equals how many discs are in its line.", pv: well(5, [md(0), md(0), md(0), md(0), md(0),
+      md(0), md(0), md(0), md(0), md(0), md(0), md(1), md(3, "ring"), md(5), md(0)]) },
+    { t: "Grey eggs crack when a disc pops beside them.", pv: '<div class="mg" style="grid-template-columns:repeat(5,20px);align-items:center">' +
+      md(0, "egg") + md(2, "ring") + md(0) + '<span class="to">&#8594;</span>' + md(0, "cracked") + "</div>" },
+  ];
+  function howto() {
+    var U = window.NumbericsUI;
+    try { if (PG && PG.markHowto) PG.markHowto("seven"); } catch (e) { /* a nicety */ }
+    if (!U || !U.sheet) { $("how").open = true; return; }
+    U.sheet("howto", function (body) {
+      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
+        return '<div class="step"><div class="pv" aria-hidden="true">' + s.pv + "</div><p>" + s.t + "</p></div>";
+      }).join("") + "</div>";
+    });
+  }
+  $("how-steps").addEventListener("click", function () { sfx("tick"); howto(); });
+  var seen = true; try { seen = !PG || !PG.seenHowto || PG.seenHowto("seven"); } catch (e) { seen = true; }
+  if (!loaded && !seen) window.addEventListener("load", function () { if (!window.NumbericsUI || !window.NumbericsUI.open()) howto(); });
+
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
+    try { if (window.NumbericsUI && window.NumbericsUI.open()) window.NumbericsUI.close(); } catch (e) { /* no sheet */ }
     flush(); endReveal(); targeting = null;
     var s = N.newGame(2026, "classic");
     for (var k = 0; k < 34 && !s.over; k++) {
@@ -422,12 +613,12 @@
     }
     s.power = { undo: 1, smash: 2, hold: 1, crack: 1 }; s.held = 7; s.prev = null; s.over = false;
     mode = "classic"; state = s; cursor = 3; viewing = false; note = ""; best.classic = Math.max(best.classic, 0);
-    render();
+    render(true); layer.finish();
   };
   window.__seven = {
-    get state() { return state; }, set state(s) { flush(); endReveal(); targeting = null; viewing = false; note = ""; state = s; render(); },
-    get mode() { return mode; }, get cursor() { return cursor; }, get busy() { return busy; },
+    get state() { return state; }, set state(s) { flush(); endReveal(); targeting = null; viewing = false; note = ""; state = s; render(true); },
+    get mode() { return mode; }, get cursor() { return cursor; }, get busy() { return busy(); },
     get targeting() { return targeting; }, get aim() { return aim; }, get viewing() { return viewing; }, get revealing() { return revealing; },
-    render: render, flush: flush,
+    render: render, flush: flush, layer: layer, get ids() { return ids.slice(); }, get drawnCount() { return drawn ? drawn.split(",").filter(function (v) { return v !== "0"; }).length : 0; }, howto: howto,
   };
 })();

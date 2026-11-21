@@ -10,12 +10,15 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nm-b1-"));
   const html = p => p.evaluate(() => Object.assign({}, document.documentElement.dataset));
   const nmKeys = p => p.evaluate(() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith("numberics_")) o[k] = localStorage.getItem(k); } return o; });
-  const openSettings = async p => { await p.click('#topbar [data-open="settings"]'); await p.waitForSelector("#sh-settings:not([hidden])"); };
+  const sw0 = (p, f) => p.click('#sh-settings [data-sw="' + f + '"]');
+  // a game may open its How to play sheet on a first visit (Fibonacci, Three): close it, as a player would
+  const settle = p => p.evaluate(() => { if (window.NumbericsUI && NumbericsUI.open() && NumbericsUI.current() !== "settings") NumbericsUI.close(); });
+  const openSettings = async p => { await settle(p); await p.click('#topbar [data-open="settings"]'); await p.waitForSelector("#sh-settings:not([hidden])"); };
 
   // 1. the sheet primitive: dialog, focus, trap, Esc, scrim, scroll lock, keys never reach the game
   let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
-  await p.goto(FIB);
+  await p.goto(FIB); await settle(p);
   ck("closed at load: NumbericsUI.open() is false", await p.evaluate(() => NumbericsUI.open() === false && !document.querySelector(".scrim:not([hidden])")));
   const ev = p.evaluate(() => new Promise(r => addEventListener("numberics:sheet", e => r(e.detail), { once: true })));
   await openSettings(p);
@@ -30,13 +33,37 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the sections are Sound and feel, Seeing, Memory, in order", (await p.$$eval("#sh-settings .sec", s => s.map(x => x.textContent))).join("|") === "Sound and feel|Seeing|Memory");
   ck("switches are button[role=switch][aria-checked], 52 x 32", await p.evaluate(() => [...document.querySelectorAll("#sh-settings .sw")].filter(b => b.offsetParent).every(b => {
     const r = b.getBoundingClientRect(); return b.tagName === "BUTTON" && b.getAttribute("role") === "switch" && b.hasAttribute("aria-checked") && Math.round(r.width) === 52 && Math.round(r.height) === 32; })));
-  ck("segments are aria-pressed buttons 38 px high: Device / Less / Full and Dark / Light / Device", await p.evaluate(() => {
-    const g = [...document.querySelectorAll("#sh-settings .seg3")].map(s => [...s.children].map(b => b.textContent).join("/"));
-    return g.join("|") === "Device/Less/Full|Dark/Light/Device" && [...document.querySelectorAll("#sh-settings .seg3 button")].every(b => b.getBoundingClientRect().height >= 38 && b.hasAttribute("aria-pressed")); }));
+  ck("segments are aria-pressed buttons 38 px high: music Style, Device / Less / Full and Dark / Light / Device", await p.evaluate(() => {
+    const g = [...document.querySelectorAll("#sh-settings .seg3")].map(s => [...s.children].map(b => b.textContent.replace(/\u00a0/g, " ")).join("/"));
+    return g.join("|") === "Auto (per game)/Chill/Drift/Pocket/Quest/Blocks/Pulse/Epic|Device/Less/Full|Dark/Light/Device" && [...document.querySelectorAll("#sh-settings .seg3 button")].every(b => b.getBoundingClientRect().height >= 38 && b.hasAttribute("aria-pressed")); }));
   ck("Vibration shows where navigator.vibrate exists", await p.isVisible('#sh-settings [data-sw="haptics"]'));
   ck("defaults shown: sound on, Motion Device, Theme Dark, volume 50", await p.evaluate(() =>
     document.querySelector('[data-sw="sound"]').getAttribute("aria-checked") === "true" && document.querySelector('[data-seg="motion"][data-v="auto"]').getAttribute("aria-pressed") === "true" &&
     document.querySelector('[data-seg="theme"][data-v="dark"]').getAttribute("aria-pressed") === "true" && document.querySelector("[data-vol]").value === "50"));
+  // Music controls (docs/design/MUSIC.md, Settings fields)
+  ck("Music sits right under Sound and Volume: Sound, Volume, Music, Music volume, Style, then Vibration", await p.evaluate(() =>
+    [...document.querySelectorAll("#sh-settings [data-sw], #sh-settings [data-vol], #sh-settings [data-mvol], #sh-settings [data-mstyle]")]
+      .map(e => e.getAttribute("data-sw") || (e.hasAttribute("data-vol") ? "vol" : e.hasAttribute("data-mvol") ? "mvol" : "style")).slice(0, 6).join() === "sound,vol,music,mvol,style,haptics"));
+  ck("Music defaults: on ('Quiet tunes while you play'), music volume 50, Auto (per game) pressed", await p.evaluate(() =>
+    document.querySelector('[data-sw="music"]').getAttribute("aria-checked") === "true" && /Quiet tunes while you play/.test(document.querySelector('[data-sw="music"]').parentNode.textContent) &&
+    document.querySelector("[data-mvol]").value === "50" && !document.querySelector("[data-mvol]").disabled &&
+    document.querySelector('[data-seg="musicStyle"][data-v="auto"]').getAttribute("aria-pressed") === "true"));
+  ck("Style: eight buttons in two rows of four, each titled with its blurb", await p.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-seg="musicStyle"]')], top = b.map(x => Math.round(x.getBoundingClientRect().top));
+    return b.length === 8 && top.slice(0, 4).every(t => t === top[0]) && top.slice(4).every(t => t === top[4]) && top[4] > top[0] && b.every(x => x.title.length > 5); }));
+  await shot(p, "sheet-music");
+  await sw0(p, "music");
+  ck("Music off: switch unchecked, music volume disabled, Style hidden, saved", await p.evaluate(() =>
+    document.querySelector('[data-sw="music"]').getAttribute("aria-checked") === "false" && document.querySelector("[data-mvol]").disabled &&
+    !document.querySelector("[data-mstyle]").offsetParent && NumbericsSettings.get().music === false));
+  await sw0(p, "music");
+  await p.click('#sh-settings [data-seg="musicStyle"][data-v="pulse"]');
+  await p.evaluate(() => { const v = document.querySelector("[data-mvol]"); v.value = "30"; v.dispatchEvent(new Event("input", { bubbles: true })); });
+  ck("Music on again, Style Pulse and music volume 30 apply", await p.evaluate(() => { const s = NumbericsSettings.get();
+    return s.music === true && s.musicStyle === "pulse" && s.musicVolume === 0.3 && document.querySelector("[data-mstyle]").offsetParent &&
+      document.querySelector('[data-seg="musicStyle"][data-v="pulse"]').getAttribute("aria-pressed") === "true"; }));
+  await p.click('#sh-settings [data-seg="musicStyle"][data-v="auto"]');
+  await p.evaluate(() => NumbericsSettings.set({ musicVolume: 0.5 }));
   await shot(p, "sheet");
   const inside = () => p.evaluate(() => document.querySelector("#sh-settings .sheet").contains(document.activeElement));
   let trapped = true; for (let i = 0; i < 20; i++) { await p.keyboard.press("Tab"); if (!(await inside())) trapped = false; }
@@ -86,7 +113,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     document.querySelector('[data-sw="text"]').getAttribute("aria-checked") === "true" && document.querySelector('[data-seg="theme"][data-v="light"]').getAttribute("aria-pressed") === "true" &&
     document.querySelector('[data-seg="theme"][data-v="dark"]').getAttribute("aria-pressed") === "false"));
   await shot(p, "sheet-light-large");
-  await p.reload();
+  await p.reload(); await settle(p);
   const st = JSON.parse(await p.evaluate(k => localStorage.getItem(k), KEY));
   ck("everything persisted in numberics_settings_v1", st.theme === "light" && st.text === "large" && st.contrast === "high" && st.motion === "reduced" && st.sound === false && st.haptics === false && st.volume === 0.75, JSON.stringify(st));
   const d0 = await html(p);
@@ -105,7 +132,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 3. Motion Full beats the OS reduce: tiles slide
   ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" });
   p = await ctx.newPage();
-  await p.goto(FIB);
+  await p.goto(FIB); await settle(p);
   const slides = async () => { await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[3] = 1; s.grid[15] = 2; window.__fibonacci.state = s; });
     await p.keyboard.press("ArrowLeft");
     return p.evaluate(() => document.getAnimations().some(a => a.transitionProperty === "transform") &&
@@ -113,7 +140,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("OS reduce + Motion Device: effective reduced, tiles do not slide", (await html(p)).motion === "reduced" && !(await slides()));
   await openSettings(p); await p.click('#sh-settings [data-seg="motion"][data-v="full"]'); await p.keyboard.press("Escape");
   ck("Motion Full: data-motion full at once", (await html(p)).motion === "full" && await p.evaluate(() => NumbericsMotion.reduced() === false && NumbericsKit.reducedMotion() === false));
-  await p.reload();
+  await p.reload(); await settle(p);
   ck("OS reduce + Motion Full (after a reload): tiles slide", (await html(p)).motion === "full" && await slides());
   await ctx.close();
 
@@ -122,7 +149,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } });
     delete Navigator.prototype.vibrate; window.AudioContext = undefined; window.webkitAudioContext = undefined; });
   p = await ctx.newPage(); const errs2 = []; p.on("pageerror", e => errs2.push(e.message));
-  await p.goto(FIB);
+  await p.goto(FIB); await settle(p);
   await openSettings(p);
   await p.click('#sh-settings [data-seg="theme"][data-v="light"]'); await p.click('#sh-settings [data-sw="text"]');
   ck("no navigator.vibrate: the Vibration row is not shown", await p.locator('#sh-settings [data-sw="haptics"]').count() === 0 && !/Vibration/.test(await p.textContent("#sh-settings")));
@@ -137,7 +164,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 5. Memory: Save -> Load round-trips every numberics_* key; corrupt files change nothing; Erase keeps settings
   const SEED = { numberics_endless_v1: JSON.stringify({ score: 1136, grid: [1, 2, 3] }), numberics_sudoku_v1: JSON.stringify({ name: "café 数" }),
     numberics_trophies_v1: JSON.stringify({ got: { fam_first: 1 } }), numberics_fibonacci_v1: JSON.stringify({ moves: 9 }),
-    [KEY]: JSON.stringify({ v: 1, sound: true, volume: 0.4, haptics: true, motion: "auto", theme: "light", text: "normal", contrast: "high" }), other_site_key: "x" };
+    [KEY]: JSON.stringify({ v: 1, sound: true, volume: 0.4, haptics: true, motion: "auto", theme: "light", text: "normal", contrast: "high",
+      music: false, musicVolume: 0.3, musicStyle: "quest" }), other_site_key: "x" };
   ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, acceptDownloads: true });
   p = await ctx.newPage(); const errs3 = []; p.on("pageerror", e => errs3.push(e.message));
   await p.goto(url + "seven/");
@@ -164,9 +192,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const nav = q.waitForNavigation(); await chooser.setFiles(file); await nav;
   const after = await nmKeys(q);
   ck("Load replaced every numberics_* key in the file, byte for byte", Object.keys(before).every(k => after[k] === before[k]), JSON.stringify(after).slice(0, 200));
-  ck("the save held exactly the numberics_* keys (not other_site_key)", JSON.stringify(Object.keys(before).sort()) === JSON.stringify(Object.keys(SEED).filter(k => k.startsWith("numberics_")).sort()));
+  ck("the save held exactly the numberics_* keys (not other_site_key)", JSON.stringify(Object.keys(before).sort()) === JSON.stringify(Object.keys(SEED).filter(k => k.startsWith("numberics_")).sort()), Object.keys(before).join());
   ck("keys the file does not hold are left alone", after.numberics_fifteen_v1 === '{"keep":1}');
   ck("the loaded settings apply after the reload", (await html(q)).theme === "light" && (await html(q)).contrast === "high");
+  ck("the music settings travel with the save (Music off, 30, Quest)", await q.evaluate(() => { const s = NumbericsSettings.get(); return s.music === false && s.musicVolume === 0.3 && s.musicStyle === "quest"; }));
   // corrupt files
   const bad = path.join(tmp, "bad.json"); fs.writeFileSync(bad, JSON.stringify(Object.assign({}, json, { data: json.data.slice(0, 12) })));
   const notjson = path.join(tmp, "not.json"); fs.writeFileSync(notjson, "hello");
@@ -207,8 +236,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     await p.click('#sh-settings [data-seg="theme"][data-v="light"]'); await p.click('#sh-settings [data-sw="contrast"]');
     const dd = await html(p);
     ck(g.id + ": the Settings sheet opens and applies live", dd.theme === "light" && dd.contrast === "high" && await p.evaluate(() => NumbericsUI.open()));
-    // sudoku/style.css does not carry the sheet CSS yet (A1 copied only the top bar there); D-Sudoku adds it
-    if (g.id !== "sudoku") ck(g.id + ": the sheet sits on screen over the page", await p.evaluate(() => {
+    ck(g.id + ": the sheet sits on screen over the page", await p.evaluate(() => {
       const s = document.querySelector("#sh-settings"), r = s.querySelector(".sheet").getBoundingClientRect();
       return getComputedStyle(s).position === "fixed" && r.top >= 0 && r.bottom <= innerHeight + 1; }));
     if (!g.path) await shot(p, "root-desktop");
