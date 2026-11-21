@@ -579,7 +579,7 @@
     { t: "Tap a column to drop the Next disc.", pv: well(5, [md(0), md(0), md(4, "ring"), md(0), md(0), md(0), md(0), md(0, "col"), md(0), md(0),
       md(2), md(0), md(0, "col"), md(6), md(5)]) },
     { t: "A disc pops when its number equals how many discs are in its line.", pv: well(5, [md(0), md(0), md(0), md(0), md(0),
-      md(0), md(0), md(0), md(0), md(0), md(0), md(1), md(3, "ring"), md(5), md(0)]) },
+      md(0), md(0), md(0), md(0), md(0), md(0), md(2), md(3, "ring"), md(5), md(0)]) },
     { t: "Grey eggs crack when a disc pops beside them.", pv: '<div class="mg" style="grid-template-columns:repeat(5,20px);align-items:center">' +
       md(0, "egg") + md(2, "ring") + md(0) + '<span class="to">&#8594;</span>' + md(0, "cracked") + "</div>" },
   ];

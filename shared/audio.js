@@ -9,13 +9,8 @@
  * (the oldest is cut with a 5 ms fade); the same sound at most once per 40 ms; nothing plays while the tab is hidden.
  * Every node is stopped and disconnected when its voice ends.
  * Settings come from NumbericsSettings.get() (safe fallback) and the window event "numberics:settings".
- * Gains: MUSIC.md "SFX notes". Pitched rewards follow the music's key (the `numberics:music` event): the ladder and the
- * fixed chords move by key semitones (-6..5, 0 with no music). best, power and trophy dip the music under them.
- * One context (MUSIC.md): musicBus() -> { context, input } (null before the context), input straight into the
- * compressor. Lazy music: a NumbericsMusic stub is set here at load (its calls are no-ops; the last duck state and
- * stop/start are kept); after the first trusted gesture, with Music on, shared/music.js is injected next to this file
- * (a script element, onload/onerror) and started with the page's game (#games[data-current], "two" by default) and
- * the kept duck state. Turning Music on later loads it then.
+ * docs/design/MUSIC.md: the SFX gains, the key shift (numberics:music), dip(), musicBus() (one context) and the lazy
+ * music loader at the end of this file (a stub NumbericsMusic now, shared/music.js after the first gesture).
  * Also require()-able: module.exports = { make, note, NAMES, BUZZ, lazyMusic } for the Node tests. */
 (function (root) {
   "use strict";

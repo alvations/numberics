@@ -22,7 +22,7 @@
 .pips i.c{ background:var(--mute); border-color:var(--mute); }
 .pips i.now{ box-shadow:0 0 0 2px var(--ink); }
 .fx{ position:absolute; inset:0; pointer-events:none; overflow:visible; }
-/* REDESIGN.md 5.6: the flying copy and the burst are driven by NumbericsMotion (transform and opacity only) */
+/* 5.6: the copy and the burst animate via NumbericsMotion */
 .fly{ position:absolute; font-size:12cqw; z-index:2; will-change:transform; }
 .ghost{ position:absolute; font-size:17cqw; z-index:2; }
 .shard{ position:absolute; z-index:3; border-radius:1px; background:hsl(var(--h,40) var(--tile-s) var(--tile-l)); }
@@ -34,16 +34,14 @@
 .slot.last .tile{ box-shadow:0 0 0 2px var(--cool); }
 .slot.dead.last::after{ border-color:var(--cool); }
 .over h2{ color:var(--ink); }
-/* reduced motion follows html[data-motion] (the in-app setting first, then the device), not the media query */
+/* reduced motion: html[data-motion] (the setting, then the device) */
 :root[data-motion="reduced"] .slot .tile{ transition:none; }
 :root[data-motion="reduced"] .slot.sel .tile{ translate:none; }
 :root[data-motion="reduced"] .ghost.final{ animation:five-final-fade 1500ms ease-out forwards; }
 @keyframes five-final-fade{ 75%{ opacity:1; } 100%{ opacity:.25; } }
 .slot.dead.hit::after{ border-color:var(--accent); } /* R13: the tile that burst to end the round */
 .over .row{ margin:4px 0 0; }
-/* the how-to steps (REDESIGN.md 9.5) */
-details.how p .btn{ min-height:var(--tap); }
-.howto .five-burst{ color:var(--accent-text); font-size:18px; font-weight:850; }
+/* the how-to steps (9.5) */
 .howto .eq .mt{ width:30px; height:30px; }
 .five-pv3{ display:flex; align-items:center; gap:8px; }
 .five-out{ width:28px; height:28px; border-radius:7px; border:2px dashed var(--line-2); }

@@ -363,6 +363,43 @@ t("bot: a greedy player lasts long enough to see several rises (tuning sanity)",
   }
   const avg = drops / G; ok(avg > 60 && avg < 600, "avg drops " + avg);
 });
+// ---- the client's redesign wiring (REDESIGN.md 5.5, 7.3, 8.4, 3.5): static checks on seven/game.js ----
+const fs = require("fs"), path = require("path");
+const G = fs.readFileSync(path.join(__dirname, "..", "seven", "game.js"), "utf8");
+t("client: discs live on NumbericsMotion's keyed layer, never rebuilt per drop", () => {
+  ok(/M\.layer\(discsEl/.test(G), "no keyed layer");
+  ok(!/discsEl\.textContent\s*=\s*""/.test(G), "the well is emptied and redrawn");
+  ok(!/K\.reducedMotion\(\)/.test(G) && /M\.reduced\(\)/.test(G), "reduced motion must be read at each drop, from NumbericsMotion");
+  ok(/fallMs\(st\.row \+ 1\)/.test(G), "the dropped disc falls from one slot above the top row");
+});
+t("client: sounds are ones NumbericsAudio has, called through the timeline helper", () => {
+  const A = require("../shared/audio.js"), used = [...G.matchAll(/sfx\("(\w+)"/g)].map(m => m[1]);
+  ok(used.length >= 8, "too few sounds: " + used);
+  used.forEach(n => ok(A.NAMES.includes(n), "unknown sound " + n));
+  ["land", "pop", "slide", "power", "bad", "tick"].forEach(n => ok(used.includes(n), "missing sound " + n));
+});
+t("client: trophy events are exactly Seven's three (8.4)", () => {
+  const evs = [...new Set([...G.matchAll(/trophy\("(\w+)"/g)].map(m => m[1]))].sort();
+  eq(evs, ["drop", "end", "level"]);
+  ok(/daily: mode === "daily"/.test(G), "end.daily must be a real boolean");
+  ok(/PG\.put\("seven"/.test(G) && /PG\.daily\("seven"/.test(G), "progress put and the Daily record");
+  ok(/seenHowto\("seven"\)/.test(G) && /markHowto\("seven"\)/.test(G), "how-to seen and marked");
+});
+t("trophies: the client's event shapes unlock each Seven trophy on its boundary", () => {
+  const TR = require("../shared/trophies.js");
+  const drop = (d) => TR.report("seven", "drop", Object.assign({ waves: 1, popped: [1], sevens: 0, left: 5 }, d), { quiet: true });
+  drop({ waves: 2 }); // the first event may earn a family trophy (first game, the hour of day): not Seven's
+  ok(!TR.has("sev_three") && drop({ waves: 3 }).includes("sev_three"), "three waves");
+  ok(!drop({ waves: 4 }).includes("sev_five") && drop({ waves: 5 }).includes("sev_five"), "five waves");
+  ok(!drop({ sevens: 2, popped: [7, 7] }).includes("sev_sevens") && drop({ sevens: 3, popped: [7, 7, 7] }).includes("sev_sevens"), "three sevens");
+  ok(!drop({ left: 1 }).includes("sev_clear") && drop({ left: 0 }).includes("sev_clear"), "an empty well");
+  ok(!TR.report("seven", "level", { level: 5, mode: "blitz" }, { quiet: true }).includes("sev_level"), "level 5 counts in Classic only");
+  ok(TR.report("seven", "level", { level: 5, mode: "classic" }, { quiet: true }).includes("sev_level"), "level 5 in Classic");
+  const end = (d) => TR.report("seven", "end", Object.assign({ mode: "classic", score: 0, daily: false }, d), { quiet: true });
+  ok(!end({ score: 6999 }).includes("sev_score") && end({ score: 7000 }).includes("sev_score"), "seven thousand");
+  ok(!end({ mode: "blitz", score: 1999 }).includes("sev_blitz") && end({ mode: "blitz", score: 2000 }).includes("sev_blitz"), "blitz 2,000");
+  ok(!end({ mode: "classic" }).includes("sev_daily") && end({ mode: "daily", daily: true, score: 10 }).includes("sev_daily"), "a Daily finished");
+});
 require("./conventions")(t, ok, ["seven/engine.js", "seven/game.js", "seven/index.html", "seven/style.css"]);
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

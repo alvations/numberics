@@ -6,10 +6,9 @@
   var N = window.NumbericsFive, K = window.NumbericsKit, P = window.NumbericsPower;
   var M = window.NumbericsMotion, A = window.NumbericsAudio, TR = window.NumbericsTrophies, NP = window.NumbericsProgress;
   var store = K.store("numberics_five_v1");
-  // Motion (REDESIGN.md 5.6) reads M.reduced() / M.ms() at the time of each animation (never cached at load).
-  // THINK and HOLD are pauses, not motion: they keep their length under reduced motion (5.12).
+  // motion is read per animation (M.reduced, M.ms); THINK and HOLD are pauses, kept under reduced motion (5.12)
   var THINK = 520, HOLD = 1500; // R13: the result shows before the card
-  var OUT_MS = 200, OUTLINE_MS = 160; // 5.6: the burst tile scales out over 200 ms, then the empty outline fades in
+  var OUT_MS = 200, OUTLINE_MS = 160; // 5.6 burst: scale out, then the outline
 
   function validState(s) {
     return s && Array.isArray(s.tiles) && s.tiles.length === 4 &&
@@ -19,22 +18,22 @@
   }
   var saved = store.load();
   var record = (saved && saved.record && typeof saved.record.won === "number") ? saved.record : { won: 0, lost: 0 };
-  // the win-loss record per level (REDESIGN.md 8.5: the cards show the current level's record)
+  // the win-loss record per level (8.5)
   var byLevel = { easy: { won: 0, lost: 0 }, medium: { won: 0, lost: 0 }, hard: { won: 0, lost: 0 } };
   if (saved && saved.byLevel) N.LEVELS.forEach(function (l) {
     var r = saved.byLevel[l]; if (r && typeof r.won === "number" && typeof r.lost === "number") byLevel[l] = { won: r.won, lost: r.lost };
   });
-  // a first visit (no saved state) starts on Easy (REDESIGN.md 1.3); a saved choice is always kept
+  // a first visit starts on Easy (1.3); a saved choice is kept
   var level = saved && N.LEVELS.indexOf(saved.level) >= 0 ? saved.level : "easy";
   var state = saved && validState(saved.state) ? saved.state : N.newMatch(K.freshSeed(), level);
   level = state.level;
-  // the run record (REDESIGN.md 8.2): how this match went, for the trophies only; it never changes a rule
+  // the run record (8.2): for the trophies only, never a rule
   var run = saved && saved.run && typeof saved.run.used === "number" ? { used: saved.run.used, down02: saved.run.down02 === true } : { used: 0, down02: false };
-  var cardTro = [], troNew = false, firstMove = false; // trophy pills for the end card; the trophy sound is still to play
+  var cardTro = [], troNew = false, firstMove = false; // end-card pills; trophy sound pending
 
   var sel = -1, cur = 0, armed = null;   // selected tile, keyboard cursor, armed power-up
   var timer = null, busy = false, counted = !!state.matchOver, levelArm = null;
-  var holding = false, viewing = false, keys = false, anim = false; // anim: a move is still being drawn // R13 hold before the card, "See the board", keyboard in use
+  var holding = false, viewing = false, keys = false, anim = false; // R13 hold, "See the board", keyboard in use; anim: a move is being drawn
 
   var $ = function (id) { return document.getElementById(id); };
   var boardEl = $("board"), fxEl = $("fx");
@@ -47,22 +46,21 @@
       if (state.matchOver === "p") { record.won++; byLevel[state.level].won++; } else lose1(state.level);
     }
     if (!state.matchOver) counted = false;
-    if (state.wins.p === 0 && state.wins.c >= 2) run.down02 = true; // the player was 0-2 down at some point (five_back)
+    if (state.wins.p === 0 && state.wins.c >= 2) run.down02 = true; // five_back
     store.save({ state: state, level: level, record: record, byLevel: byLevel, run: run });
-    // the card summary (shared/progress.js): the current level's record, and a live match to continue
+    // the card summary (3.5): this level's record, and a live match
     if (NP) {
       var r = byLevel[level] || { won: 0, lost: 0 };
       NP.put("five", { best: r.won || r.lost ? "Won " + r.won + ", lost " + r.lost : "",
         live: N.played(state) && !state.matchOver, liveText: "Round " + state.round + ", " + state.wins.p + "-" + state.wins.c });
     }
   }
-  // sounds and haptics: called at the visual moment, inside the seq() timeline, so a finish() drops pending sounds
-  // instead of bunching them (REDESIGN.md 7.3)
+  // sounds and haptics at the visual moment, inside seq(): a finish() drops pending sounds (7.3)
   var hush = false;
   function sfx(name, arg) { if (hush || !A || typeof A[name] !== "function") return; try { A[name](arg); } catch (e) { /* a sound is a nicety */ } }
   function buzz(kind) { if (hush || !A || typeof A.buzz !== "function") return; try { A.buzz(kind); } catch (e) { /* no vibrate */ } }
   function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
-  // trophies (REDESIGN.md 8.4): reported quietly when a round ends; the card shows them as pills, with the sound
+  // trophies (8.4): reported quietly at a round's end; the card shows the pills and plays the sound
   function report(ev, data) {
     if (!TR) return [];
     try { return TR.report("five", ev, data, { quiet: true }) || []; } catch (e) { return []; }
@@ -105,8 +103,7 @@
     t.style.setProperty("--h", K.hue(v)); t.textContent = v;
     return t;
   }
-  // each slot keeps its tile element (identity is the slot: tiles never move in Five), so a pop or a raised
-  // selection that is still playing is never cut by the next redraw ("no blipping", REDESIGN.md 5.1)
+  // each slot keeps its tile element (tiles never move in Five), so a redraw never cuts a pop (5.1)
   function paintTile(el, v) {
     var t = el.firstElementChild;
     if (!v) { if (t) el.removeChild(t); return; }
@@ -115,7 +112,7 @@
     var h = String(K.hue(v)); if (t.style.getPropertyValue("--h") !== h) t.style.setProperty("--h", h);
     if (t.textContent !== String(v)) t.textContent = v;
   }
-  var shown = null; // the tiles on screen while a flight is in the air (the target changes when the copy lands)
+  var shown = null; // the tiles shown while a copy flies
   var cardUp = false, trayKey = "";
   function render() {
     var canTargets = {}, tiles = shown || state.tiles;
@@ -134,7 +131,7 @@
     $("you").textContent = state.wins.p; $("cpu").textContent = state.wins.c;
     var none = !record.won && !record.lost; // R16: Record reads a dimmed "none" until a match is decided
     $("matches").textContent = none ? "none" : record.won + "-" + record.lost; $("matches").classList.toggle("none", none);
-    // the pips and the tray are rebuilt only when what they show changes (a move redraws several times)
+    // pips and tray are rebuilt only when they change
     var pips = $("pips"), R = 2 * N.ROUNDS_TO_WIN - 1, pk = state.wins.p + ":" + state.wins.c;
     if (pips.getAttribute("data-k") !== pk) pips.textContent = "";
     pips.setAttribute("data-k", pk);
@@ -180,10 +177,10 @@
           (state.draws ? " \u00b7 " + state.draws + "\u00a0drawn" : "") + (got.length ? " \u00b7 earned\u00a0" + got.join(", ") : "");
       $("again").textContent = m ? "New game" : "Next round";
     }
-    if (!over.hidden && wasHidden) $("again").focus({ preventScroll: true }); // focus goes to the card's primary button
+    if (!over.hidden && wasHidden) $("again").focus({ preventScroll: true }); // focus: the card's primary
     if (TR && TR.pills) TR.pills($("over-pills"), state.roundOver ? cardTro : []);
     if (!over.hidden !== cardUp) {
-      cardUp = !over.hidden; duck(cardUp); // music steps back while the end card shows
+      cardUp = !over.hidden; duck(cardUp);
       if (cardUp && troNew) {
         troNew = false; sfx("trophy"); buzz("big");
         try { if (window.NumbericsUI) window.NumbericsUI.dot(true); } catch (e) { /* no top bar */ }
@@ -213,7 +210,7 @@
   // R13: after the round-ending move, hold the board (undimmed) for a beat, then show the card
   function hold() {
     holding = true; viewing = false; render();
-    var rw = state.roundOver; // the result sound just after the burst (a finish() drops it)
+    var rw = state.roundOver;
     if (rw !== "draw") seq.at(320, function () { sfx(rw === "p" ? "win" : "lose"); buzz(rw === "p" ? "win" : "lose"); });
     timer = setTimeout(function () { timer = null; holding = false; fxEl.textContent = ""; render(); }, HOLD);
   }
@@ -222,13 +219,12 @@
     holding = false; viewing = false; fxEl.textContent = ""; render(); $("again").focus({ preventScroll: true });
   }
 
-  // ---- motion (REDESIGN.md 5.6): a copy of the giving tile flies onto the target along a slight arc; on landing the
-  // target's number changes and it pops; at five or more it bursts into shards and its empty outline fades in.
-  // Every step is on one generation-guarded timeline (M.seq), so a new input runs it to its end state at once.
+  // ---- motion (5.6): the copy flies on an arc; on landing the number changes and pops, or it bursts.
+  // Every step is on one seq() timeline, so a new input runs it to its end state at once (5.11).
   var seq = M.seq();
-  var running = []; // pops and outline fades still playing on the board's own nodes
+  var running = []; // pops and outline fades on the board's own nodes
   function keep(a) { if (a) running.push(a); return a; }
-  function settle() { // end state now: pending steps run (their sounds dropped), pops and fades jump to their end
+  function settle() { // end state now, sounds dropped
     hush = true; try { seq.finish(); } finally { hush = false; }
     running.forEach(function (a) { try { a.finish(); } catch (e) { /* already gone */ } }); running = [];
   }
@@ -237,7 +233,7 @@
     return { x: r.left - b.left, y: r.top - b.top, w: r.width, h: r.height };
   }
   function place(el, r) { el.style.left = r.x + "px"; el.style.top = r.y + "px"; el.style.width = r.w + "px"; el.style.height = r.h + "px"; }
-  function gone(el, a) { // remove an effect node when its animation ends (at once when nothing animates)
+  function gone(el, a) {
     if (a) a.onfinish = function () { if (el.parentNode) el.parentNode.removeChild(el); };
     else if (el.parentNode) el.parentNode.removeChild(el);
   }
@@ -246,7 +242,7 @@
     var t = slots[i].firstElementChild; if (!t) return;
     keep(M.play(t, POP, { duration: M.T.pop, easing: M.E.pop }, [{ opacity: 0.55 }, { opacity: 1 }]));
   }
-  // 8 shards, 6% squares in the tile's hue, out 30 to 45% of the tile, turning 90 to 180 degrees (fixed, not random)
+  // 8 shards: 6% squares, out 30 to 45%, turning 90 to 180 degrees (a fixed table)
   var SHARD_D = [0.30, 0.42, 0.36, 0.45, 0.33, 0.40, 0.38, 0.31], SHARD_R = [90, 150, 120, 180, 105, 165, 135, 95];
   function shards(r, v) {
     if (M.reduced()) return; // no flying shards under reduced motion (5.12)
@@ -268,33 +264,29 @@
     var g = tileEl(hv); g.classList.add("ghost"); if (final) g.classList.add("final");
     place(g, to); g.textContent = last.kind === "nudge" ? "5" : String(last.value);
     fxEl.appendChild(g);
-    // the burst that decides a round stays lit through the whole hold (round 3, craft #2; CSS .ghost.final);
-    // any other burst scales 1 -> 1.15 -> 0 and fades over 200 ms
+    // the deciding burst stays lit through the hold (craft #2, CSS .ghost.final); others scale out
     if (!final) gone(g, M.play(g, [{ transform: "scale(1)", opacity: 1 }, { transform: "scale(1.15)", opacity: 1, offset: 0.35 }, { transform: "scale(0)", opacity: 0 }],
       { duration: OUT_MS, easing: M.E.out, fill: "forwards" }, [{ opacity: 1 }, { opacity: 0 }]));
     shards(to, hv);
-    // the empty outline fades in once the tile is gone (opacity: kept under reduced motion)
     keep(M.play(slots[last.to], [{ opacity: 0 }, { opacity: 0, offset: OUT_MS / (OUT_MS + OUTLINE_MS) }, { opacity: 1 }],
       { duration: OUT_MS + OUTLINE_MS, pseudoElement: "::after" }, [{ opacity: 0 }, { opacity: 1 }]));
   }
   function animate(prev, last, done) {
-    settle(); fxEl.textContent = ""; // the last move's shards end with it: effect nodes stay bounded
+    settle(); fxEl.textContent = ""; // effect nodes stay bounded
     var kind = last && last.kind;
     if (kind !== "add" && kind !== "nudge" && kind !== "split") { shown = null; busy = false; anim = false; render(); return done(); }
-    busy = true; anim = true; // the card never shows mid-animation (it once flashed up under the deciding burst)
-    // the burst that decides a round stays lit on the board through the whole hold: the hold starts the moment the
-    // tile bursts, and the lit ghost is cleared only when the card shows
+    busy = true; anim = true; // no card mid-animation
     var final = !!(last.burst && state.roundOver);
-    var b = boardEl.getBoundingClientRect(), to = rectIn(slots[last.to], b), fly = 0; // one layout read per move (5.13)
+    var b = boardEl.getBoundingClientRect(), to = rectIn(slots[last.to], b), fly = 0; // one read (5.13)
     if (kind === "add" && to.w) {
       var from = rectIn(slots[last.from], b), f = tileEl(prev[last.from]);
       fly = M.ms("fly");
       if (fly) {
-        // the flying copy reads "+3", not a second "3" over the tile that stays (craft nit: a doubled numeral)
+        // the copy reads "+3", not a second "3" (craft nit)
         f.classList.add("fly"); f.textContent = "+" + prev[last.from]; place(f, from); fxEl.appendChild(f);
         var dx = (to.x - from.x).toFixed(1), dy = (to.y - from.y).toFixed(1);
         M.play(f, [{ transform: "translate(0px,0px)" }, { transform: "translate(" + dx + "px," + dy + "px)" }], { duration: fly, easing: M.E.fly, fill: "forwards" });
-        // the arc: a lift of 6% and a 1.08 swell at mid-flight, on a second track added to the first
+        // the arc: a second, added track
         M.play(f, [{ transform: "translateY(0%) scale(1)" }, { transform: "translateY(-6%) scale(1.08)", offset: 0.5 }, { transform: "translateY(0%) scale(1)" }],
           { duration: fly, easing: "ease-in-out", composite: "add", fill: "forwards" });
         seq.at(fly, function () { gone(f, null); });
@@ -311,14 +303,13 @@
       done();
     });
   }
-  function flush() { // drop any pending animation or computer timer; the state is already authoritative
+  function flush() { // drop pending animation and timers (the state is authoritative)
     if (timer !== null) { clearTimeout(timer); timer = null; }
     seq.cancel(); shown = null;
     running.forEach(function (a) { try { a.finish(); } catch (e) { /* already gone */ } }); running = [];
     fxEl.textContent = ""; busy = false; anim = false; holding = false; viewing = false;
   }
-  // a tap or key while only an animation is pending on your turn lands at once (the state is already yours):
-  // the running animation goes to its end state and the input is applied in the same handler (REDESIGN.md 5.11)
+  // an input during the computer's animation ends it and is applied at once (5.11)
   function catchUp() {
     if (busy && state.turn === "p" && !state.roundOver) {
       settle(); if (timer !== null) { clearTimeout(timer); timer = null; }
@@ -330,7 +321,7 @@
   function commit(res, who) {
     var before = state.tiles.slice(), wasOver = !!state.roundOver;
     state = res.state; persist();
-    if (who === "p" && !firstMove) { firstMove = true; report("move", {}); } // a game counts as played after its first move
+    if (who === "p" && !firstMove) { firstMove = true; report("move", {}); }
     if (state.roundOver && !wasOver) roundEnded();
     // R7: a reward is a toast; a round result is the overlay alone (no "Burst!" note on the round-ending burst)
     // a reward on the round-ending burst is said on the card ("earned Shield"), never in a toast over the hold's hint
@@ -338,10 +329,10 @@
     else if (res.unpaid && !state.roundOver) K.toast("Burst! No reward after Shield.", "info"); // R2
     else if (res.burst && who === "p" && !state.roundOver) K.toast("Burst!");
     animate(before, state.last, afterTurn);
-    if (res.awarded) seq.at(M.ms("fly") + 140, function () { sfx("power"); }); // after the burst it paid for
+    if (res.awarded) seq.at(M.ms("fly") + 140, function () { sfx("power"); });
   }
   function afterTurn() {
-    if (state.matchOver === "c") { // no reward toast over a lost match (R7): hide it at once, no fade
+    if (state.matchOver === "c") { // R7: no reward toast over a lost match
       var t = $("toast");
       if (t && t.classList.contains("on")) {
         t.style.transition = "none"; t.classList.remove("on"); void t.offsetWidth; t.style.transition = "";
@@ -353,7 +344,7 @@
   function scheduleComputer() {
     if (timer !== null || state.turn !== "c" || state.roundOver) return;
     busy = true; render();
-    var gen = state.moves, opening = !state.last; // a beat longer on a fresh round, so the start is seen first
+    var gen = state.moves, opening = !state.last; // a beat longer on a fresh round
     timer = setTimeout(function () {
       timer = null; if (state.moves !== gen || state.turn !== "c") { busy = false; return render(); }
       var r = N.aiPlan(state);
@@ -399,7 +390,7 @@
   }
   function activate(name) {
     if (name === "undo") {
-      if (!N.canUse(state, "undo")) return; // R1: never across a decided round, so a counted match stays counted
+      if (!N.canUse(state, "undo")) return; // R1: never across a decided round
       flush(); armed = null; sel = -1; levelArm = null; run.used++; sfx("tick");
       state = N.use(state, "undo").state; persist(); K.toast("Took back your turn"); return render();
     }
@@ -409,9 +400,9 @@
     if (!state.power.p[name] || (name === "shield" && state.midTurn)) return;
     armed = name; sel = -1; sfx("tick"); render();
   }
-  window.addEventListener("pointerdown", function () { keys = false; }, true); // "(Esc cancels)" is for keyboard players
+  window.addEventListener("pointerdown", function () { keys = false; }, true); // "(Esc cancels)" is for keys
   slots.forEach(function (el, i) { el.addEventListener("click", function (e) { e.stopPropagation(); boardEl.classList.remove("kb"); cur = i; tap(i); }); });
-  boardEl.addEventListener("click", function (e) { // R13: a tap anywhere on the shown board brings the summary back
+  boardEl.addEventListener("click", function (e) { // R13: a tap brings the summary back
     if (state.roundOver && !busy && (holding || viewing) && !(e.target.closest && e.target.closest(".over"))) showCard();
   });
   var GRID = { 0: { up: 2, right: 1 }, 1: { up: 3, left: 0 }, 2: { down: 0, right: 3 }, 3: { down: 1, left: 2 } };
@@ -419,7 +410,7 @@
   function traySlot(k) { var b = $("tray").querySelectorAll("button")[k]; if (b) b.click(); }
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    if (window.NumbericsUI && window.NumbericsUI.open()) return; // a sheet is open: no key reaches the game
+    if (window.NumbericsUI && window.NumbericsUI.open()) return;
     var tg = e.target && e.target.closest ? e.target : null;
     if (tg && tg.closest("input, select, textarea")) return;
     // R17: Enter or Space on a focused link or button is that control (a games-row link navigates)
@@ -482,12 +473,12 @@
     state = N.nextRound(state); armed = null; sel = -1; persist(); render(); scheduleComputer();
   });
 
-  // ---- how to play (REDESIGN.md 1.3, 9.5): three steps, each a small drawn picture and one sentence ----
+  // ---- how to play (1.3, 9.5) ----
   function mt(v, bg) { return '<span class="mt" style="background:' + bg + '">' + v + "</span>"; }
   var BLUE = "hsl(205 70% 62%)", GREEN = "hsl(152 60% 58%)";
   var STEPS = [
     ['<div class="eq">' + mt(2, BLUE) + '<span class="op">\u2192</span>' + mt(3, GREEN) + "</div>", "Tap your tile, then a tile to add it onto."],
-    ['<div class="eq">' + mt(2, BLUE) + '<span class="op">+</span>' + mt(3, GREEN) + '<span class="op">=</span><span class="five-burst">5!</span></div>', "A tile at five or more bursts."],
+    ["", "A tile at five or more bursts."], // the card's own picture, 2 + 3 = 5!
     ['<div class="five-pv3"><span class="five-out"></span><span class="five-out"></span><span class="five-pips"><i></i><i></i><i></i></span></div>',
       "Burst both of the computer's tiles to win the round. First to three."]
   ];
@@ -495,7 +486,7 @@
     var U = window.NumbericsUI; if (!U || !U.sheet) { if (onClose) onClose(); return; }
     U.sheet("howto", function (body) {
       body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
+        return '<div class="step"><div class="pv" aria-hidden="true">' + (s[0] || (window.NumbericsNav ? window.NumbericsNav.preview("five") : "")) + "</div><p>" + s[1] + "</p></div>";
       }).join("") + '</div><div class="row"><button class="btn primary" type="button" data-play>Play</button></div>';
       body.querySelector("[data-play]").addEventListener("click", function () { sfx("tick"); U.close(); });
     }, { title: "How to play Five", onClose: onClose });
@@ -504,9 +495,8 @@
   $("howto-open").addEventListener("click", function () { sfx("tick"); howto(); });
 
   render();
-  // the first visit to Five (no saved game) opens the steps once; the computer opens the round when they close
+  // a first visit opens the steps once (after ui.js loads); the computer opens when they close
   var firstVisit = !saved && NP && !NP.seenHowto("five");
-  // (after this file: ui.js loads last, so the sheet opens once every script has run)
   if (firstVisit) setTimeout(function () { howto(function () { scheduleComputer(); }); }, 0); else scheduleComputer();
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-match. Not reachable from the UI.

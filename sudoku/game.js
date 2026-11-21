@@ -493,8 +493,8 @@
     var k = e.key, tag = (e.target && e.target.tagName) || "";
     // R17: a focused link or form field keeps every key (Enter on a games-row link navigates); a focused button keeps
     // Enter and Space (they press it, R9). Digits and arrows still reach the board after a click on the pad.
-    if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || tag === "SUMMARY") return;
-    if (tag === "BUTTON" && (k === "Enter" || k === " ")) return;
+    if (tag === "A" || tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+    if ((tag === "BUTTON" || tag === "SUMMARY") && (k === "Enter" || k === " ")) return;
     if (state.solved && (hold || viewing) && (k === "Escape" || k === "Enter" || k === " ")) { e.preventDefault(); return showCard(); }
     if (k >= "1" && k <= "9") return enter(+k);
     if (k === "Backspace" || k === "Delete" || k === "0") { e.preventDefault(); return enter(0); }

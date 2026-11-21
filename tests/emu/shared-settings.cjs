@@ -10,13 +10,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nm-b1-"));
   const html = p => p.evaluate(() => Object.assign({}, document.documentElement.dataset));
   const nmKeys = p => p.evaluate(() => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith("numberics_")) o[k] = localStorage.getItem(k); } return o; });
+  // games open How to play on a first visit and write numberics_progress_v1: mark it seen for every game up front
+  const HOWTO = JSON.stringify({ v: 1, games: {}, howto: Object.fromEntries(games.map(g => [g.id, true]).concat([["endless", true]])), daily: {} });
+  const SEEN = h => { try { if (!localStorage.getItem("numberics_progress_v1")) localStorage.setItem("numberics_progress_v1", h); } catch (e) { /* blocked */ } };
+  const newCtx = async o => { const c = await browser.newContext(o); await c.addInitScript(SEEN, HOWTO); return c; };
   const sw0 = (p, f) => p.click('#sh-settings [data-sw="' + f + '"]');
   // a game may open its How to play sheet on a first visit (Fibonacci, Three): close it, as a player would
   const settle = p => p.evaluate(() => { if (window.NumbericsUI && NumbericsUI.open() && NumbericsUI.current() !== "settings") NumbericsUI.close(); });
   const openSettings = async p => { await settle(p); await p.click('#topbar [data-open="settings"]'); await p.waitForSelector("#sh-settings:not([hidden])"); };
 
   // 1. the sheet primitive: dialog, focus, trap, Esc, scrim, scroll lock, keys never reach the game
-  let ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
+  let ctx = await newCtx({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
   await p.goto(FIB); await settle(p);
   ck("closed at load: NumbericsUI.open() is false", await p.evaluate(() => NumbericsUI.open() === false && !document.querySelector(".scrim:not([hidden])")));
@@ -130,7 +134,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
 
   // 3. Motion Full beats the OS reduce: tiles slide
-  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" });
+  ctx = await newCtx({ viewport: { width: 375, height: 812 }, reducedMotion: "reduce" });
   p = await ctx.newPage();
   await p.goto(FIB); await settle(p);
   const slides = async () => { await p.evaluate(() => { const s = window.__fibonacci.state; s.grid = new Array(16).fill(0); s.grid[3] = 1; s.grid[15] = 2; window.__fibonacci.state = s; });
@@ -145,7 +149,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
 
   // 4. blocked storage: the page and every control still work, in memory
-  ctx = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  ctx = await newCtx({ viewport: { width: 375, height: 812 } });
   await ctx.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } });
     delete Navigator.prototype.vibrate; window.AudioContext = undefined; window.webkitAudioContext = undefined; });
   p = await ctx.newPage(); const errs2 = []; p.on("pageerror", e => errs2.push(e.message));
@@ -164,9 +168,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 5. Memory: Save -> Load round-trips every numberics_* key; corrupt files change nothing; Erase keeps settings
   const SEED = { numberics_endless_v1: JSON.stringify({ score: 1136, grid: [1, 2, 3] }), numberics_sudoku_v1: JSON.stringify({ name: "café 数" }),
     numberics_trophies_v1: JSON.stringify({ got: { fam_first: 1 } }), numberics_fibonacci_v1: JSON.stringify({ moves: 9 }),
+    numberics_progress_v1: HOWTO,
     [KEY]: JSON.stringify({ v: 1, sound: true, volume: 0.4, haptics: true, motion: "auto", theme: "light", text: "normal", contrast: "high",
       music: false, musicVolume: 0.3, musicStyle: "quest" }), other_site_key: "x" };
-  ctx = await browser.newContext({ viewport: { width: 375, height: 812 }, acceptDownloads: true });
+  ctx = await newCtx({ viewport: { width: 375, height: 812 }, acceptDownloads: true });
   p = await ctx.newPage(); const errs3 = []; p.on("pageerror", e => errs3.push(e.message));
   await p.goto(url + "seven/");
   await p.evaluate(s => { localStorage.clear(); for (const k in s) localStorage.setItem(k, s[k]); }, SEED);
@@ -181,7 +186,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("the file is { game, v, saved, data } and scrambled", json.game === "numberics" && json.v === 1 && /^\d{4}-\d\d-\d\d$/.test(json.saved) && !/1136|fam_first|endless/.test(text));
   ck("Save reports the fam_keep event (report('fam','saved'))", (await p.evaluate(() => window.__rep.join())) === "fam:saved");
   // load it into a different browser profile with other data
-  const ctx2 = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  const ctx2 = await newCtx({ viewport: { width: 375, height: 812 } });
   const q = await ctx2.newPage(); const errs4 = []; q.on("pageerror", e => errs4.push(e.message));
   await q.goto(url + "fibonacci/");
   await q.evaluate(() => { localStorage.clear(); localStorage.setItem("numberics_endless_v1", '{"score":2}'); localStorage.setItem("numberics_fifteen_v1", '{"keep":1}'); });
@@ -192,7 +197,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const nav = q.waitForNavigation(); await chooser.setFiles(file); await nav;
   const after = await nmKeys(q);
   ck("Load replaced every numberics_* key in the file, byte for byte", Object.keys(before).every(k => after[k] === before[k]), JSON.stringify(after).slice(0, 200));
-  ck("the save held exactly the numberics_* keys (not other_site_key)", JSON.stringify(Object.keys(before).sort()) === JSON.stringify(Object.keys(SEED).filter(k => k.startsWith("numberics_")).sort()), Object.keys(before).join());
+  // the file holds every numberics_* key on the device at Save (the seeded ones plus any the page wrote itself), and no other
+  const fileKeys = (await p.evaluate(t => Object.keys(NumbericsSettings.memory.unpack(t) || {}), text)).sort();
+  ck("the save held exactly the numberics_* keys (not other_site_key)", fileKeys.every(k => k.startsWith("numberics_")) &&
+    Object.keys(SEED).filter(k => k.startsWith("numberics_")).every(k => fileKeys.includes(k)) && JSON.stringify(fileKeys) === JSON.stringify(Object.keys(before).sort()), fileKeys.join());
   ck("keys the file does not hold are left alone", after.numberics_fifteen_v1 === '{"keep":1}');
   ck("the loaded settings apply after the reload", (await html(q)).theme === "light" && (await html(q)).contrast === "high");
   ck("the music settings travel with the save (Music off, 30, Quest)", await q.evaluate(() => { const s = NumbericsSettings.get(); return s.music === false && s.musicVolume === 0.3 && s.musicStyle === "quest"; }));
@@ -225,7 +233,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx2.close(); await ctx.close();
 
   // 6. every page: the Settings button opens the sheet and a change applies live there
-  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  ctx = await newCtx({ viewport: { width: 1280, height: 860 } });
   for (const g of games) {
     p = await ctx.newPage(); const e5 = []; p.on("pageerror", e => e5.push(e.message));
     await p.goto(url + g.path);

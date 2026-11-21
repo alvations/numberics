@@ -51,3 +51,13 @@
 /* round 3 (craft #11): the status line keeps room for two lines, so copy that wraps never pushes the board down */
 #hint{ line-height:1.35; min-height:2.7em; display:flex; align-items:center; justify-content:center; }
 @media (max-width:359px){ #hint{ min-height:4.05em; } } /* at 320 a tray explanation can take three lines */
+/* D-Nine motion (REDESIGN.md 5.7): a tile taken to zero stays on top of its empty slot while its pips leave and it
+   fades to the empty look; the computer's take flashes a one-shot cool ring. Only transform and opacity animate. */
+.heap > .heap.fx{ position:absolute; inset:0; width:auto; height:auto; z-index:1; pointer-events:none; display:flex; align-items:center; justify-content:center; }
+.heap .ring{ position:absolute; inset:-4px; border-radius:calc(var(--tile-radius) + 4px); box-shadow:0 0 0 3px var(--cool); opacity:0; pointer-events:none; }
+details.how p .btn{ margin-top:2px; }
+/* the How to play pictures (REDESIGN.md 9.8) */
+.howto .nrow{ display:flex; gap:8px; }
+.howto .nt{ width:30px; height:34px; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.howto .nt.e{ background:var(--cell); box-shadow:none; } .howto .nt.ry{ box-shadow:0 0 0 2px var(--accent); } .howto .nt.rc{ box-shadow:0 0 0 2px var(--cool); }
+.howto .nt .pips i{ opacity:.8; } .howto .nt .pips i.t{ opacity:.25; } .howto .nt .pips i.e{ opacity:.12; }

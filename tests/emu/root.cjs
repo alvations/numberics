@@ -5,6 +5,13 @@
  * Run: NODE_PATH=$(npm root -g) node tests/emu/run.cjs root */
 "use strict";
 const fs = require("fs"), path = require("path");
+const SEEN = JSON.stringify({ v: 1, games: {}, howto: { fibonacci: true, two: true, three: true, four: true, five: true, six: true, seven: true, nine: true, fifteen: true, sudoku: true }, daily: {} });
+// first-visit how-to sheets would cover the page: these checks start as a returning player
+async function newCtx(browser, opts) {
+  const c = await browser["newContext"](opts);
+  await c.addInitScript(seen => { try { if (!localStorage.getItem("numberics_progress_v1")) localStorage.setItem("numberics_progress_v1", seen); } catch (e) { /* none */ } }, SEEN);
+  return c;
+}
 module.exports = async function ({ browser, url, ck, shot }) {
   const games = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "..", "games.json"), "utf8")).filter(g => g.status === "live");
   const ORDER = games.map(g => g.id);
@@ -14,8 +21,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const SAVED = { bestScore: 2400, bestTop: 9, bestBefore: 2400,
     state: { size: 4, grid: [1, 2, 3, 4, 5, 6, 7, 8, 0, 0, 0, 0, 1, 0, 0, 2], score: 1136, top: 8, moves: 40, seed: 12345,
       over: false, power: { undo: 1, smash: 2, swap: 0, boost: 1 }, prev: null, free: false, marks: new Array(16).fill(0) } };
-  let ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
-  await ctx.addInitScript(s => { try { if (!sessionStorage.getItem("seeded")) { localStorage.clear(); localStorage.setItem("numberics_endless_v1", s); sessionStorage.setItem("seeded", "1"); } } catch (e) { /* none */ } }, JSON.stringify(SAVED));
+  let ctx = await newCtx(browser, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
+  await ctx.addInitScript(s => { try { if (!sessionStorage.getItem("seeded")) { localStorage.clear(); localStorage.setItem("numberics_endless_v1", s); localStorage.setItem("numberics_progress_v1", '{"v":1,"games":{},"howto":{"fibonacci":true,"two":true,"three":true,"four":true,"five":true,"six":true,"seven":true,"nine":true,"fifteen":true,"sudoku":true},"daily":{}}'); sessionStorage.setItem("seeded", "1"); } } catch (e) { /* none */ } }, JSON.stringify(SAVED));
   let p = await ctx.newPage(); const errs = [], ext = [];
   p.on("pageerror", e => errs.push(e.message)); p.on("request", r => { if (!r.url().startsWith(url)) ext.push(r.url()); });
   await p.goto(url);
@@ -85,14 +92,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 5. widths: no horizontal scroll at 375 and 320; desktop puts Today and the cards beside the board
   for (const w of [375, 320]) {
-    ctx = await browser.newContext({ viewport: { width: w, height: 760 } }); p = await ctx.newPage();
+    ctx = await newCtx(browser, { viewport: { width: w, height: 760 } }); p = await ctx.newPage();
     await p.goto(url);
     ck("phone " + w + ": no horizontal scroll, cards in two columns", await noHScroll(p) &&
       await p.evaluate(() => getComputedStyle(document.getElementById("games")).gridTemplateColumns.split(" ").length === 2));
     await p.evaluate(() => document.getElementById("today").scrollIntoView()); await shot(p, "phone-" + w);
     await ctx.close();
   }
-  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } }); p = await ctx.newPage();
+  ctx = await newCtx(browser, { viewport: { width: 1280, height: 860 } }); p = await ctx.newPage();
   await p.goto(url);
   const dk = await p.evaluate(() => { const r = s => document.querySelector(s).getBoundingClientRect();
     return { board: r("#board"), today: r("#today"), games: r("#games"), cols: getComputedStyle(document.getElementById("games")).gridTemplateColumns.split(" ").length }; });
@@ -100,13 +107,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("desktop 1280: no horizontal scroll", await noHScroll(p));
   await shot(p, "desktop");
   await ctx.close();
-  ctx = await browser.newContext({ viewport: { width: 1000, height: 800 } }); p = await ctx.newPage();
+  ctx = await newCtx(browser, { viewport: { width: 1000, height: 800 } }); p = await ctx.newPage();
   await p.goto(url);
   ck("desktop 1000: the cards beside the board run two columns", await p.evaluate(() => getComputedStyle(document.getElementById("games")).gridTemplateColumns.split(" ").length === 2));
   await ctx.close();
 
   // 6. the Games sheet on every other page lists the same games in the same order; /two/ reaches the root
-  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  ctx = await newCtx(browser, { viewport: { width: 390, height: 844 } });
   for (const g of games.filter(x => x.path)) {
     p = await ctx.newPage(); const e2 = []; p.on("pageerror", e => e2.push(e.message));
     await p.goto(url + g.path);

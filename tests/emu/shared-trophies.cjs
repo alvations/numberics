@@ -13,10 +13,17 @@ module.exports = async function ({ browser, url, ck, shot }) {
   });
   const dotOn = p => p.evaluate(() => { const d = document.querySelector("#topbar .tb-dot"); return !!d && !d.hidden && d.offsetParent !== null; });
   const COUNT = /\d+\s*(of|\/)\s*\d+|\b84\b|total|locked|padlock/i;
+  // Night owl (hour < 4) must never fire by accident when the suite runs after midnight: pin every page's clock to
+  // noon of the real day (the day stays real for Daily and streak checks). The Night owl check sets 3 am itself.
+  const PIN = () => {
+    window.__noon = () => { const d = new Date(); d.setHours(12, 0, 0, 0); return d; };
+    let lib; Object.defineProperty(window, "NumbericsProgress", { configurable: true, get: () => lib,
+      set: v => { lib = v; try { v._clock(window.__noon); } catch (e) { /* no hook */ } } });
+  };
   const SECRETS = await (async () => { const T = require("../../shared/trophies.js"); return T.REG.filter(x => x.secret).map(x => [x.id, x.name, x.desc]); })();
 
   // 1. a fresh visitor: no dot, the sheet says "Nothing yet", no counts, no secret anywhere in the page
-  let ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  let ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await ctx.addInitScript(PIN);
   let p = await ctx.newPage(); const errs = [], ext = [];
   p.on("pageerror", e => errs.push(e.message));
   p.on("request", r => { if (!r.url().startsWith(url)) ext.push(r.url()); });
@@ -53,7 +60,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 3. a secret: absent before, shown with its real description and the gold edge after
   html = await p.content();
   ck("secret Night owl not in the DOM before earning", html.indexOf("Night owl") < 0 && html.indexOf("fam_night") < 0);
-  await p.evaluate(() => { NumbericsProgress._clock(() => new Date(2026, 10, 20, 3, 10)); NumbericsTrophies.report("two", "move", { top: 2 }); NumbericsProgress._clock(); });
+  await p.evaluate(() => { NumbericsProgress._clock(() => new Date(2026, 10, 20, 3, 10)); NumbericsTrophies.report("two", "move", { top: 2 }); NumbericsProgress._clock(window.__noon); });
   await open(p);
   ck("earned secret shows once earned, marked secret, with its description", await p.evaluate(() => {
     const e = document.querySelector('.tr.secret[data-trophy="fam_night"]'); return !!e && /Night owl/.test(e.textContent) && /Played well past bedtime\./.test(e.textContent); }));
@@ -100,7 +107,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await ctx.close();
 
   // 7. blocked storage and reduced motion: everything still works in memory
-  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: "reduce" });
+  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, reducedMotion: "reduce" }); await ctx.addInitScript(PIN);
   await ctx.addInitScript(() => {
     const no = () => { throw new Error("blocked"); };
     Object.defineProperty(window, "localStorage", { get: no, configurable: true });

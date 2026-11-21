@@ -70,7 +70,7 @@
   // ---- the keyed disc layer (NumbericsMotion). ids[cell] is the client's identity map, never in the save ----
   var ids = [], nextId = 1;
   var layer = M.layer(discsEl, {
-    cols: COLS, rows: ROWS, clip: true,
+    cols: COLS, rows: ROWS, // clipped at the top edge only (style.css), so rings on the outer discs show
     make: function () {
       var t = document.createElement("div"), f = document.createElement("div");
       f.className = "face"; t.appendChild(f); return t;

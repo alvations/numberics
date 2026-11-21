@@ -426,6 +426,27 @@ t("round 3: the help line says exactly how R2 works and names the number keys", 
   ok(/\.toast\.info\{/.test(src["style.css"]) && /--line:#33384f/.test(src["style.css"]), "info toast and --line mirrored (the token block, tests/test-theme.js)");
 });
 
+t("D-Two motion (REDESIGN.md 5.3, 5.11, 5.12): a keyed layer, never a rebuilt board; motion read at each move", () => {
+  const g = src["game.js"], c = src["style.css"], th = fs.readFileSync(path.join(root, "shared", "theme.css"), "utf8");
+  ok(/M\.layer\(tilesEl,/.test(g) && /M\.track\(ids, r\.trace, r\.spawned, nextId\)/.test(g), "layer + track");
+  ok(!/tilesEl\.textContent\s*=/.test(g) && !/innerHTML/.test(g.replace(/body\.innerHTML/, "")), "the board's DOM is never rebuilt");
+  ok(!/var ANIM\b/.test(g) && !/K\.reducedMotion\(\)/.test(g), "no motion constant cached at load");
+  ok(/function flush\(\) \{ layer\.finish\(\); snd\.cancel\(\); clearRing\(\); \}/.test(g) && /function doMove\(dir\) \{\s*flush\(\);/.test(g), "a new input finishes the running animation first");
+  const blk = (s, a, z) => s.slice(s.indexOf(a), s.indexOf(z) + z.length);
+  ok(blk(c, "/* ===== B2 motion", "/* ===== end B2 motion ===== */") === blk(th, "/* ===== B2 motion", "/* ===== end B2 motion ===== */"), "B2 block mirrored byte for byte");
+  ok(/:root\[data-motion="full"\]\{ --anim:var\(--m-slide\); \}/.test(c) && /:root\[data-motion="reduced"\]\{ --anim:0ms; \}/.test(c), "B1 motion lines");
+  ok(/:root\[data-motion="reduced"\] \.stat \.plus\{ animation:two-fadeout/.test(c) && /\.tiles\.nmm-reduced \.tile\.ring::after/.test(c), "+N and the ring only fade under reduced motion");
+});
+t("D-Two trophies, progress, how-to and music (REDESIGN.md 8.4, 3.5, 1.3, MUSIC.md)", () => {
+  const g = src["game.js"], h = src["index.html"];
+  ["move", "power", "end"].forEach(ev => ok(new RegExp('trophy\\("' + ev + '", \\{').test(g), "reports " + ev));
+  ok(/merges: r\.merges\.length, grid: state\.grid\.slice\(\),\s*moves: state\.moves, stuck: !N\.canMove\(state\), run: run/.test(g), "move fields");
+  ok(/run: run \}\);\s*\/\/ the card summary/.test(g) || /store\.save\(\{ state: state, bestScore: best\.score, bestTop: best\.top, bestBefore: bestBefore, run: run \}\)/.test(g), "the run record is saved with the game");
+  ok(/NP\.put\("two", \{ best:/.test(g), "progress put on persist");
+  ok(/seenHowto\("two"\)/.test(g) && /markHowto\("two"\)/.test(g) && /var firstVisit = !saved;/.test(g), "how-to once, never for a saved player");
+  ok(/<details class="how"><summary>How to play<\/summary>/.test(h) && /<div id="over-pills" class="tro-pills" hidden><\/div>/.test(h), "how-to row and pill row");
+  ok(/TR\.pills\(\$\("over-pills"\), endIds\)/.test(g) && /NumbericsMusic\.duck\(on\)/.test(g) && !/music\.js/.test(h), "pills, duck; music.js is never loaded by the page");
+});
 t("history carries only the owner's authorship (no AI author, co-author or trailer)", () => {
   let log;
   try { log = require("child_process").execSync("git log --format=%an%n%ae%n%cn%n%ce%n%B", { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); }

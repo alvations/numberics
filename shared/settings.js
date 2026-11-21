@@ -5,8 +5,7 @@
  * Every change fires `numberics:settings` on window (detail: the full settings) and calls the on("change") listeners
  * with (settings, changedKeys). Loaded right after kit.js; it makes NumbericsKit.reducedMotion() follow the in-app
  * Motion setting, which beats the OS (Motion "Full" plays motion even when the device asks for less).
- * Music (docs/design/MUSIC.md, Settings fields): music, musicVolume, musicStyle ("auto" or a style id). The style list
- * lives here, not in music.js, which loads later (after a gesture). */
+ * Music fields: docs/design/MUSIC.md, Settings fields. */
 (function (w) {
   "use strict";
   var KEY = "numberics_settings_v1", PREFIX = "numberics_";

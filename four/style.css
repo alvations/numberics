@@ -8,7 +8,7 @@
 .slot.aim{ background:var(--cell); }
 /* the keyed disc layer (shared/motion.js) sits over the holes on the same grid; clicks go through to the board.
    A falling disc is clipped at the top edge of the grid (REDESIGN.md 5.5). */
-.board.four > .discs{ inset:var(--bgap); --gap:var(--sg); z-index:1; pointer-events:none; }
+.board.four > .discs{ inset:var(--bgap); --gap:var(--sg); z-index:1; pointer-events:none; clip-path:inset(0 -16px -16px -16px); }
 .board.four > .discs > .tile{ background:none; box-shadow:none; border-radius:50%; }
 .board.four > .discs > .tile > .face{ position:absolute; inset:7%; width:auto; height:auto; border-radius:50%;
   transition:opacity 200ms linear; }
