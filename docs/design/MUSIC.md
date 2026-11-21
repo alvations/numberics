@@ -103,6 +103,17 @@ switches through every style. Compiling a style costs 0.3 to 5 ms, once per styl
 is the browser's own `new AudioContext()` (about 21 ms here). With the shared context (below) the tap makes only the
 SFX one; the music plugs into it.
 
+**The first-tap long task (integration, 21 Nov).** At 4x CPU every game showed one 100 to 150 ms task about 100 ms after
+the first tap. Profiled: the engine's buffers (the 2.2 s stereo reverb impulse and one second of noise, about 260 000
+seeded samples, ~95 ms) and the browser preparing one 2.2 s `ConvolverNode` kernel (~75 ms, measured in isolation).
+Now the live engine builds in short tasks: the samples in slices of 40 000 (`e.step`), then the reverb as four equal
+parts, each its own un-normalised convolver fed through a delay of its offset (convolution is linear, so the sum is the
+whole impulse), with the Web Audio normalisation of the whole impulse applied once (`irScale`), then the first player in
+a task of its own. Every task is under 35 ms at 4x CPU; the music starts about 200 ms after the tap instead of about
+150 ms, inside its 2.5 s fade-in. Same sound: the seeded samples are identical (`tests/test-music.js`), and the impulse
+response through the parts matches one convolver of the whole impulse within 0.1 % of its peak and 0.01 dB
+(`tests/emu/shared-music.cjs`). Offline render uses the same parts, built at once.
+
 ### One context, shared with `shared/audio.js` (built)
 SFX and music share **one AudioContext**, owned by `audio.js`. Why: every `new AudioContext()` costs about 21 ms on
 the tap that makes it (measured), so two contexts double the work of the first tap; one context is one audio thread

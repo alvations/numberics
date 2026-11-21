@@ -168,8 +168,11 @@ module.exports = async function ({ browser, url, ck }) {
   // un-normalised parts and its spec normalisation matches one normalised convolver of the whole 2.2 s impulse
   { const c = await browser.newContext(); const pg = await c.newPage();
     await pg.goto(url + "tests/fixtures/music.html");
-    const r = await pg.evaluate(async (src) => {
-      const mod = { exports: {} }; new Function("module", src).call(window, mod); const M = mod.exports;
+    // the module's own exports (engine): load it once more with a CommonJS-style `module` in scope
+    await pg.evaluate(() => { window.module = { exports: {} }; });
+    await pg.addScriptTag({ url: url + "shared/music.js" });
+    const r = await pg.evaluate(async () => {
+      const M = window.module.exports;
       const sr = 44100, n = Math.ceil(sr * 3), imp = (c) => { const b = c.createBuffer(1, 1, sr); b.getChannelData(0)[0] = 1; const s = c.createBufferSource(); s.buffer = b; return s; };
       // A: one convolver, the whole impulse (the same seeded generator as engine()), normalised by the browser
       const ca = new OfflineAudioContext(2, n, sr), len = Math.floor(sr * 2.2), ir = ca.createBuffer(2, len, sr); let x = 0x2545f491;
@@ -183,7 +186,7 @@ module.exports = async function ({ browser, url, ck }) {
       for (let ch = 0; ch < 2; ch++) { const a = A.getChannelData(ch), b = B.getChannelData(ch);
         for (let i = 0; i < n; i++) { peak = Math.max(peak, Math.abs(a[i])); diff = Math.max(diff, Math.abs(a[i] - b[i])); ea += a[i] * a[i]; eb += b[i] * b[i]; } }
       return { peak, diff, rel: diff / peak, db: 10 * Math.log10(eb / ea) };
-    }, require("fs").readFileSync(require("path").join(__dirname, "..", "..", "shared", "music.js"), "utf8"));
-    ck("the reverb in four parts is the same reverb as one convolver (within 1% of its peak, level within 0.1 dB)", r.peak > 0 && r.rel < 0.01 && Math.abs(r.db) < 0.1, JSON.stringify(r));
+    });
+    ck("the reverb in four parts is the same reverb as one convolver (within 0.1% of its peak, level within 0.01 dB)", r.peak > 0 && r.rel < 0.001 && Math.abs(r.db) < 0.01, JSON.stringify(r));
     await c.close(); }
 };

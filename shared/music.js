@@ -398,10 +398,10 @@
   // chunked (live play): e.step(n) generates at most n more samples, or sets up one part, per call, and returns true once
   // the engine is complete (the same seeded samples, in the same order). Offline render builds it at once.
   var SEGS = 4;
-  function irScale(power, n, chans, sr) { // the spec's ConvolverNode normalisation (GainCalibration -58 dB at 44.1 kHz)
+  function irScale(power, n, chans, sr) { // the ConvolverNode normalisation of the Web Audio spec (RMS, calibrated at 44.1 kHz)
     var rms = Math.sqrt(power / (chans * n));
     if (!isFinite(rms) || rms < 0.000125) rms = 0.000125;
-    return 1 / rms * 0.00125 * (sr ? 44100 / sr : 1);
+    return 1 / rms * Math.pow(10, -58 / 20) * (sr ? 44100 / sr : 1); // -58 dB, as Chromium and WebKit compute it
   }
   function engine(c, dest, chunked) {
     var e = { c: c, waves: {}, mix: c.createGain(), duck: c.createGain(), verb: c.createGain(), wet: c.createGain(), n: 0, live: 0 };

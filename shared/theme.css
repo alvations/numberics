@@ -83,6 +83,12 @@ h1{ margin:0; font-size:var(--fs-2xl); line-height:1.05; letter-spacing:-.01em; 
 .stat > span{ display:block; font-size:var(--fs-xs); font-weight:650; text-transform:uppercase; letter-spacing:.07em; color:var(--mute); }
 .stat b{ font-size:var(--fs-lg); font-weight:800; font-variant-numeric:tabular-nums; }
 .stat b.none,.stat .none{ color:var(--mute); font-weight:600; font-size:var(--fs-lg); }
+/* a row of four pills (Four, Nine) keeps one row on phones from 361 to 420 px wide, where an empty value ("none") made
+   the last pill wrap alone (integration): a little less side padding and gap; rows that fit look the same elsewhere */
+@media (min-width:361px) and (max-width:420px){
+  .stats:has(> .stat:nth-child(4)){ gap:6px; }
+  .stats:has(> .stat:nth-child(4)) > .stat{ padding-left:8px; padding-right:8px; min-width:0; }
+}
 
 /* ===== power-up tray: 4 slots, gold count badges ===== */
 .tray{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:6px; }
@@ -259,8 +265,8 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .pv .sq9 span.c{ color:var(--cool); }
 .pv .eq{ display:flex; gap:4px; align-items:center; font-weight:850; font-size:13px; }
 .pv .eq .op{ color:var(--mute); }
-.pv .pips{ display:grid; grid-template-columns:repeat(3,4px); gap:2px; margin-top:2px; }
-.pv .pips i{ width:4px; height:4px; border-radius:50%; background:var(--tile-ink); opacity:.75; }
+.pv .pips{ display:grid; grid-template-columns:repeat(3,4px); gap:2px; margin-top:2px; min-height:auto; } /* min-height: Seven's own .pips sets one */
+.pv .pips i{ width:4px; height:4px; border:0; border-radius:50%; background:var(--tile-ink); opacity:.75; } /* border:0: a game page's own .pips i (Five, Six, Seven) never rings the Nine card's dots */
 .foot-note{ color:var(--faint); font-size:var(--fs-xs); text-align:center; margin:22px 0 4px; }
 
 /* ===== reduced motion: the OS query until settings.js drives html[data-motion] (B1) ===== */

@@ -44,6 +44,8 @@ module.exports = async function ({ browser, url, ck, shot }) {
     ck("a saved choice is kept (Hard after reload)", (await S(p0)).diff === "hard");
     const seg = await p0.locator(".views button").evaluateAll(b => b.map(x => x.getBoundingClientRect().height));
     ck("the Numbers/Grid switch is 44 px tall", seg.every(h => h >= 44), JSON.stringify(seg));
+    // integration: the win line is hidden until a win (a zero-length round-capped line drew a dot in the board's corner)
+    ck("no win line (or stray dot) on a fresh board", await p0.evaluate(() => document.getElementById("wl").hasAttribute("hidden") && getComputedStyle(document.getElementById("wl")).display === "none"));
     ck("the games list is the cards, this game marked", await p0.locator("#games.cards a.card").count() === 10 && await p0.locator('#games a.card[aria-current="page"][data-id="fifteen"]').count() === 1);
     ck("no page errors (first visit)", e0.length === 0, e0.join("|"));
     await c0.close();
@@ -490,7 +492,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     const t = window.__fifteen; const r = t.run; t.state = s; r.first = 5; });
   await tile(p, 9).click();                                   // 1 + 5 + 9 = 15, the middle column of the magic square
   await p.waitForTimeout(300);
-  const wl = await p.evaluate(() => { const l = document.querySelector("#wl line"), sv = document.getElementById("wl"); return { shown: !sv.hidden, x1: +l.getAttribute("x1"), y1: +l.getAttribute("y1"), x2: +l.getAttribute("x2"), y2: +l.getAttribute("y2"), anim: l.getAnimations().map(a => Object.keys(a.effect.getKeyframes()[0])) }; });
+  const wl = await p.evaluate(() => { const l = document.querySelector("#wl line"), sv = document.getElementById("wl"); return { shown: !sv.hasAttribute("hidden") && getComputedStyle(sv).display !== "none", x1: +l.getAttribute("x1"), y1: +l.getAttribute("y1"), x2: +l.getAttribute("x2"), y2: +l.getAttribute("y2"), anim: l.getAnimations().map(a => Object.keys(a.effect.getKeyframes()[0])) }; });
   ck("Grid win: a line is drawn through the three", wl.shown && Math.abs(wl.x1 - wl.x2) < 2 && Math.abs(wl.y1 - wl.y2) > 50, JSON.stringify(wl));
   ck("Grid win: the line draws by stroke-dashoffset", wl.anim.some(k => k.includes("strokeDashoffset")), JSON.stringify(wl.anim));
   ck("Grid win: the winning three pulse", await p.locator(".ft.win").count() === 3);

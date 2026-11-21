@@ -388,7 +388,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await go(p); await idle(p);
   await p.evaluate(() => { // spy on the music, the sounds and the trophy reports (the real calls still run)
     window.__calls = { duck: [], sfx: [], rep: [] };
-    window.NumbericsMusic = Object.assign(window.NumbericsMusic || {}, { duck: v => window.__calls.duck.push(v) });
+    // the music spy survives the lazy loader swapping the stub for the real module after a tap (integration: a race
+    // under load lost the spy): every object set as NumbericsMusic gets its duck wrapped
+    let mus = window.NumbericsMusic;
+    const spy = o => { if (o && !o.__spy) { const d = o.duck; o.duck = v => { window.__calls.duck.push(v); return d ? d.call(o, v) : v; }; o.__spy = 1; } return o; };
+    spy(mus); Object.defineProperty(window, "NumbericsMusic", { configurable: true, get: () => mus, set: v => { mus = spy(v); } });
     const A = window.NumbericsAudio;
     ["land", "burst", "win", "lose", "trophy", "power", "tick", "bad"].forEach(n => { const f = A[n]; A[n] = a => { window.__calls.sfx.push(n); return f(a); }; });
     const T = window.NumbericsTrophies, r = T.report; T.report = function (g, e, d, o) { const out = r.apply(T, arguments); window.__calls.rep.push([g, e, JSON.parse(JSON.stringify(d)), out]); return out; };

@@ -137,6 +137,41 @@ module.exports = async function ({ browser, url, ck, shot }) {
     ck(g.id + ": no page errors", e2.length === 0, e2.join(" | "));
     await p.close();
   }
+  await ctx.close();
+  // integration: on a fresh start (empty values read "none") the stat pills keep one row at 375 and 390 px, every game
+  // (Four and Nine wrapped their last pill alone)
+  for (const width of [375, 390]) {
+    ctx = await newCtx(browser, { viewport: { width, height: 812 } });
+    for (const g of games.filter(x => x.status !== "planned")) {
+      p = await ctx.newPage(); await p.goto(url + g.path);
+      const rows = await p.evaluate(() => { const st = document.querySelector(".stats"); if (!st) return 1;
+        return new Set([...st.children].filter(k => k.offsetParent !== null).map(k => Math.round(k.getBoundingClientRect().top))).size; });
+      ck(g.id + " " + width + ": the stat pills sit on one row", rows === 1, rows + " rows");
+      await p.close();
+    }
+    await ctx.close();
+  }
+  // integration: a game page's own CSS never changes the shared card previews (Five, Six and Seven's .pips rules once
+  // ringed and squeezed the Nine card's dots). Sudoku keeps its own CSS copy (its body line-height differs by a pixel).
+  // integration: the Today card is drawn after the first paint; its empty box keeps the drawn height, so the desktop
+  // root does not shift on load (perf budget loadCls 0.05; it read 0.057 before)
+  ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  await ctx.addInitScript(() => { window.__ls = 0; new PerformanceObserver(l => { for (const e of l.getEntries()) if (!e.hadRecentInput) window.__ls += e.value; }).observe({ type: "layout-shift", buffered: true }); });
+  p = await ctx.newPage(); await p.goto(url); await p.waitForTimeout(800);
+  const ls = await p.evaluate(() => ({ cls: window.__ls, today: document.getElementById("today").getBoundingClientRect().height }));
+  ck("desktop root: load layout shift under 0.05 (Today keeps its height)", ls.cls < 0.05 && ls.today >= 146, JSON.stringify(ls));
+  await ctx.close();
+  ctx = await newCtx(browser, { viewport: { width: 390, height: 844 } });
+  const look = (pg) => pg.evaluate(() => { const out = {}; document.querySelectorAll("#games .card .pv").forEach(pv => {
+    out[pv.parentElement.dataset.id] = [...pv.querySelectorAll("*")].map(e => { const c = getComputedStyle(e);
+      return [c.width, c.height, c.borderTopWidth, c.backgroundColor, c.display, c.opacity, c.margin].join("/"); }).join(";"); }); return out; });
+  p = await ctx.newPage(); await p.goto(url); const base = await look(p); await p.close();
+  for (const g of games.filter(x => x.path && x.id !== "sudoku")) {
+    p = await ctx.newPage(); await p.goto(url + g.path); const here = await look(p);
+    const off = Object.keys(base).filter(k => k !== g.id && k !== "two" && here[k] !== base[k]);
+    ck(g.id + ": the other games' card previews look as on the root page", off.length === 0, off.join());
+    await p.close();
+  }
   p = await ctx.newPage();
   await p.goto(url + "two/"); await p.waitForURL(u => !/\/two\/$/.test(u.pathname || String(u)), { timeout: 5000 }).catch(() => null);
   ck("/two/ reaches the root and Two loads", new URL(p.url()).pathname === "/" && (await p.textContent("h1")) === "Two", p.url());

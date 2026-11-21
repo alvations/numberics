@@ -251,6 +251,9 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .tag.new{ color:var(--good); background:color-mix(in srgb, var(--good) 14%, transparent); }
 .today{ background:linear-gradient(160deg, var(--panel-2), var(--panel)); border:1px solid var(--line); border-radius:var(--r-lg);
   padding:14px 16px; margin:0 0 20px; box-shadow:var(--sh-2); }
+/* the root page draws Today from nav.js after the first paint: the empty card keeps its drawn height until then, so the
+   heading and the cards below it never jump on load (integration: desktop load CLS 0.057 > 0.05) */
+#today.today:empty{ min-height:146px; }
 .today .when{ display:flex; justify-content:space-between; align-items:center; font-size:var(--fs-sm); color:var(--mute); font-weight:650; }
 .today .streak{ display:flex; align-items:center; gap:6px; color:var(--accent-text); font-weight:800; }
 .today .streak svg{ width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
@@ -271,8 +274,8 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .pv .sq9 span.c{ color:var(--cool); }
 .pv .eq{ display:flex; gap:4px; align-items:center; font-weight:850; font-size:13px; }
 .pv .eq .op{ color:var(--mute); }
-.pv .pips{ display:grid; grid-template-columns:repeat(3,4px); gap:2px; margin-top:2px; }
-.pv .pips i{ width:4px; height:4px; border-radius:50%; background:var(--tile-ink); opacity:.75; }
+.pv .pips{ display:grid; grid-template-columns:repeat(3,4px); gap:2px; margin-top:2px; min-height:auto; } /* min-height: Seven's own .pips sets one */
+.pv .pips i{ width:4px; height:4px; border:0; border-radius:50%; background:var(--tile-ink); opacity:.75; } /* border:0: a game page's own .pips i (Five, Six, Seven) never rings the Nine card's dots */
 .foot-note{ color:var(--faint); font-size:var(--fs-xs); text-align:center; margin:22px 0 4px; }
 
 /* ===== reduced motion: the OS query until settings.js drives html[data-motion] (B1) ===== */

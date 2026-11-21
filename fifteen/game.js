@@ -235,7 +235,8 @@
   }
   // the winning line in Grid view: one SVG line through the three centres, drawn by stroke-dashoffset (5.8, as Four)
   var wl = $("wl"), wlLine = wl.firstElementChild;
-  function clearLine() { wl.hidden = true; }
+  // an <svg> has no `hidden` property (only HTML elements do): set the attribute, which .wl[hidden] hides
+  function clearLine() { wl.setAttribute("hidden", ""); }
   function drawLine() {
     var res = state.result;
     if (!res || !res.line || view !== "grid") return clearLine();
@@ -245,7 +246,7 @@
     var x1 = ra.left + ra.width / 2 - base.left, y1 = ra.top + ra.height / 2 - base.top;
     var x2 = rb.left + rb.width / 2 - base.left, y2 = rb.top + rb.height / 2 - base.top, len = Math.hypot(x2 - x1, y2 - y1);
     wlLine.setAttribute("x1", x1); wlLine.setAttribute("y1", y1); wlLine.setAttribute("x2", x2); wlLine.setAttribute("y2", y2);
-    wlLine.style.strokeDasharray = len; wlLine.style.strokeDashoffset = 0; wl.hidden = false;
+    wlLine.style.strokeDasharray = len; wlLine.style.strokeDashoffset = 0; wl.removeAttribute("hidden");
     var an = M.play(wlLine, [{ strokeDashoffset: len }, { strokeDashoffset: 0 }], { duration: M.T.line, easing: M.E.out }, [{ opacity: 0 }, { opacity: 1 }]);
     if (an) anims.push(an);
   }
