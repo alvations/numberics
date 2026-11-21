@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0
  * Copyright 2026 alvations (Melon Lab)
- * Numberics Fibonacci: browser client, modelled on the Two client (../game.js).
- * The engine (engine.js on top of ../engine.js) owns every rule; this file only draws, listens, remembers.
+ * Numberics Fibonacci: browser client, modelled on the Two client (../two/game.js).
+ * The engine (engine.js on top of ../two/engine.js) owns every rule; this file only draws, listens, remembers.
  * Motion (docs/design/REDESIGN.md 5.3): tiles are kept by identity in the shared keyed layer (shared/motion.js), so every
  * tile slides from its old cell to its new one as in the original 2048; a joined tile pops on top after the slide and a
  * new tile appears after it. A new input finishes the running animation and is applied at once (5.11). Sounds, haptics

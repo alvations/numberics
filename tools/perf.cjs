@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * The PERF gate: load and play every live game in games.json (plus the root page) in Chromium, at phone
+ * The PERF gate: load and play every live game in games.json (plus the games page at the root, id "root") in Chromium, at phone
  * (390x844, 4x CPU throttling) and desktop (1280x860, no throttling), and check tools/perf-budgets.json.
  *   NODE_PATH=$(npm root -g) node tools/perf.cjs [id ...]
  * Env: PERF_OUT=<file> (JSON report, default <os tmpdir>/numberics-perf-report.json), PERF_RUNS (default 3,
@@ -22,6 +22,9 @@ const VIEWS = [
 // keys: keys pressed (repeat a key to weight it); click: share of actions that are clicks (0..1); sel: extra
 // click targets; seq + seqP: tap sequences (one selector per tap) tried with probability seqP. Unknown ids (new games, renamed games) just play generically.
 const PLAY = {
+  // the games page (O-9) has no game: it opens the Games and Trophies sheets from the top bar and closes them with Esc
+  // (its cards and Today chips are links, which play never clicks)
+  root: { keys: ["Escape"], click: 0, seqP: 0.5, seq: [['#topbar [data-open="games"]'], ['#topbar [data-open="trophies"]']] },
   endless: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
   two: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
   fibonacci: { keys: ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], click: 0.05 },
@@ -263,7 +266,9 @@ function budgetFor(B, id, metric, view) {
   const ids = process.argv.slice(2);
   const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).filter(g => g.status === "live");
   const pages = games.map(g => ({ id: g.id, path: g.path || "", vs: !!g.vs }));
-  if (!pages.some(g => g.path === "" || g.path === "./")) pages.unshift({ id: "root", path: "", vs: false });
+  if (!pages.some(g => g.path === "" || g.path === "./")) pages.unshift({ id: "root", path: "", vs: false }); // the games page
+  const unknown = ids.filter(id => !pages.some(g => g.id === id));
+  if (unknown.length) { console.log("perf: unknown id " + unknown.join(", ") + " (ids: " + pages.map(g => g.id).join(", ") + ")"); process.exit(1); }
   const todo = pages.filter(g => !ids.length || ids.includes(g.id));
   await new Promise(r => srv.listen(0, "127.0.0.1", r));
   const base = "http://127.0.0.1:" + srv.address().port + "/";

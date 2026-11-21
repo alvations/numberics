@@ -2,13 +2,14 @@
 # The PERF gate
 
 Every change passes QA, QC and PERF. `tools/perf.cjs` is the PERF part: it loads and plays every live game in
-`games.json` (by its `path`, so renamed or moved games follow automatically), plus the root page, in Chromium,
+`games.json` (by its `path`, so renamed or moved games follow automatically), plus the games page at the root
+(id `root`; O-9 made it the games page, so it is no longer one of the games), in Chromium,
 and checks the numbers against `tools/perf-budgets.json`. It exits 1 and prints each failed budget.
 
 ## Run
 ```bash
 NODE_PATH=$(npm root -g) node tools/perf.cjs              # every live game + root, 3 runs each, about 50 minutes
-NODE_PATH=$(npm root -g) node tools/perf.cjs four nine    # only these ids (the root page's id is "root")
+NODE_PATH=$(npm root -g) node tools/perf.cjs four nine    # only these ids (the games page's id is "root"; an unknown id fails)
 PERF_RUNS=1 PERF_PLAY_MS=5000 NODE_PATH=$(npm root -g) node tools/perf.cjs   # a quick look, not a gate run
 ```
 Env: `PERF_OUT=<file>` (the JSON report; default `<os tmpdir>/numberics-perf-report.json`), `PERF_RUNS`
@@ -43,7 +44,8 @@ external requests and page errors are the **worst run**.
 the header, the games row, the difficulty row, settings and New game (targets below the fold are scrolled into
 view). End-card buttons are preferred when shown, so play continues across game ends; against the computer, 20 actions with no computer move count as stuck, and the script presses Escape and takes the end card's button. Small per-game hints live in
 the `PLAY` map at the top of `tools/perf.cjs` (keys, click share, tap sequences such as Five's own tile then a
-target); a game without an entry plays generically. Against the computer, the script waits while the hint line says
+target); a game without an entry plays generically. The games page (`root`) has no game: its play opens the Games and
+Trophies sheets from the top bar and closes them with Esc, since its cards and Today chips are links. Against the computer, the script waits while the hint line says
 "thinking", like a player would, so each reply is timed from the move that caused it.
 
 **The computer's move.** Every `Numberics*` global's functions named `cpu*`, `computer*` or `ai*` (for example

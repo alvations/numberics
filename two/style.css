@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * Two (the root page). It keeps its own CSS (REDESIGN.md 2.3): the token block is a byte-for-byte copy of
+ * Two (two/, O-9). It keeps its own CSS (REDESIGN.md 2.3): the token block is a byte-for-byte copy of
  * shared/theme.css and the components below mirror it (tests/test-theme.js, tests/test.js). */
 /* tokens: REDESIGN.md 2.1, copied byte for byte into style.css and sudoku/style.css (tests/test-theme.js) */
 :root{
@@ -71,19 +71,6 @@ a:hover{ color:var(--ink); }
 .tb-btn:hover{ background:var(--panel-2); border-color:var(--line-2); }
 .tb-dot{ position:absolute; top:6px; right:6px; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--panel); }
 .tb-dot[hidden]{ display:none; }
-
-/* ===== root layout (REDESIGN.md 3.1): phones stack the board, then Today and the games; from 960 px they sit beside it ===== */
-.layout{ width:100%; max-width:1100px; margin:0 auto; display:grid; gap:28px; }
-.layout > #app{ margin:0 auto; }
-.side{ min-width:0; }
-.side h2{ font-size:var(--fs-lg); margin:0 0 4px; }
-.side .lede{ margin:0 0 14px; color:var(--mute); font-size:var(--fs-sm); }
-@media (min-width:960px){
-  .layout{ grid-template-columns:480px minmax(0,1fr); align-items:start; gap:48px; }
-  .layout > #app{ margin:0; } .side{ padding-top:6px; }
-  .side .cards{ grid-template-columns:repeat(2,minmax(0,1fr)); }
-}
-@media (min-width:1180px){ .side .cards{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
 
 /* ===== header and stats ===== */
 header{ display:flex; justify-content:space-between; align-items:flex-end; gap:12px; margin-bottom:12px; flex-wrap:wrap; }
@@ -253,9 +240,6 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .tag.new{ color:var(--good); background:color-mix(in srgb, var(--good) 14%, transparent); }
 .today{ background:linear-gradient(160deg, var(--panel-2), var(--panel)); border:1px solid var(--line); border-radius:var(--r-lg);
   padding:14px 16px; margin:0 0 20px; box-shadow:var(--sh-2); }
-/* the root page draws Today from nav.js after the first paint: the empty card keeps its drawn height until then, so the
-   heading and the cards below it never jump on load (integration: desktop load CLS 0.057 > 0.05) */
-#today.today:empty{ min-height:146px; }
 .today .when{ display:flex; justify-content:space-between; align-items:center; font-size:var(--fs-sm); color:var(--mute); font-weight:650; }
 .today .streak{ display:flex; align-items:center; gap:6px; color:var(--accent-text); font-weight:800; }
 .today .streak svg{ width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
@@ -319,6 +303,9 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .stat.rung::after{ content:""; position:absolute; inset:-1px; border-radius:inherit; box-shadow:0 0 0 2px var(--accent); pointer-events:none;
   animation:two-fadeout 420ms var(--e-out) forwards; }
 details.how p .btn{ margin-top:2px; }
+/* the games list under the game, as on every other game page (O-9; fibonacci/style.css) */
+.more{ margin:22px 0 8px; }
+.more h2{ margin:0 0 10px; font-size:var(--fs-lg); }
 /* Round 3 end card: See the board beside New game */
 .over .row{ margin:4px 0 0; gap:8px; flex-wrap:wrap; }
 

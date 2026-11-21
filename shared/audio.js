@@ -23,7 +23,7 @@
   }
   var C5 = note(5), E5 = note(6), G5 = note(7), C6 = note(10), E4 = note(2), G4 = note(3);
   var BUZZ = { tap: 6, merge: 10, big: 18, win: [20, 40, 20], lose: [30], bad: 0 };
-  var MAX_VOICES = 8, SAME_MS = 40, BUZZ_MS = 50, RAMP = 0.03;
+  var MAX_VOICES = 8, SAME_MS = 40, BUZZ_MS = 50, RAMP = 0.03, WAKE_MS = 250;
   var COMP = { threshold: -18, knee: 6, ratio: 4, attack: 0.003, release: 0.12 };
 
   // ---- recipes: (v, t) where v = { c, out, src(node) } ; return the voice length in seconds ----
@@ -121,6 +121,7 @@
     var now = opt.now || function () { try { return w.performance.now(); } catch (e) { return Date.now(); } };
     var AC = null; try { AC = w.AudioContext || w.webkitAudioContext || null; } catch (e) { AC = null; }
     var eng = null, voices = [], last = {}, lastBuzz = -1e9, cfg = null, made = 0, key = 0, bus = null;
+    var waking = 0, wakeGen = 0;
     var DIP = { best: 1, power: 1, trophy: 1 };
 
     function readCfg(d) {
@@ -145,9 +146,21 @@
           s.buffer = b; s.connect(c.destination); s.start(0);
           s.onended = function () { try { s.disconnect(); } catch (e) { /* gone */ } };
         }
-        if (eng.c.state !== "running" && eng.c.resume) { var p = eng.c.resume(); if (p && p.catch) p.catch(function () {}); }
+        if (eng.c.state !== "running" && eng.c.resume) wake(eng.c.resume());
       } catch (e) { return false; }
       return true;
+    }
+    // The context starts a moment after resume() (a context made on a key that is not an activation, such as Escape,
+    // or on any first tap where the browser starts it asynchronously). Sounds asked for within WAKE_MS of that resume
+    // are booked on the waking clock, so the tap that wakes it is not silent; if the start comes later than that, those
+    // voices are cut rather than played late.
+    function wake(p) {
+      var g = ++wakeGen, t0 = now(); waking = t0 + WAKE_MS;
+      function settle() {
+        if (g === wakeGen) waking = 0;
+        if (now() - t0 > WAKE_MS || !eng || eng.c.state !== "running") voices.slice().forEach(function (v) { if (v.wake === g) cut(v); });
+      }
+      if (p && p.then) p.then(settle, settle); else settle();
     }
     function onGesture(e) { if (e && e.isTrusted === false) return; unlock(); }
     try { ["pointerdown", "keydown", "touchend", "click"].forEach(function (n) { w.addEventListener(n, onGesture, { capture: true }); }); } catch (e) { /* no events */ }
@@ -201,13 +214,14 @@
     function play(name, arg) {
       if (!eng || !conf().sound || target() <= 0 || hidden()) return false;
       try {
-        if (eng.c.state !== "running") return false;
-        var ms = now();
+        var ms = now(), w8 = eng.c.state === "suspended" && waking && ms < waking;
+        if (eng.c.state !== "running" && !w8) return false;
         if (last[name] != null && ms - last[name] < SAME_MS) return false;
         last[name] = ms;
         prune();
         while (voices.length >= MAX_VOICES) cut(voices[0]);
-        voice(eng, name, arg, eng.c.currentTime + 0.005, true, key);
+        var v = voice(eng, name, arg, eng.c.currentTime + 0.005, true, key);
+        if (w8) v.wake = wakeGen;
         if (DIP[name]) try { if (w.NumbericsMusic) w.NumbericsMusic.dip(); } catch (e) { /* no music */ }
         return true;
       } catch (e) { return false; }

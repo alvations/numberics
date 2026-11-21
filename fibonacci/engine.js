@@ -2,7 +2,7 @@
  * Copyright 2026 alvations (Melon Lab)
  *
  * Numberics Fibonacci: 2584 with no ceiling. The pure engine. No DOM, no storage, no clock.
- * It is the Endless slide-and-merge core (../engine.js, make(rules)) with the 2584 rule set:
+ * It is the Endless slide-and-merge core (../two/engine.js, make(rules)) with the 2584 rule set:
  *   - tiles are Fibonacci numbers stored as INDICES: 1 shows 1, 2 shows 2, 3 shows 3, 4 shows 5,
  *     5 shows 8 ... (index i shows F(i+1) in the usual F(1) = F(2) = 1 numbering), so no overflow;
  *   - two tiles merge when they are consecutive in the sequence (|a - b| == 1), or both are 1;
@@ -14,10 +14,10 @@
  * Power-ups are Endless's exactly; Boost moves a tile to the next Fibonacci number, and a NEW
  * highest tile from 55 up (index 9) awards one. The floor was 34 until round 2: with the same bot
  * Fibonacci paid more rewards per game than Endless, so it moved up one step (docs/ROADMAP.md 1, 0a).
- * R2 (a power-up never earns one, including the swipe right after it) lives in ../engine.js.
+ * R2 (a power-up never earns one, including the swipe right after it) lives in ../two/engine.js.
  */
 (function (root, factory) {
-  if (typeof module === "object" && module.exports) module.exports = factory(require("../engine.js"));
+  if (typeof module === "object" && module.exports) module.exports = factory(require("../two/engine.js"));
   else root.NumbericsFibonacci = factory(root.Numberics);
 })(typeof self !== "undefined" ? self : this, function (Endless) {
   "use strict";

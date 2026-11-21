@@ -146,7 +146,7 @@ t("stuck is not over while a power-up can act; locked with none is over", () => 
   ok(F.move(b.state, "left").moved === false, "an over game ignores moves");
 });
 t("the Endless engine is unchanged by the Fibonacci rule set", () => {
-  const N = require("../engine.js");
+  const N = require("../two/engine.js");
   eq(N.label(11), "2048"); eq(N.slideLine([1, 1, 2, 0], [0, 1, 2, 3]).out, [2, 2]); eq(N.slideLine([1, 2, 0, 0], [0, 1, 2, 3]).out, [1, 2]);
   eq(N.AWARD_FROM_LEVEL, 5);
 });

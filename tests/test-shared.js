@@ -29,7 +29,7 @@ t("O-7 order: every games list runs Fibonacci, Two, Three, Four, Five, Six, Seve
   const O7 = ["fibonacci", "two", "three", "four", "five", "six", "seven", "nine", "fifteen", "sudoku"];
   ok(JSON.stringify(games.map(g => g.id)) === JSON.stringify(O7), "games.json: " + games.map(g => g.id).join());
   ok(JSON.stringify(require("../shared/nav.js").map(g => g[0])) === JSON.stringify(O7), "nav.js mirror");
-  ok(games.find(g => g.id === "two").path === "", "Two is the root page");
+  ok(games.find(g => g.id === "two").path === "two/", "Two has its own page in two/ (O-9)");
   ok(!games.some(g => g.id === "endless"), "the old id is gone from games.json (saves and trophies still accept it)");
 });
 t("C1 card copy (REDESIGN.md 3.3): names, blurbs and vs-computer flags as specified", () => {
@@ -52,7 +52,18 @@ t("every games.json entry is well formed and paths are unique", () => {
   const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8"));
   const seen = new Set();
   games.forEach(g => { ok(g.id && g.name && typeof g.path === "string" && /^(live|planned)$/.test(g.status), g.id); ok(!seen.has(g.path), "dup " + g.path); seen.add(g.path); });
-  games.filter(g => g.status === "live" && g.path).forEach(g => ok(fs.existsSync(path.join(root, g.path, "index.html")), g.id + " page"));
+  games.filter(g => g.status === "live").forEach(g => ok(/^[a-z]+\/$/.test(g.path) && fs.existsSync(path.join(root, g.path, "index.html")), g.id + " page"));
+});
+t("O-9: every games list links Two to two/ and the home link is the root, the games page", () => {
+  const nav = require("../shared/nav.js"), ui = fs.readFileSync(path.join(root, "shared/ui.js"), "utf8");
+  ok(nav.find(g => g[0] === "two")[2] === "two/", "nav.js mirror");
+  ok(nav.every(g => g[2] && g[2] !== "./"), "no game is the root any more");
+  ok(/class="tb-home" href="' \+ \(root \|\| "\.\/"\) \+ '" aria-label="Numberics home"/.test(ui), "the top bar mark goes to data-root, the games page");
+  // no page or tool still points at Two's old root files
+  const scan = d => fs.readdirSync(path.join(root, d), { withFileTypes: true }).flatMap(e => e.isDirectory() ? (/^(node_modules|screenshots|\.git)$/.test(e.name) ? [] : scan(path.join(d, e.name)))
+    : /\.(html|js|cjs)$/.test(e.name) ? [path.join(d, e.name)] : []);
+  const bad = scan(".").filter(f => !/^docs[\\/]/.test(f)).filter(f => /src="(\.\.\/)+engine\.js"|require\("(\.\.\/)+engine\.js"\)/.test(fs.readFileSync(path.join(root, f), "utf8")));
+  ok(!bad.length, "still loads the old root engine.js: " + bad.join(", "));
 });
 require("./conventions")(t, ok, ["shared/kit.js", "shared/power.js", "shared/nav.js", "shared/theme.css", "shared/boot.js",
   "shared/settings.js", "shared/motion.js", "shared/audio.js", "shared/trophies.js", "shared/progress.js", "shared/ui.js"]);

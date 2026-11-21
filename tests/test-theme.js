@@ -13,10 +13,10 @@ function block(src, f) {
   ok(a >= 0 && b > a, f + ": token block markers");
   return src.slice(a, b + END.length);
 }
-const CSS = ["shared/theme.css", "style.css", "sudoku/style.css"];
+const CSS = ["shared/theme.css", "two/style.css", "sudoku/style.css"];
 const tokens = block(read(CSS[0]), CSS[0]);
 
-t("the token block is byte-identical in shared/theme.css, style.css and sudoku/style.css", () => {
+t("the token block is byte-identical in shared/theme.css, two/style.css and sudoku/style.css", () => {
   CSS.slice(1).forEach(f => ok(block(read(f), f) === tokens, f + " differs from shared/theme.css"));
 });
 t("the R4 shared block (top bar at 320 px, mute, end cards, trophy goals, Today, Memory) is byte-identical in all three", () => {
@@ -100,7 +100,7 @@ t("contrast: the accent fill carries --accent-ink at 4.5:1 (badges, primary butt
 const theme = read("shared/theme.css"), LIFT = /--tl:calc\(var\(--tile-l\) \+ ([\d.]+)% \+ ([\d.]+)% \* max\(0, cos\(\(var\(--h,40\) - (\d+)\) \* ([\d.]+)deg\)\)\)/;
 t("contrast: --tile-ink on tile faces, levels 1 to 40, 4.5:1 in every theme", () => {
   const m = theme.match(LIFT); ok(m, "hue lift rule in shared/theme.css");
-  ok(read("style.css").includes(m[0]), "root style.css uses the same hue lift");
+  ok(read("two/style.css").includes(m[0]), "two/style.css uses the same hue lift");
   const K = require("../shared/kit.js"), bad = [];
   MODES.forEach(([th, hc]) => { const v = mode(th, hc), S = parseFloat(v["--tile-s"]), L = parseFloat(v["--tile-l"]);
     for (let lv = 1; lv <= 40; lv++) {
@@ -112,7 +112,9 @@ t("contrast: --tile-ink on tile faces, levels 1 to 40, 4.5:1 in every theme", ()
 });
 
 // ---- pages: boot first, top bar container, script order (REDESIGN.md 11, A1) ----
-const PAGES = ["index.html"].concat(JSON.parse(read("games.json")).filter(g => g.status === "live" && g.path).map(g => g.path + "index.html"));
+// the games page at the root (O-9) plus every game page; GAMES are the game pages only (the root plays no game)
+const GAMES = JSON.parse(read("games.json")).filter(g => g.status === "live").map(g => g.path + "index.html");
+const PAGES = ["index.html"].concat(GAMES);
 const ORDER = ["shared/kit.js", "shared/settings.js", "shared/motion.js", "shared/audio.js", "shared/trophies.js", "shared/progress.js", "shared/power.js"];
 t("every page loads shared/boot.js first in <head>, before any stylesheet or other script", () => PAGES.forEach(f => {
   const s = read(f), head = s.slice(0, s.indexOf("</head>")), b = head.indexOf("shared/boot.js");
@@ -125,13 +127,21 @@ t("every page has the top bar container before the game, with its root link", ()
   ok(m, f + " #topbar"); ok(m[1] === (f === "index.html" ? "" : "../"), f + " data-root " + m[1]);
   ok(s.indexOf('id="topbar"') < s.indexOf('<main id="app"'), f + " before main");
 }));
-t("every page includes the scripts in the spec order: kit, settings, motion, audio, trophies, progress, power, engine(s), game, nav, ui", () => PAGES.forEach(f => {
+t("every game page includes the scripts in the spec order: kit, settings, motion, audio, trophies, progress, power, engine(s), game, nav, ui", () => GAMES.forEach(f => {
   const s = read(f), body = s.slice(s.indexOf("<body"));
   const src = [...body.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1].replace(/^(\.\.\/)+/, ""));
   ok(JSON.stringify(src.slice(0, ORDER.length)) === JSON.stringify(ORDER), f + " head of list " + src.join(","));
   ok(src[src.length - 1] === "shared/ui.js" && src[src.length - 2] === "shared/nav.js", f + " ends with nav, ui");
   ok(src[src.length - 3] === "game.js" || /\/game\.js$/.test(src[src.length - 3]), f + " game before nav");
 }));
+
+t("O-9: the games page loads only what the top bar, Settings, Trophies, mute, Today and the cards need, in the spec order", () => {
+  const s = read("index.html"), src = [...s.slice(s.indexOf("<body")).matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]);
+  ok(JSON.stringify(src) === JSON.stringify(["shared/kit.js", "shared/settings.js", "shared/audio.js", "shared/trophies.js", "shared/progress.js",
+    "shared/nav.js", "shared/ui.js"]), "root scripts " + src.join(","));
+  const css = [...s.matchAll(/<link rel="stylesheet" href="([^"]+)">/g)].map(m => m[1]);
+  ok(JSON.stringify(css) === JSON.stringify(["shared/theme.css", "home.css"]), "root CSS " + css.join(","));
+});
 
 // ---- stub modules: the globals exist with the spec's API, and every call is safe (B1 to B4 fill them) ----
 const vm = require("vm");
@@ -182,5 +192,5 @@ t("boot applies stored settings and falls back to defaults with storage blocked"
   const g = doc2.documentElement.dataset;
   ok(g.theme === "light" && g.text === "normal" && g.motion === "full", "malformed fields fall back one by one (theme to Device, light here), Full beats the OS " + JSON.stringify(g));
 });
-require("./conventions")(t, ok, ["style.css", "sudoku/style.css"]); // the shared modules are checked in test-shared.js
+require("./conventions")(t, ok, ["two/style.css", "sudoku/style.css", "home.css", "index.html"]); // the shared modules are checked in test-shared.js
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

@@ -240,7 +240,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // craft #6: the pills sit under the title, where Two's are
   const pills = (q) => q.evaluate(() => { const b = document.querySelector(".brand").getBoundingClientRect(), s = document.querySelector(".stats").getBoundingClientRect(), t = document.getElementById("tray").getBoundingClientRect();
     return { under: s.top >= b.bottom, left: Math.round(s.left - b.left), top: Math.round(s.top), tray: Math.round(t.top) }; });
-  const fp = await pills(p), ep2 = await ctx.newPage(); await ep2.goto(url); const ep = await pills(ep2); await ep2.close();
+  const fp = await pills(p), ep2 = await ctx.newPage(); await ep2.goto(url + "two/"); const ep = await pills(ep2); await ep2.close();
   ck("pills sit under the title at 1280, as in Two", fp.under && ep.under && fp.left === ep.left && Math.abs(fp.top - ep.top) <= 2 && Math.abs(fp.tray - ep.tray) <= 2, JSON.stringify([fp, ep]));
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowUp"); await p.waitForTimeout(250);
   ck("after the first move the start hint is gone", await p.evaluate(() => window.__fibonacci.state.moves > 0) && (await p.textContent("#hint")).trim() === "");

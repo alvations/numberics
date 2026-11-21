@@ -49,7 +49,8 @@ jobs:
         run: |
           assemble () {
             src="$1"; out="$2"; mkdir -p "$out"
-            for f in index.html engine.js game.js style.css games.json .nojekyll LICENSE NOTICE; do
+            # the root files of either layout: Two at the root (main today), or the games page with home.css (O-9, build/v2)
+            for f in index.html home.css engine.js game.js style.css games.json .nojekyll LICENSE NOTICE; do
               [ -e "$src/$f" ] && cp -r "$src/$f" "$out/"
             done
             cp -r "$src/shared" "$src/screenshots" "$out/"

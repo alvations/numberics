@@ -175,7 +175,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
   {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await ctx.addInitScript(SEEN, HOWTO);
     await ctx.addInitScript(() => { const set = Storage.prototype.setItem; window.__w = []; Storage.prototype.setItem = function (k, v) { if (this === localStorage) window.__w.push(k); return set.call(this, k, v); }; });
-    const p = await ctx.newPage(); await p.goto(url); await closeSheets(p);
+    const p = await ctx.newPage(); await p.goto(url + "two/"); await closeSheets(p);
     const r = await p.evaluate(() => new Promise(res => {
       window.__w.length = 0; const m0 = window.__numberics.state.moves;
       ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft"].forEach(k => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })));

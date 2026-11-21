@@ -20,7 +20,7 @@ module.exports = async function ({ browser, url, ck }) {
   const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
 
   // 1. no AudioContext before a gesture: on the fixture and on every live page
-  const pages = [""].concat(require("../../games.json").filter(g => g.status === "live" && g.path).map(g => g.path));
+  const pages = [""].concat(require("../../games.json").filter(g => g.status === "live").map(g => g.path)); // the games page, then every game
   for (const path of pages) {
     await p.goto(url + path); await p.waitForTimeout(150);
     ck("no AudioContext on load: /" + path, await p.evaluate(() => window.__ac === 0 && typeof NumbericsAudio.tick === "function"));
@@ -91,7 +91,7 @@ module.exports = async function ({ browser, url, ck }) {
   ck("without Web Audio: every sound returns false, render null, no context", bare.s.every(x => x === false) && bare.r === null && bare.st.contexts === 0 && bare.ac === "undefined", JSON.stringify(bare));
   ck("without vibrate: buzz returns false", bare.z.every(x => x === false), JSON.stringify(bare.z));
   ck("no page errors without Web Audio or vibrate", !e2.length, e2.join(" | "));
-  await q.goto(url); await q.click("body", { position: { x: 5, y: 5 } }); await q.keyboard.press("ArrowLeft"); await q.waitForTimeout(200);
-  ck("the root page plays on without Web Audio or vibrate", !e2.length, e2.join(" | "));
+  await q.goto(url + "two/"); await q.click("body", { position: { x: 5, y: 5 } }); await q.keyboard.press("ArrowLeft"); await q.waitForTimeout(200);
+  ck("Two plays on without Web Audio or vibrate", !e2.length, e2.join(" | "));
   await c2.close();
 };

@@ -59,7 +59,7 @@
   function topbar() {
     var el = doc.getElementById("topbar"); if (!el) return null;
     var root = el.getAttribute("data-root") || "";
-    el.innerHTML = '<a class="tb-home" href="' + (root || "./") + '" aria-label="Numberics home, play Two">' + MARK + '<span class="tb-word">Numberics</span></a>' +
+    el.innerHTML = '<a class="tb-home" href="' + (root || "./") + '" aria-label="Numberics home">' + MARK + '<span class="tb-word">Numberics</span></a>' +
       '<span class="tb-sp"></span>' +
       '<button class="tb-btn tb-games" type="button" data-open="games" aria-label="Games">' + ICON.games + '<span class="tb-lbl">Games</span></button>' +
       '<button class="tb-btn tb-mute" type="button" data-open="mute" aria-pressed="false" aria-label="Mute sound and music">' + ICON.sound + "</button>" +

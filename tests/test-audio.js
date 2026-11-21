@@ -80,6 +80,30 @@ t("the first gesture creates and resumes the context synchronously, once; it pla
   ctx().state = "suspended"; w.fire("touchend");
   ok(ctx().state === "running" && m.Ctx.made.length === 1, "a later gesture resumes an interrupted context");
 });
+// O-10: a context made on a key that is not an activation (Escape) stays suspended; the next tap resumes it, and the
+// browser starts it a moment later (asynchronously). The sound of that tap used to be dropped.
+function waking() {
+  const o = win(); let done = null;
+  o.m.Ctx.prototype.resume = function () { this.resumes++; return new Promise(r => { done = () => { this.state = "running"; r(); }; }); };
+  o.w.fire("keydown");
+  return { o, c: o.ctx(), start: () => done() };
+}
+t("O-10: the tap that wakes a suspended context is heard; after the wake window nothing piles up", () => {
+  const { o, c } = waking();
+  ok(c.state === "suspended", "still suspended while it wakes");
+  const before = c.srcs.length;
+  ok(o.api.slide() === true && c.srcs.length > before, "the waking tap's sound is booked on the waking clock");
+  o.clock.ms += 300;
+  ok(o.api.merge(3) === false, "after the 250 ms window a context that has not started plays nothing");
+});
+{
+  const a = waking(); a.o.api.slide(); a.o.clock.ms += 50; a.start();
+  const b = waking(); b.o.api.slide(); b.o.clock.ms += 1300; b.start();
+  later.push(new Promise(r => setTimeout(r, 0)).then(() => {
+    t("O-10: a prompt start keeps the waking tap's voice", () => ok(a.o.api.stats().voices === 1 && a.c.state === "running", JSON.stringify(a.o.api.stats())));
+    t("O-10: a late start cuts it instead of playing it late", () => ok(b.o.api.stats().voices === 0 && b.c.srcs.filter(s => s.kind !== "buf" || s.buffer.length !== 1).every(s => s.t1 <= 0.01), JSON.stringify(b.o.api.stats())));
+  }));
+}
 t("graph: master = volume * 0.5 into the compressor (-18 dB, 4:1, 3 ms, 120 ms) into the destination", () => {
   const { w, m } = win({ settings: settingsOf({ sound: true, volume: 0.5 }) });
   w.fire("pointerdown");

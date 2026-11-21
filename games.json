@@ -9,7 +9,7 @@
   {
     "id": "two",
     "name": "Two",
-    "path": "",
+    "path": "two/",
     "status": "live",
     "blurb": "2048 with no top tile."
   },

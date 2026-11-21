@@ -2,7 +2,7 @@
  * Zero-dependency test runner: `node tests/test.js` */
 "use strict";
 const fs = require("fs"), path = require("path");
-const N = require("../engine.js");
+const N = require("../two/engine.js");
 let pass = 0, fail = 0;
 function t(name, fn) { try { fn(); pass++; } catch (e) { fail++; console.log("FAIL", name, "\n  ", e.message); } }
 function eq(a, b, m) { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error((m || "") + " got " + JSON.stringify(a) + " want " + JSON.stringify(b)); }
@@ -271,7 +271,7 @@ t("R15 (critic S2): a full stock says so; the reward is skipped, not lost silent
   const r = N.move(board([[5, 5, 0, 0], Z4, Z4, Z4], { top: 5, power: full }), "left");
   eq(r.milestones, [6]); eq(r.awarded, []); ok(r.full, "result flags the full stock"); eq(r.state.power, full);
   ok(!N.move(board([[5, 5, 0, 0], Z4, Z4, Z4], { top: 5 }), "left").full, "a normal award is not full");
-  const gsrc = fs.readFileSync(path.join(__dirname, "..", "game.js"), "utf8");
+  const gsrc = fs.readFileSync(path.join(__dirname, "..", "two", "game.js"), "utf8");
   ok(/r\.full\) toast\("New tile " \+ N\.label\(top\) \+ "\. Power-ups full\.", "info"\)/.test(gsrc), "the client toasts it");
   ok(/r\.marked\) toast\("New tile " \+ N\.label\(top\) \+ "\. Swapped and boosted tiles earn no reward\.", "info"\)/.test(gsrc), "and the marked case");
 });
@@ -345,7 +345,8 @@ t("random play never corrupts the board (5000 moves)", () => {
 
 // ---- repo conventions (carried over from the melon-eight / cleo-guide lessons) ----
 const root = path.join(__dirname, "..");
-const files = ["engine.js", "game.js", "index.html", "style.css"].map(f => [f, fs.readFileSync(path.join(root, f), "utf8")]);
+// Two lives in two/ (O-9); the keys stay the bare file names so the checks below read as before
+const files = ["engine.js", "game.js", "index.html", "style.css"].map(f => [f, fs.readFileSync(path.join(root, "two", f), "utf8")]);
 t("no document.write anywhere", () => files.forEach(([f, s]) => ok(!/document\.write/.test(s), f)));
 t("no em-dashes anywhere in source", () => files.forEach(([f, s]) => ok(!/\u2014/.test(s), f)));
 t("every localStorage use sits inside a try block (storage may throw)", () => {
@@ -358,14 +359,14 @@ t("the content does not depend on a CDN", () => files.forEach(([f, s]) => ok(!/h
 
 // ---- round 1 fixes (docs/reviews/TRIAGE1.md): static guards for the page shell ----
 const src = Object.fromEntries(files);
-t("C1 rename (REDESIGN.md 3.1, 4.2): the root is Two: title, H1, sub line, meta, favicon; no Endless left on the page", () => {
+t("C1 rename (REDESIGN.md 3.1, 4.2): two/ is Two: title, H1, sub line, meta, favicon; no Endless left on the page", () => {
   const h = src["index.html"];
   ok(/<title>Numberics Two<\/title>/.test(h), "title");
   ok(/<h1>Two<\/h1>/.test(h), "H1");
   ok(/<p class="sub">Every tile is a power of two\. No top tile\.<\/p>/.test(h), "sub line");
   ok(/<meta name="description" content="Two: 2048 with no top tile\. Every tile is a power of two;/.test(h), "meta description");
   ok(/%3E2%3C\/text%3E/.test(h) && !/%E2%88%9E/.test(h), "favicon is a 2, not the infinity sign");
-  ok(!/endless/i.test(h), "no Endless in the root page");
+  ok(!/endless/i.test(h), "no Endless on Two's page");
   ok(!/Endless/.test(fs.readFileSync(path.join(root, "README.md"), "utf8").replace("Two was called Endless", "")), "README: Endless only in the one line on the old name");
 });
 t("C1 back-compat: Two keeps the numberics_endless_v1 save key and the replay fixture name, with the reason beside them", () => {
@@ -373,19 +374,28 @@ t("C1 back-compat: Two keeps the numberics_endless_v1 save key and the replay fi
   ok(/Two was called Endless; the key is kept so saved games load/.test(src["game.js"]), "the comment at the key");
   ok(fs.existsSync(path.join(__dirname, "fixtures", "endless-replay.json")), "replay fixture name");
 });
-t("C1 root layout (REDESIGN.md 3.1, 3.3, 3.4): Today and the game cards beside the board, then the footer line", () => {
+t("O-9: Two has its own page in two/, like the other games: shared paths, home link, More number games under the game", () => {
   const h = src["index.html"];
-  ok(/<div class="layout">\s*<main id="app">/.test(h), "layout wraps the game");
-  ok(/<aside class="side"[^>]*>\s*<section id="today" class="today"[^>]*><\/section>\s*<h2 id="more">Ten number games<\/h2>\s*<p class="lede">From the smallest number to the biggest\. Free, no ads, saved on this device\.<\/p>\s*<div id="games" class="cards" data-root="" data-current="two"/.test(h), "side: Today, heading, lede, cards");
-  ok(/<p class="foot-note">Your scores and trophies stay on this device\. Nothing is sent anywhere\.<\/p>/.test(h), "footer line");
-  ok(h.indexOf('id="games"') > h.indexOf("</main>"), "the cards sit after the game");
-  ok(/\.layout\{[^}]*max-width:1100px[^}]*display:grid[^}]*gap:28px/.test(src["style.css"]), "layout grid");
-  ok(/@media \(min-width:960px\)\{\s*\.layout\{ grid-template-columns:480px minmax\(0,1fr\);[^}]*gap:48px/.test(src["style.css"]), "beside the board from 960");
+  ok(/<div id="topbar" class="topbar" data-root="\.\.\/"><\/div>\s*<main id="app">/.test(h), "top bar, then the game");
+  ok(/<section class="more" aria-labelledby="more">\s*<h2 id="more">More number games<\/h2>\s*<div id="games" class="cards" data-root="\.\.\/" data-current="two"><\/div>\s*<\/section>/.test(h), "More number games, Two marked");
+  ok(h.indexOf('id="games"') < h.indexOf("</main>") && h.indexOf('id="games"') > h.indexOf("</details>"), "the cards sit under the game, inside main");
+  ok(!/class="layout"|<aside|id="today"|Ten number games/.test(h), "no side column, no Today card, no games-page heading");
+  ok(/<script src="\.\.\/shared\/boot\.js"><\/script>/.test(h) && /<link rel="stylesheet" href="style\.css">/.test(h), "boot from ../shared, Two's own CSS");
+  ok(/<script src="engine\.js"><\/script>/.test(h) && /<script src="game\.js"><\/script>/.test(h), "its own engine and client");
+  [...h.matchAll(/<script src="([^"]+)"><\/script>/g)].map(m => m[1]).filter(f => /shared\//.test(f)).forEach(f => ok(/^\.\.\/shared\//.test(f), "shared from ../: " + f));
+  ok(/\.more\{ margin:22px 0 8px; \}/.test(src["style.css"]) && /\.more h2\{ margin:0 0 10px; font-size:var\(--fs-lg\); \}/.test(src["style.css"]), "the More section styled as on the other game pages");
+  ok(!/\.layout\{|\.side\b/.test(src["style.css"]), "the old side-column layout is gone");
+  ["engine.js", "game.js", "style.css"].forEach(f => ok(!fs.existsSync(path.join(root, f)), "no " + f + " left at the root"));
 });
-t("C1 alias: two/ sends the player to the root (meta refresh and a visible link, no script)", () => {
-  const a = fs.readFileSync(path.join(root, "two", "index.html"), "utf8");
-  ok(/<meta http-equiv="refresh" content="0; url=\.\.\/">/.test(a) && /<a href="\.\.\/">Go to Two<\/a>/.test(a), "refresh + link");
-  ok(/SPDX-License-Identifier: Apache-2\.0/.test(a) && /href="\.\.\/shared\/theme\.css"/.test(a) && !/<script/.test(a) && !/document\.write|\u2014/.test(a), "header, theme, no script");
+t("O-9: the root is the games page: top bar, Today, the heading and lede, the cards, the footer line; no game", () => {
+  const h = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  ok(/<title>Numberics<\/title>/.test(h), "title");
+  ok(/<div id="topbar" class="topbar" data-root=""><\/div>\s*<main id="app" class="home">\s*<section id="today" class="today"[^>]*><\/section>\s*<h1 id="more">Ten number games<\/h1>\s*<p class="lede">From the smallest number to the biggest\. Free, no ads, saved on this device\.<\/p>\s*<div id="games" class="cards" data-root=""[^>]*><\/div>\s*<p class="foot-note">Your scores and trophies stay on this device\. Nothing is sent anywhere\.<\/p>/.test(h), "top bar, Today, heading, lede, cards, footer line");
+  ok(!/data-current/.test(h), "no card is marked Playing");
+  ok(!/id="board"|id="tray"|id="score"|class="how"|data-howto|engine\.js|game\.js|power\.js|howto\.js|motion\.js/.test(h), "no board, stats, how-to or game scripts");
+  const css = fs.readFileSync(path.join(root, "home.css"), "utf8");
+  ok(/#app\.home\{ max-width:760px;/.test(css) && /#today\.today:empty\{ min-height:146px; \}/.test(css), "one column, Today keeps its height");
+  ok(!/\.cards\{|\.card\{|\.today\{/.test(css), "the cards and Today are the shared components as they are");
 });
 t("R5: the tray is the shared one (descriptions, aria-disabled, tap explains) and loads before game.js", () => {
   const h = src["index.html"];
@@ -462,6 +472,14 @@ t("every live game in games.json has mobile + desktop screenshots", () => {
     const f = path.join(root, "screenshots", g.id + "-" + v + ".png");
     ok(fs.existsSync(f) && fs.statSync(f).size > 10000, "missing or empty " + path.relative(root, f) + " (run npm run shots)");
   }));
+});
+t("O-9: the games page has mobile + desktop screenshots, embedded in the README", () => {
+  const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+  ["mobile", "desktop"].forEach(v => {
+    const f = path.join(root, "screenshots", "home-" + v + ".png");
+    ok(fs.existsSync(f) && fs.statSync(f).size > 10000, "missing or empty screenshots/home-" + v + ".png (run npm run shots)");
+    ok(readme.includes('src="screenshots/home-' + v + '.png"'), "README embeds home-" + v);
+  });
 });
 
 // ---- replay: the rule-set refactor must keep Endless byte-identical ----

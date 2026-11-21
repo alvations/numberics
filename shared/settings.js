@@ -259,7 +259,7 @@
       sw("sound", "Sound", "Soft clicks and chimes") +
       range("data-vol", "Volume") +
       sw("music", "Music", "Quiet tunes while you play") + range("data-mvol", "Music volume") +
-      '<div class="set" data-mstyle style="flex-direction:column;align-items:stretch"><div class="lbl"><b>Style</b></div>' +
+      '<div class="set" data-mstyle style="flex-direction:column;align-items:stretch"><div class="lbl"><b>Music style</b></div>' +
       '<div class="seg3" role="group" aria-label="Music style" style="grid-auto-flow:row;grid-template-columns:repeat(4,1fr)">' +
       [["auto", "Auto (per\u00a0game)", "Each game picks its own"]].concat(STY).map(function (o) {
         return '<button type="button" aria-pressed="false" data-seg="musicStyle" data-v="' + o[0] + '" title="' + o[2] + '" style="padding:0 4px">' + o[1] + "</button>";

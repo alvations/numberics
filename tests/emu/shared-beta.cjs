@@ -33,7 +33,7 @@ module.exports = async function ({ browser, ck, shot }) {
     const stableSame = async () => { const r = await raw(); return Object.keys(STABLE).filter(k => r[k] !== STABLE[k]); };
 
     const p = await ctx.newPage(); p.on("pageerror", e => errs.push(e.message));
-    await p.goto(beta);
+    await p.goto(beta + "two/"); // Two has its own page (O-9)
     ck("beta: the page does not see the stable settings (Theme Light, Larger text)", await p.evaluate(() => NumbericsSettings.get().theme === "auto" && document.documentElement.dataset.text === "normal"));
     ck("beta: the page does not see the stable save or trophies", await p.evaluate(() => localStorage.getItem("numberics_endless_v1") === null && !NumbericsTrophies.has("fam_first")));
     for (const k of ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"]) await p.keyboard.press(k);
@@ -63,7 +63,7 @@ module.exports = async function ({ browser, ck, shot }) {
     await st.reload();
     ck("stable: the page reads its own settings and save, never a beta key", await st.evaluate(() => NumbericsSettings.get().theme === "light" &&
       JSON.parse(localStorage.getItem("numberics_endless_v1")).stable === "two save" && !Storage.prototype.__nmBeta));
-    await shot(p, "beta-root");
+    await shot(p, "beta-two");
     ck("beta: no page errors", errs.length === 0, errs.join(" | "));
     await ctx.close();
   } finally { srv.close(); }

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * Headless-browser checks. Opt-in: `node tests/emulation.cjs` (skips if Playwright is absent).
+ * Headless-browser checks of Two (two/) and Sudoku. Opt-in: `node tests/emulation.cjs` (skips if Playwright is absent).
  * Optional env: SHOTS=<dir> writes screenshots. */
 "use strict";
 let chromium; try { ({ chromium } = require("playwright")); } catch (e) { console.log("skip: playwright not installed"); process.exit(0); }
@@ -17,6 +17,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
 (async () => {
   await new Promise(r => srv.listen(0, "127.0.0.1", r));
   const url = "http://127.0.0.1:" + srv.address().port + "/";
+  const two = url + "two/"; // Two has its own page (O-9); the root is the games page (tests/emu/root.cjs)
   const browser = await chromium.launch();
   // Two opens its How to play sheet by itself on a first visit (REDESIGN.md 1.3). These checks play a fresh page, so
   // every context starts with the how-to marked seen; section 8 checks the first visit itself on a raw context.
@@ -34,7 +35,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   // 1. plays, animates, persists
   let ctx = await b.newContext({ viewport: { width: 420, height: 800 }, deviceScaleFactor: 2 });
   let p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
-  await p.goto(url);
+  await p.goto(two);
   ck("two starting tiles", await p.locator(".tile").count() === 2);
   for (let i = 0; i < 12; i++) { await p.keyboard.press(["ArrowLeft","ArrowUp","ArrowRight","ArrowDown"][i % 4]); }
   await p.waitForTimeout(250);
@@ -84,7 +85,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   // 4b. Round 1 fixes: header (R6), tray explains itself (R5), keyboard aiming (R9), toasts (R7), end screen (R8)
   ctx = await b.newContext({ viewport: { width: 375, height: 812 }, deviceScaleFactor: 2 });
   p = await ctx.newPage(); const e5 = []; p.on("pageerror", x => e5.push(x.message));
-  await p.goto(url);
+  await p.goto(two);
   ck("H1 is Two on the home page (C1 rename)", (await p.textContent("h1")) === "Two");
   ck("the sub line says what Two is (C1)", (await p.textContent(".sub")) === "Every tile is a power of two. No top tile.");
   ck("tray buttons are never disabled; empty ones are aria-disabled", await p.evaluate(() => { const bs = [...document.querySelectorAll("#tray .pw")]; return bs.length === 4 && bs.every(x => !x.disabled) && bs.slice(1).every(x => x.getAttribute("aria-disabled") === "true"); }));
@@ -151,7 +152,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   // 4b2. Round 2 fixes (docs/reviews/TRIAGE2.md)
   ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 });
   p = await ctx.newPage(); const e7 = []; p.on("pageerror", x => e7.push(x.message));
-  await p.goto(url);
+  await p.goto(two);
   ck("R11: BEST says a dimmed none before any score", (await p.textContent("#best")) === "none" && await p.locator("#best.none").count() === 1);
   // a power-up tap right after a swipe is never lost (cold #1): press during the animation, release after it ends
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[3] = 1; s.grid[7] = 2; s.top = 2; s.moves = 3;
@@ -185,7 +186,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.focus("#games a[href*='sudoku']");
   await Promise.all([p.waitForURL(/sudoku/, { timeout: 5000 }).catch(() => null), p.keyboard.press("Enter")]);
   ck("R17: Enter on a focused games-row link navigates", /sudoku/.test(p.url()), p.url());
-  await p.goto(url);
+  await p.goto(two);
   ck("R17: ...and no move was made on the way out", await p.evaluate(m => window.__numberics.state.moves === m, mv));
   ck("no page errors in round 2 checks", e7.length === 0, e7.join("|"));
   await ctx.close();
@@ -193,7 +194,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   // 4b3. Round 3 fixes (docs/reviews/TRIAGE3.md)
   ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
   p = await ctx.newPage(); const e8 = []; p.on("pageerror", x => e8.push(x.message));
-  await p.goto(url);
+  await p.goto(two);
   // cold #5: a tap on a power-up within 50 ms of the swipe that earned it arms it on the first tap
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = new Array(16).fill(0); s.grid[8] = 5; s.grid[9] = 5; s.grid[15] = 1; s.top = 5;
     s.power = { undo: 9, smash: 9, swap: 0, boost: 9 }; s.prev = null; s.free = false; s.marks = new Array(16).fill(0); s.over = false; window.__numberics.state = s; });
@@ -252,7 +253,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   // a run that loads already over shows the card at once (no hold on reload)
   ctx = await b.newContext({ viewport: { width: 375, height: 812 } }); p = await ctx.newPage();
   await p.addInitScript(() => { try { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 10, state: { size: 4, grid: [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3], power: { undo: 0, smash: 0, swap: 0, boost: 0 }, score: 5, top: 4, moves: 30, seed: 1, over: true, prev: null } })); } catch (e) {} });
-  await p.goto(url);
+  await p.goto(two);
   ck("a saved finished run shows its card at once", await p.isVisible("#over"));
   // 375px: a targeting state, for the eye
   await p.evaluate(() => window.__demo()); await p.keyboard.press("2"); await shot(p, "r3-aim-375");
@@ -260,7 +261,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
 
   // 4c. a phone (no hover): no "Esc", and 320px does not scroll sideways
   ctx = await b.newContext({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
-  p = await ctx.newPage(); await p.goto(url);
+  p = await ctx.newPage(); await p.goto(two);
   await p.evaluate(() => { const s = window.__numberics.state; s.power = { undo: 9, smash: 9, swap: 9, boost: 9 }; window.__numberics.state = s; });
   ck("tray fits at 320px (no horizontal scroll)", await p.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   await p.tap("#tray .pw:nth-child(2)");
@@ -273,7 +274,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ctx = await b.newContext({ viewport: { width: 420, height: 800 } });
   p = await ctx.newPage(); const e6 = []; p.on("pageerror", x => e6.push(x.message));
   await p.addInitScript(() => { try { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 10, state: { size: 4, grid: new Array(16).fill(1), power: { undo: 1, smash: 0, swap: 0, boost: 0 }, score: 5, top: 1, moves: 3, seed: 1, over: false, prev: { grid: 7 } } })); } catch (e) {} });
-  await p.goto(url);
+  await p.goto(two);
   ck("malformed prev is rejected: fresh game", e6.length === 0 && await p.evaluate(() => window.__numberics.state.moves === 0 && window.__numberics.state.prev === null), e6.join("|"));
   await ctx.close();
 
@@ -281,13 +282,13 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ctx = await b.newContext({ viewport: { width: 420, height: 800 } });
   p = await ctx.newPage(); const e2 = []; p.on("pageerror", e => e2.push(e.message));
   await p.addInitScript(() => { Object.defineProperty(window, "localStorage", { get() { throw new Error("blocked"); } }); });
-  await p.goto(url); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowDown");
+  await p.goto(two); await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowDown");
   ck("runs with storage blocked", e2.length === 0 && await p.locator(".tile").count() >= 2, e2.join("|"));
   await ctx.close();
 
   // 6. reduced motion: no animation delay, still fully playable
   ctx = await b.newContext({ viewport: { width: 420, height: 800 }, reducedMotion: "reduce" });
-  p = await ctx.newPage(); await p.goto(url);
+  p = await ctx.newPage(); await p.goto(two);
   const before = await p.evaluate(() => window.__numberics.state.moves);
   await p.keyboard.press("ArrowLeft"); await p.keyboard.press("ArrowUp"); await p.keyboard.press("ArrowRight");
   const after = await p.evaluate(() => window.__numberics.state.moves);
@@ -335,7 +336,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   const tx = (p, sel) => p.evaluate(q => { const n = document.querySelector(q); return n ? new DOMMatrix(getComputedStyle(n).transform).m41 : null; }, sel);
   ctx = await browser.newContext({ viewport: { width: 420, height: 800 } }); await ctx.addInitScript(HOW);
   p = await ctx.newPage(); const e9 = []; p.on("pageerror", x => e9.push(x.message));
-  await p.goto(url);
+  await p.goto(two);
   // a lone tile slides: the same element moves from its old cell to its new one, part way at 50 ms (no blip)
   await forge(p, [0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   const id0 = await p.evaluate(() => window.__numberics.ids[3]);
@@ -393,7 +394,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   const slid = async (o, setting) => {
     const c = await browser.newContext(Object.assign({ viewport: { width: 420, height: 800 } }, o)); await c.addInitScript(HOW);
     if (setting) await c.addInitScript(m => { try { localStorage.setItem("numberics_settings_v1", JSON.stringify({ v: 1, motion: m })); } catch (e) { /* none */ } }, setting);
-    const q = await c.newPage(); await q.goto(url);
+    const q = await c.newPage(); await q.goto(two);
     await forge(q, [0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     const i = await q.evaluate(() => window.__numberics.ids[3]);
     await q.keyboard.press("ArrowLeft"); await q.waitForTimeout(40);
@@ -407,7 +408,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   rm = await slid({ reducedMotion: "reduce" }, "full");
   ck("D-Two: the setting Full beats the OS: the tile slides", !rm.red && rm.x > 2, JSON.stringify(rm));
   // the setting is read at each move, not cached at load
-  ctx = await browser.newContext({ viewport: { width: 420, height: 800 } }); await ctx.addInitScript(HOW); p = await ctx.newPage(); await p.goto(url);
+  ctx = await browser.newContext({ viewport: { width: 420, height: 800 } }); await ctx.addInitScript(HOW); p = await ctx.newPage(); await p.goto(two);
   await p.evaluate(() => window.NumbericsSettings.set({ motion: "reduced" }));
   await forge(p, [0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
   await p.keyboard.press("ArrowLeft");
@@ -416,7 +417,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
 
   // trophies on a scripted line (REDESIGN.md 8.4), with the end-card pill and the music duck
   ctx = await browser.newContext({ viewport: { width: 420, height: 800 } }); await ctx.addInitScript(HOW);
-  p = await ctx.newPage(); const e10 = []; p.on("pageerror", x => e10.push(x.message)); await p.goto(url);
+  p = await ctx.newPage(); const e10 = []; p.on("pageerror", x => e10.push(x.message)); await p.goto(two);
   const has = (id) => p.evaluate(i => window.NumbericsTrophies.has(i), id);
   const move = async (grid, extra, key) => { await forge(p, grid, extra); await p.keyboard.press(key || "ArrowLeft"); await p.waitForTimeout(30); };
   await move([6, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { top: 6 });
@@ -460,7 +461,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await ctx.close();
 
   // first visit: the How to play sheet opens by itself, once; a returning Two player never sees it unasked
-  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); p = await ctx.newPage(); await p.goto(url);
+  ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); p = await ctx.newPage(); await p.goto(two);
   ck("first visit: How to play opens by itself with three steps", await p.isVisible("#sh-howto") && await p.locator("#sh-howto .step").count() === 3);
   ck("its steps read as the spec", (await p.textContent("#sh-howto .howto")).includes("Make a new biggest tile from 32 up to earn a power-up. There is no top tile."));
   await shot(p, "d-two-howto");
@@ -480,13 +481,13 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await ctx.close();
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   await ctx.addInitScript(() => { try { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 10, state: null })); } catch (e) { /* none */ } });
-  p = await ctx.newPage(); await p.goto(url);
+  p = await ctx.newPage(); await p.goto(two);
   ck("a player with a Two save never gets the sheet unasked", !(await p.isVisible("#sh-howto")));
   await ctx.close();
 
   // budgets (REDESIGN.md 10): a scripted 60-move session, a key every 45 ms, frames and tile nodes sampled each frame
   ctx = await browser.newContext({ viewport: { width: 1100, height: 800 } }); await ctx.addInitScript(HOW);
-  p = await ctx.newPage(); const e11 = []; p.on("pageerror", x => e11.push(x.message)); await p.goto(url);
+  p = await ctx.newPage(); const e11 = []; p.on("pageerror", x => e11.push(x.message)); await p.goto(two);
   const session = () => p.evaluate(() => new Promise(res => {
     const F = [], H = [], over = [], tl = document.getElementById("tiles"); let prev = 0, k = 0, done = false;
     const tick = (t) => { if (prev) F.push(t - prev); prev = t;
@@ -529,7 +530,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
 
   // 9. TRIAGE4 (craft #3, #12, #18; Family end card): the open hint, the "+N" above the SCORE label, the board's focus ring
   ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }); await ctx.addInitScript(HOW);
-  p = await ctx.newPage(); const e12 = []; p.on("pageerror", x => e12.push(x.message)); await p.goto(url);
+  p = await ctx.newPage(); const e12 = []; p.on("pageerror", x => e12.push(x.message)); await p.goto(two);
   ck("R4: the hint row is not blank on open: it says how to play", (await p.textContent("#hint")) === "Swipe or use the arrow keys.", await p.textContent("#hint"));
   await forge(p, [3, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], { score: 0 });
   await p.keyboard.press("ArrowLeft");
@@ -560,7 +561,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
 
   // 7. desktop shot + swipe
   ctx = await b.newContext({ viewport: { width: 1100, height: 800 }, deviceScaleFactor: 1 });
-  p = await ctx.newPage(); await p.goto(url); await shot(p, "desktop");
+  p = await ctx.newPage(); await p.goto(two); await shot(p, "desktop");
   await ctx.close(); await browser.close(); srv.close();
   console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);
 })().catch(e => { console.log("ERR", e); srv.close(); process.exit(1); });

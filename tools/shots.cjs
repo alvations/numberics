@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
- * Screenshots of every live game in games.json -> screenshots/<id>-{mobile,desktop}.png
- * Run: NODE_PATH=$(npm root -g) node tools/shots.cjs [id ...]   (npm run shots)
+ * Screenshots of every live game in games.json -> screenshots/<id>-{mobile,desktop}.png, and of the games page at the
+ * root (O-9) -> screenshots/home-{mobile,desktop}.png (the whole page, fresh storage)
+ * Run: NODE_PATH=$(npm root -g) node tools/shots.cjs [id ...]   (npm run shots; the games page's id is "home")
  * With ids, shoots exactly those games whatever their status (use it while building a planned game).
  * A game opts into a representative state by defining window.__demo(); otherwise its fresh page is shot. */
 "use strict";
@@ -22,7 +23,8 @@ const VIEWS = [
   fs.mkdirSync(out, { recursive: true });
   await new Promise(r => srv.listen(0, "127.0.0.1", r));
   const port = srv.address().port, ids = process.argv.slice(2);
-  const games = JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")).filter(g => ids.length ? ids.includes(g.id) : g.status === "live");
+  const games = [{ id: "home", path: "", home: true }].concat(JSON.parse(fs.readFileSync(path.join(root, "games.json"), "utf8")))
+    .filter(g => ids.length ? ids.includes(g.id) : g.home || g.status === "live");
   const b = await chromium.launch();
   let bad = 0;
   for (const g of games) for (const v of VIEWS) {
@@ -32,7 +34,7 @@ const VIEWS = [
     await p.evaluate(() => { if (typeof window.__demo === "function") window.__demo(); });
     await p.waitForTimeout(400);
     const file = path.join(out, g.id + "-" + v.tag + ".png");
-    await p.screenshot({ path: file });
+    await p.screenshot({ path: file, fullPage: !!g.home });
     if (errs.length) { bad++; console.log("ERR", g.id, errs.join("|")); }
     console.log("wrote", path.relative(root, file));
     await ctx.close();

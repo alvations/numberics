@@ -20,6 +20,7 @@ sound and vibration on by default (silent until the first tap, volume 50%); firs
 and Fifteen on Easy (saved choices kept); the new Daily Sudoku ramps Easy Mon-Thu, Medium Fri-Sat, Hard Sun.
 | O-8 | 20 Nov 2026 | Background music (BGM) and SFX like melon-eight (procedural Web Audio), with selectable BGM styles: chill, epic, EDM, and styles evoking classic falling-block, monster-collecting and adventure games; decided with the panel, a music director and a producer. All music original (no copied melodies or names of other games in the product). | In progress |
 | O-9 | 21 Nov 2026 | "The landing page is weird, we should just have the games and then Two has it's own page like the rest fix that on the beta." The root becomes the games list only (the side panel's Today card and game cards, nothing else); Two moves to `two/` with its own page like every other game. Beta first. Supersedes O-7's "the root opens Two". | In progress |
+| O-10 | 21 Nov 2026 | "Check that the BGM and SFX is working properly also the 'Style' in settings is ambiguous call it 'Music Style'." Settings label renamed to "Music style" (sentence case like its neighbour "Music volume"); BGM and SFX verified in a real browser on every game. | In progress |
 
 Decisions from review round 4 (docs/reviews/TRIAGE4.md), each reversible by the owner: music stays ON at first visit
 (panel vote 4-1) with a one-tap mute in the top bar; the default theme follows the device; trophies show not-yet-earned

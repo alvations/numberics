@@ -3,7 +3,7 @@
  * the sound rule under fast play (sfx, buzz, seq().sound, together: TRIAGE4 D7), reduced (Settings tri-state, then the device). The keyed layer itself is proven in a browser: tests/emu/shared-motion.cjs.
  * `node tests/test-motion.js` */
 "use strict";
-const M = require("../shared/motion.js"), N = require("../engine.js"), F = require("../fibonacci/engine.js");
+const M = require("../shared/motion.js"), N = require("../two/engine.js"), F = require("../fibonacci/engine.js");
 let pass = 0, fail = 0;
 const later = [];
 function t(n, f) { try { const r = f(); if (r && r.then) later.push(r.then(() => pass++, e => { fail++; console.log("FAIL", n, "\n  ", e.message); })); else pass++; } catch (e) { fail++; console.log("FAIL", n, "\n  ", e.message); } }
@@ -172,7 +172,7 @@ t("D7 together(): one dedup group across a finish and a final step; nested group
 });
 t("D7 every game uses the one rule: shared calls, no hush flags, no dropped sounds on input", () => {
   const fs = require("fs"), path = require("path"), root = path.join(__dirname, "..");
-  const games = ["game.js"].concat(["fibonacci", "three", "four", "five", "six", "seven", "nine", "fifteen", "sudoku"].map(g => g + "/game.js"));
+  const games = ["two/game.js"].concat(["fibonacci", "three", "four", "five", "six", "seven", "nine", "fifteen", "sudoku"].map(g => g + "/game.js"));
   games.forEach(f => {
     const g = fs.readFileSync(path.join(root, f), "utf8");
     ok(/M\.sfx/.test(g), f + " plays through M.sfx");

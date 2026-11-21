@@ -175,6 +175,11 @@ Sudoku keeps its own look) but **both copy the token block of 2.1 verbatim** at 
 ## 3. The root page and the shared chrome
 
 ### 3.1 Root = Two (O-7)
+**Superseded by O-9 (21 Nov, beta first):** the root is the games page (the top bar, the Today card, the "Ten number
+games" heading and lede, the cards, the foot line; nothing marked Playing), and Two has its own page at `two/`
+(`two/index.html`, `game.js`, `style.css`, `engine.js`) like every other game, with "More number games" under the board.
+The save key and everything else below stay as they were. The text below records the C1 layout.
+
 `/` stays Two, playable on load exactly as today (same files: `index.html`, `game.js`, `style.css`, `engine.js`), with:
 1. The **top bar** (3.2) above the header.
 2. The game: header (h1 "Two", sub "Every tile is a power of two. No top tile."), stats, tray, hint, board, New game,
@@ -196,7 +201,7 @@ compact list of cards at the bottom of the page (the same component, 2 columns o
 ### 3.2 Top bar (every page, `shared/ui.js` builds it into `<div id="topbar"></div>`)
 Height 52 px, `max-width:1100px` centred. Left: the family mark (a 2x2 of tiles: gold, hsl(159 66% 62%), hsl(202 66% 62%),
 hsl(330 66% 62%), 26 px) and "Numberics" (`--fs-sm`, weight 700, `--mute`), a link to the root (`href` from
-`data-root`), `aria-label="Numberics home, play Two"`. Right: four 44 px icon buttons with 1px `--line` border:
+`data-root`), `aria-label="Numberics home"` (the games page, O-9). Right: four 44 px icon buttons with 1px `--line` border:
 - **Games** (2x2 squares glyph + the word "Games"): opens the Games sheet.
 - **Sound** (speaker glyph, TRIAGE4 D2): one tap mutes Sound and Music together and the next tap brings back what was on
   (`NumbericsSettings.toggleMute`, remembered); pressed and struck through while muted.
@@ -957,7 +962,8 @@ order evaluation (4.4) is reported with evidence; triage follows the existing ro
 - Sound and haptics default on (silent until a gesture); volume 50%.
 - Erase keeps settings.
 - Sudoku Daily difficulty rises through the week (Easy Mon to Thu, Medium Fri and Sat, Hard Sun).
-- The root keeps Two's files where they are; `two/` is a redirect alias, not a move.
+- The root keeps Two's files where they are; `two/` is a redirect alias, not a move. (Superseded by O-9: Two's files
+  moved to `two/`, and the root is the games page.)
 - The storage key `numberics_endless_v1` and the replay fixture name are permanent.
 - The merged pop starts at scale .72, not 0 (5.2).
 - Trophy descriptions of secrets are shown after earning.

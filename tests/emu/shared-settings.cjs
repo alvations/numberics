@@ -245,7 +245,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
 
   // 6. every page: the Settings button opens the sheet and a change applies live there
   ctx = await newCtx({ viewport: { width: 1280, height: 860 } });
-  for (const g of games) {
+  for (const g of [{ id: "home", path: "" }].concat(games)) { // the games page (O-9), then every game
     p = await ctx.newPage(); const e5 = []; p.on("pageerror", e => e5.push(e.message));
     await p.goto(url + g.path);
     await p.evaluate(() => { try { localStorage.removeItem("numberics_settings_v1"); } catch (e) { /* none */ } });
@@ -258,7 +258,7 @@ module.exports = async function ({ browser, url, ck, shot }) {
     ck(g.id + ": the sheet sits on screen over the page", await p.evaluate(() => {
       const s = document.querySelector("#sh-settings"), r = s.querySelector(".sheet").getBoundingClientRect();
       return getComputedStyle(s).position === "fixed" && r.top >= 0 && r.bottom <= innerHeight + 1; }));
-    if (!g.path) await shot(p, "root-desktop");
+    if (!g.path) await shot(p, "home-desktop");
     await p.keyboard.press("Escape");
     ck(g.id + ": Esc closes it, no page errors", !(await p.isVisible("#sh-settings")) && e5.length === 0, e5.join(" | "));
     await p.evaluate(() => { try { localStorage.removeItem("numberics_settings_v1"); } catch (e) { /* none */ } });

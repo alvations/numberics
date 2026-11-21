@@ -4,24 +4,25 @@ Read this first. It is the standing memory for the repo (the single highest-leve
 sister project melon-eight): stack, core rules, and "keep it this way" notes beside load-bearing decisions.
 
 ## What this is
-**Numberics** is a collection of ten number games, listed in `games.json` order (O-7): **Fibonacci**, **Two** (2048 with no ceiling, at the repo root; renamed from Endless because every tile is a power of two), **Three**, **Four**, **Five**, **Six**, **Seven**, **Nine**, **Fifteen** and **Sudoku** (each other game in its own folder; `two/` is only an alias page). Browser game, static, no build step,
+**Numberics** is a collection of ten number games, listed in `games.json` order (O-7): **Fibonacci**, **Two** (2048 with no ceiling; renamed from Endless because every tile is a power of two), **Three**, **Four**, **Five**, **Six**, **Seven**, **Nine**, **Fifteen** and **Sudoku**, each in its own folder (Two in `two/`). The repo root is the games page (O-9): the top bar, Today and a card for every game, no game of its own. Browser game, static, no build step,
 no framework, no backend, no tracking. Playable by opening `index.html` or `npm start` (port 8070).
 
 ## Layout
 ```
-<id>/              every other game: engine.js (pure, seeded), game.js, index.html, style.css (docs/NEW-GAME.md)
+<id>/              every game: engine.js (pure, seeded), game.js, index.html, style.css (docs/NEW-GAME.md)
 shared/            theme.css (the family look), boot.js (theme before paint), kit.js (store, toast), settings.js (Settings,
                    Memory), ui.js (top bar, sheets), howto.js, motion.js, audio.js, music.js, trophies.js, progress.js,
                    power.js (one power-up system), nav.js (games list, cards, Today card, Games sheet)
-engine.js          pure rules (UMD: browser global `Numberics` AND `require`). No DOM/storage/clock.
-game.js            browser client: draw, input, persistence. Never re-implements a rule.
-style.css          theme tokens, layout, reduced motion
-index.html         page shell
+two/               Two: engine.js (pure rules, UMD: browser global `Numberics` AND `require`; no DOM/storage/clock; also
+                   the slide-and-merge core under fibonacci/engine.js), game.js (draw, input, persistence; never re-implements
+                   a rule), style.css (its own copy of the theme tokens, layout, reduced motion), index.html
+index.html         the games page (O-9): top bar, Today, the game cards, the foot line; loads only kit, settings, audio,
+                   trophies, progress, nav, ui; home.css lays it out over shared/theme.css. No card is marked Playing
 tests/test*.js     engine + convention tests per game        (npm test runs them all via tests/run.js)
 tests/emulation.cjs Two + Sudoku browser checks; tests/emu/<id>.cjs per game (npm run test:browser)
 docs/reviews/      the QA/QC review panel (PERSONAS.md) and each round's reviews + triage
 games.json         registry of every game (id, name, path, status: live | planned)
-tools/shots.cjs    screenshots of every live game -> screenshots/<id>-{mobile,desktop}.png
+tools/shots.cjs    screenshots of every live game -> screenshots/<id>-{mobile,desktop}.png, and the games page -> home-*.png
 docs/DESIGN.md     design principles register + how the power-ups are tuned
 ```
 

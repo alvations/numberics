@@ -1,8 +1,9 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * NumbericsNav (docs/design/REDESIGN.md 3.3, 3.4): the games list, in games.json order (O-7), everywhere it shows.
  *   - <nav id="games" class="games" data-root="../" data-current="seven"> : the quiet text row (every game page)
- *   - <div id="games" class="cards" data-root="" data-current="two">       : the game cards (the root page)
- *   - <section id="today" class="today">                                    : the Today card (the root page)
+ *   - <div id="games" class="cards" data-root="../" data-current="two">    : the game cards (every game page; the games
+ *                                                                            page at the root has no data-current)
+ *   - <section id="today" class="today">                                    : the Today card (the games page, the root)
  *   - NumbericsNav.openSheet() : the Games sheet (the top bar's Games button, shared/ui.js): Today, then every card
  *   - NumbericsNav.cards(el, {root, current}) and .today(el, {root}) draw into any element
  * Cards read NumbericsProgress (best, a live run, played) at draw time; nothing is sent anywhere.
@@ -12,7 +13,7 @@
   "use strict";
   var LIVE = [
     ["fibonacci", "Fibonacci", "fibonacci/", "Join neighbours in the Fibonacci run."],
-    ["two", "Two", "", "2048 with no top tile."],
+    ["two", "Two", "two/", "2048 with no top tile."],
     ["three", "Three", "three/", "Count in threes, make rainbow rows."],
     ["four", "Four", "four/", "Four in a row, or four that make ten.", 1],
     ["five", "Five", "five/", "Add tile onto tile; at five it bursts.", 1],

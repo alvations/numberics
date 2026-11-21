@@ -151,13 +151,13 @@ module.exports = async function ({ browser, url, ck }) {
   await L.c.close();
 
   // the live pages: no music request on load; after a tap, music.js and one context
-  for (const path of ["", "four/"]) {
+  for (const path of ["two/", "four/"]) {
     L = await lazy();
     await L.pg.goto(url + path); await L.pg.waitForTimeout(300);
     const before = L.reqs.length;
     await L.pg.mouse.click(5, 300); await L.pg.waitForFunction(() => !NumbericsMusic.stub, null, { timeout: 3000 }).catch(() => {}); await L.pg.waitForTimeout(600);
     s = await L.pg.evaluate(() => NumbericsMusic.state && NumbericsMusic.state());
-    const want = await L.pg.evaluate(id => NumbericsMusic.forGame(id), path ? "four" : "two");
+    const want = await L.pg.evaluate(id => NumbericsMusic.forGame(id), path === "four/" ? "four" : "two");
     ck("live /" + path + ": no music request before a gesture; music.js after the first tap, playing " + want + " on one context",
       before === 0 && L.reqs.length === 1 && s && s.playing && s.style === want && s.shared && await L.pg.evaluate(() => window.__ac) === 1, before + " " + JSON.stringify(s));
     ck("live /" + path + ": no page errors", L.errs.length === 0, L.errs.join(" | "));

@@ -7,7 +7,7 @@
 module.exports = async function ({ browser, url, ck, shot }) {
   const SEEN = JSON.stringify({ v: 1, games: {}, howto: { two: true, fibonacci: true, three: true }, daily: {} });
   const GAMES = [
-    { id: "two", path: "", api: "__numberics", grid: [1, 0, 0, 1], slide: 110 },
+    { id: "two", path: "two/", api: "__numberics", grid: [1, 0, 0, 1], slide: 110 },
     { id: "fibonacci", path: "fibonacci/", api: "__fibonacci", grid: [2, 0, 0, 3], slide: 110 },
     { id: "three", path: "three/", api: "__three", grid: [1, 2, 0, 0], slide: 100 }
   ];

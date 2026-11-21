@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
+ * The games page (index.html, O-9). It links shared/theme.css first, so the top bar, the Today card and the game
+ * cards are the shared components as they are; this file only lays them out as the page's one column. The heading
+ * and lede keep the look they had beside Two's board (the old root's .side rules). */
+#app.home{ max-width:760px; padding-top:6px; }
+.home h1{ margin:0 0 4px; font-size:var(--fs-lg); line-height:inherit; letter-spacing:normal; color:var(--ink); font-weight:700; }
+.home .lede{ margin:0 0 14px; color:var(--mute); font-size:var(--fs-sm); }
+/* nav.js draws Today after the first paint: the empty card keeps its drawn height until then, so the heading and the
+   cards below it never jump on load (integration: desktop load CLS 0.057 > 0.05) */
+#today.today:empty{ min-height:146px; }

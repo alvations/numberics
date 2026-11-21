@@ -7,7 +7,7 @@
 module.exports = async function ({ browser, url, ck }) {
   const SEEN = JSON.stringify({ v: 1, games: {}, howto: { two: true, fibonacci: true }, daily: {} });
   const GAMES = [
-    { id: "two", path: "", api: "__numberics", eng: "Numberics", slide: 110 },
+    { id: "two", path: "two/", api: "__numberics", eng: "Numberics", slide: 110 },
     { id: "fibonacci", path: "fibonacci/", api: "__fibonacci", eng: "NumbericsFibonacci", slide: 110 }
   ];
   const KEYS = ["ArrowLeft", "ArrowDown", "ArrowRight", "ArrowDown"];

@@ -1,6 +1,6 @@
 # Adding a game to Numberics
 
-Every game follows the same contract, so it looks and plays like Two (the root game). Read `CLAUDE.md` and
+Every game follows the same contract, so it looks and plays like Two (`two/`). Read `CLAUDE.md` and
 `docs/ROADMAP.md` (your game's section and section 0a, power-ups) first.
 
 ## Files (all in `<id>/`, except the tests)

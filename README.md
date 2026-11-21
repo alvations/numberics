@@ -2,8 +2,8 @@
 
 **Play: https://alvations.github.io/numberics/**
 
-Ten number games, no build step, no tracking. Open `index.html` to play **Two**; the **Games** button (and the cards
-beside the board) lead to the other nine.
+Ten number games, no build step, no tracking. Open `index.html` for the games page: Today's three dailies and a card
+for every game. Each game has its own page (Two is `two/`), and the **Games** button in the top bar leads to the rest.
 
 **Two** is 2048 with the ceiling removed. Every tile is a power of two: join them past 2048 and keep going; there is no
 winning tile, only how far you get before the board locks. (Two was called Endless; saved games carry over.)
@@ -16,7 +16,7 @@ Every new highest tile from 32 up earns a **power-up**: **Undo**, **Smash** (del
 From the smallest number to the biggest:
 
 - **Fibonacci** (`/fibonacci/`): 2584 with no ceiling: merge neighbours in the Fibonacci sequence.
-- **Two** (`/`, also `/two/`): 2048 with no top tile, plus earned power-ups.
+- **Two** (`/two/`): 2048 with no top tile, plus earned power-ups.
 - **Three** (`/three/`): Count in threes: step merges and rainbow Flush runs.
 - **Four** (`/four/`): Four in a row, or any four that sum to ten.
 - **Five** (`/five/`): Add one tile onto another; at five it bursts. Beat the computer.
@@ -29,6 +29,12 @@ From the smallest number to the biggest:
 Every game shares one look, one power-up system (earned by play, never bought) and plays on phone and desktop.
 
 ## Screenshots
+
+The games page (the root):
+
+| **Phone** | **Desktop** |
+|---|---|
+| <img src="screenshots/home-mobile.png" width="260" alt="The games page on a phone"> | <img src="screenshots/home-desktop.png" width="520" alt="The games page on a desktop"> |
 
 | **Fibonacci** | **Two** |
 |---|---|
@@ -57,7 +63,7 @@ Classic 9x9 with three difficulties, pencil notes, undo, hints and red conflict 
 generated from a seed and has exactly one solution. Keys: `1`-`9`, `Backspace`, `N` notes, `U` undo, `H` hint, arrows.
 
 ## Play
-Open `index.html`, or `npm start` and visit http://localhost:8070.
+Open `index.html` and pick a game, or `npm start` and visit http://localhost:8070.
 Arrow keys / WASD / swipe to slide. `1`-`4` or tap a power-up, then tap a target. `Esc` cancels.
 
 ## Develop
