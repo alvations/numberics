@@ -265,4 +265,15 @@ t("trophies.js and progress.js make no network calls and never touch localStorag
   ok(!/fetch\(|XMLHttpRequest|sendBeacon|WebSocket|navigator\.send|https?:\/\//.test(s), f + " network");
   ok(!/localStorage/.test(s), f + " storage goes through NumbericsKit.store");
 }));
+t("a Daily Six line solve does not finish the Daily (only its end does); a Sudoku Daily solve does", () => {
+  const { execFileSync } = require("child_process");
+  const out = execFileSync(process.execPath, ["-e", `
+    const store = {}; global.localStorage = { getItem: k => store[k] || null, setItem: (k, v) => { store[k] = v; }, removeItem: k => { delete store[k]; } };
+    const T = require(${JSON.stringify(require("path").join(__dirname, "../shared/trophies.js"))});
+    const a = T.report("six", "solve", { mode: "daily", tier: 1, helped: false }, { quiet: true }).includes("fam_daily");
+    const b = T.report("six", "end", { mode: "daily", solved: 6, daily: true }, { quiet: true }).includes("fam_daily");
+    console.log(JSON.stringify([a, b]));`], { encoding: "utf8" });
+  const [a, b] = JSON.parse(out.trim().split("\n").pop());
+  ok(a === false, "a Six line solve must not earn the Daily"); ok(b === true, "the Six Daily end earns it");
+});
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

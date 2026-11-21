@@ -482,5 +482,35 @@ t("valid() rejects broken saves", () => {
   const b = F.newMatch(1, "easy"); b.diff = "nightmare"; ok(!F.valid(b));
 });
 
+// D-Fifteen (docs/design/REDESIGN.md 5.8, 5.13, 8.4, 9.9): static checks on the client
+{
+  const fs = require("fs"), path = require("path"), rd = (f) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+  const css = rd("fifteen/style.css"), js = rd("fifteen/game.js"), html = rd("fifteen/index.html");
+  t("motion: no transition or keyframes animate width, height, top, left, margin or padding (10.3)", () => {
+    (css.match(/transition:[^;}]*/g) || []).forEach((d) => ok(!/\b(width|height|top|left|margin|padding)\b/.test(d), d));
+    (css.match(/@keyframes[^{]*\{([^{}]*\{[^}]*\})*\s*\}/g) || []).forEach((k) => ok(!/(^|[{;\s])(width|height|top|left|margin|padding)\s*:/.test(k.replace(/@keyframes[^{]*\{/, "")), k));
+  });
+  t("motion: the claim is a clip-path circle from the centre; the view switch a translate + scale FLIP", () => {
+    ok(/@keyframes ft-claim\{ from\{ clip-path:circle\(0% at 50% 50%\)/.test(css)); ok(/circle\(75% at 50% 50%\)/.test(css));
+    ok(/translate: tx \+ "px " \+ ty \+ "px", scale: sx \+ " " \+ sy/.test(js)); ok(/FLIP_MS = 380/.test(js));
+    ok(/:root\[data-motion="reduced"\] \.ft\.claiming::after/.test(css), "reduced motion keyed on the in-app setting");
+    ok(!/prefers-reduced-motion/.test(css), "html[data-motion] drives it, not the media query");
+  });
+  t("trophies: the three events of 8.4, with real booleans", () => {
+    ok(/trophy\("claim", \{ forks: F\.threats\(state\.owner, 1\)\.length \}\)/.test(js));
+    ok(/trophy\("round", \{ won: res\.winner === 1, view: view, firstMid: run\.first === 5 \}/.test(js));
+    ok(/trophy\("match", \{ won: state\.match\.winner === 1, diff: state\.diff \}/.test(js));
+    ok(/<div id="pills" class="tro-pills" hidden><\/div>/.test(html));
+  });
+  t("first visit on Easy; how-to row and sheet; cards list", () => {
+    ok(/: "easy";/.test(js) && !/newMatch\(K\.freshSeed\(\), "medium"\)/.test(js));
+    ok(/<details id="how" class="how"><summary>How to play<\/summary>/.test(html));
+    ["Pick a number from 1 to 9.", "The computer picks too.", "Hold three numbers that add up to fifteen to win."].forEach((s) => ok(js.indexOf(s) >= 0, s));
+    ok(/seenHowto\(ID\)/.test(js) && /markHowto\(ID\)/.test(js));
+    ok(/<div id="games" class="cards" data-root="\.\.\/" data-current="fifteen"/.test(html));
+    ok(/NumbericsMusic\.duck\(on\)/.test(js) && /PR\.put\(ID,/.test(js));
+  });
+}
+
 require("./conventions")(t, ok, ["fifteen/engine.js", "fifteen/game.js", "fifteen/index.html", "fifteen/style.css"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

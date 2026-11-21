@@ -101,7 +101,12 @@
   }
   function run(d) { return d && d.run && typeof d.run === "object" ? d.run : {}; }
   function num(v) { return typeof v === "number" && isFinite(v) ? v : NaN; }
-  function isDaily(event, d) { return (event === "end" || event === "solve") && !!d && (d.daily === true || d.mode === "daily"); }
+  // A Daily is finished by "end" in every game; "solve" finishes one only where a solve ends the puzzle (Sudoku).
+  // Six sends "solve" per line, so a Six solve never counts as finishing its Daily (D-Six report, 21 Nov).
+  function isDaily(event, d, game) {
+    if (!d || !(d.daily === true || d.mode === "daily")) return false;
+    return event === "end" || (event === "solve" && game !== "six");
+  }
 
   // ---- the registry (REDESIGN.md 8.4). on: the events that test it ("*" any); test(data, ctx) ----
   var REG = [];
@@ -113,7 +118,7 @@
   T("fam_first", "fam", "Hello, numbers", "Finish your first game.", "star", 0, ["end", "round", "solve"], function () { return true; });
   T("fam_five", "fam", "High five", "Play five different games.", "hands", 0, ANY, function (d, x) { return Object.keys(x.fam.played).length >= 5; });
   T("fam_all", "fam", "The whole set", "Play all ten games.", "grid", 0, ANY, function (d, x) { return GAMES.every(function (g) { return !!x.fam.played[g]; }); });
-  T("fam_daily", "fam", "Same for everyone", "Finish a Daily.", "cal", 0, ["end", "solve"], function (d, x, e) { return isDaily(e, d); });
+  T("fam_daily", "fam", "Same for everyone", "Finish a Daily.", "cal", 0, ["end", "solve"], function (d, x, e) { return isDaily(e, d, x.game); });
   T("fam_week", "fam", "A week of dailies", "Finish a Daily seven days in a row.", "flame", 0, ["end", "solve"], function (d, x) { return x.fam.streak.n >= 7; });
   T("fam_night", "fam", "Night owl", "Played well past bedtime.", "moon", 1, ANY, function (d, x) { return x.hour < 4; });
   T("fam_keep", "fam", "Keepsake", "Kept a copy of everything.", "key", 1, ["saved"], function () { return true; });
@@ -233,11 +238,11 @@
     var g = norm(gameId), ev = String(event), d0 = data && typeof data === "object" ? data : {};
     var pr = P(), now = pr ? pr.now() : new Date(), today = pr ? pr.dayKey(now) : "", s = load();
     if (GAMES.indexOf(g) >= 0) s.fam.played[g] = 1;               // a game counts as played from its first event
-    if (isDaily(ev, d0) && today) {
+    if (isDaily(ev, d0, g) && today) {
       if (s.fam.dailyDays.indexOf(today) < 0) s.fam.dailyDays = s.fam.dailyDays.concat([today]).sort().slice(-14);
       s.fam.streak = pr.streakAfter(s.fam.streak, today);
     }
-    var ctx = { fam: s.fam, hour: now.getHours(), today: today }, fresh = [];
+    var ctx = { fam: s.fam, hour: now.getHours(), today: today, game: g }, fresh = [];
     REG.forEach(function (t) {
       if (s.got[t.id] || (t.game !== g && t.game !== "fam")) return;
       if (t.on !== ANY && t.on.indexOf(ev) < 0) return;
