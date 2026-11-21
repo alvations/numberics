@@ -80,3 +80,5 @@ details.how p .btn{ padding:0 14px; }
 /* the tiles sit above the gaps' hit boxes, so a tap on a tile's edge is the tile's */
 .num{ z-index:1; }
 .sheen{ z-index:2; }
+/* the four-number picture fits the 120 px (96 px narrow) picture box */
+.howto .pv .eq.sm{ gap:2px; } .howto .pv .eq.sm .mt{ width:19px; height:22px; font-size:12px; border-radius:5px; }

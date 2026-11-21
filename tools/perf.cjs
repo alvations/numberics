@@ -210,8 +210,12 @@ async function runOnce(browser, base, page, view) {
       cpu: P.cpu.map(c => ({ fn: c.fn, ms: c.ms, since: c.since, reply: c.reply })), hooked: P.hooked.slice() };
   }).catch(() => null);
   await ctx.close();
-  const kb = [...reqs.values()].reduce((a, b) => a + b, 0) / 1024;
-  const out = { weightKB: kb, requests: reqs.size, external: external.length, externalUrls: [...new Set(external)], pageErrors: errors.length, errors,
+  // music.js loads lazily after the first gesture (only when Music is on): it is not part of the page weight
+  // and has its own budget (musicKB), so a tap during play cannot push a game over its page budget
+  const isMusic = u => /\/shared\/music\.js(\?|#|$)/.test(u);
+  const kb = [...reqs.entries()].filter(([u]) => !isMusic(u)).reduce((a, [, b]) => a + b, 0) / 1024;
+  const musicKB = [...reqs.entries()].filter(([u]) => isMusic(u)).reduce((a, [, b]) => a + b, 0) / 1024;
+  const out = { weightKB: kb, musicKB, requests: reqs.size, external: external.length, externalUrls: [...new Set(external)], pageErrors: errors.length, errors,
     fcpMs: load.fcp, dclMs: load.dcl, loadLongTaskMs: load.lt.reduce((a, t) => Math.max(a, t[1]), 0), loadCls: load.cls, actions, navigated };
   if (play) {
     const F = play.frames, FR = 1000 / 60;
@@ -234,7 +238,7 @@ async function runOnce(browser, base, page, view) {
 }
 
 const TIMING = ["fcpMs", "dclMs", "loadLongTaskMs", "loadCls", "p95FrameMs", "droppedPct", "playLongTaskMs", "cls", "cpuMs", "cpuLongTaskMs", "replyMs"];
-const WORST = ["weightKB", "requests", "external", "pageErrors"];
+const WORST = ["weightKB", "musicKB", "requests", "external", "pageErrors"];
 function combine(runs) {
   const o = {};
   for (const k of TIMING) o[k] = median(runs.map(r => r[k]));
@@ -270,7 +274,7 @@ function budgetFor(B, id, metric, view) {
     for (let i = 0; i < RUNS; i++) runs.push(await runOnce(browser, base, g, v));
     const m = combine(runs); m.vs = g.vs;
     const checks = [];
-    const metrics = ["weightKB", "requests", "external", "pageErrors", "fcpMs", "dclMs", "loadLongTaskMs", "loadCls", "playLongTaskMs", "p95FrameMs", "droppedPct", "cls"];
+    const metrics = ["weightKB", "musicKB", "requests", "external", "pageErrors", "fcpMs", "dclMs", "loadLongTaskMs", "loadCls", "playLongTaskMs", "p95FrameMs", "droppedPct", "cls"];
     if (g.vs || m.cpuMoves) metrics.push("cpuMs", "cpuLongTaskMs", "replyMs");
     for (const k of metrics) {
       const lim = budgetFor(B, g.id, k, v.tag); if (lim == null) continue;

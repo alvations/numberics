@@ -539,7 +539,7 @@
   function mt(v, cls) { return '<span class="mt' + (cls ? " " + cls : "") + '"' + (cls ? "" : ' style="--h:' + K.hue(level(String(v))) + '"') + ">" + v + "</span>"; }
   var STEPS = [
     ['<div class="eq">' + mt(2) + '<span class="hg">+</span>' + mt(2) + "</div>", "Tap a gap to put a sign there."],
-    ['<div class="eq">' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">=</span>' + mt(6, "gold") + "</div>", "Make the line equal six."],
+    ['<div class="eq sm">' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">=</span>' + mt(6, "gold") + "</div>", "Make the line equal six."],
     ['<div class="eq"><span class="op">(</span>' + mt(3) + '<span class="op">)!</span><span class="op">=</span>' + mt(6, "gold") + "</div>", "Use brackets, roots and ! when you need them."]
   ];
   function howto() {

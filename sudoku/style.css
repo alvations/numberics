@@ -260,3 +260,8 @@ details.how p{ margin:0 14px 12px; color:var(--mute); font-size:var(--fs-sm); }
 .pv .key{ width:24px; height:28px; display:grid; place-items:center; border-radius:6px; background:var(--panel); border:1px solid var(--line-2);
   font-weight:800; font-size:13px; color:var(--ink); }
 details.how .how-more{ display:flex; justify-content:center; margin:0 14px 12px; }
+/* a solve can earn several trophies at once: the pill row scrolls inside the card, so the card never spills past the
+   board and its buttons stay in view */
+#win{ overflow:hidden; }
+#win > *{ flex:none; }
+#win > #win-pills{ flex:0 1 auto; min-height:44px; overflow:auto; overscroll-behavior:contain; align-content:flex-start; padding:2px 0; }

@@ -531,6 +531,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
   ck("a Daily solve reports daily:true", ds && ds[2].daily === true, JSON.stringify(ds));
   ck("the Daily card names it and shows Daily grid and Same for everyone", /on today's Daily \((Easy|Medium|Hard)\)/.test(await p.textContent("#win-text")) &&
     (await p.textContent("#win-best")) === "Today's Daily is done." && /sdk_daily/.test(await pills()) && /fam_daily/.test(await pills()), (await p.textContent("#win-text")) + " " + await pills());
+  await p.setViewportSize({ width: 375, height: 812 });
+  ck("375 px with many pills: the card stays on the board and its buttons stay in view (the pills scroll)", await p.evaluate(() => {
+    const b = document.getElementById("board").getBoundingClientRect(), w = document.getElementById("win").getBoundingClientRect(), a = document.getElementById("again").getBoundingClientRect();
+    return Math.abs(w.bottom - b.bottom) < 2 && a.bottom <= b.bottom && a.top >= b.top && document.querySelectorAll("#win-pills [data-trophy]").length >= 3; }));
+  await p.setViewportSize({ width: 1280, height: 860 });
   ck("the Daily's time is written to today's progress (the Today chip)", await p.evaluate(() => /^\d+:\d\d$/.test(NumbericsProgress.today().sudoku || "")));
   ck("Best on the Daily is today's time", (await p.textContent("#best")) === (await p.textContent("#time")));
   await shot(p, "daily-solved");

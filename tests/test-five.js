@@ -411,6 +411,19 @@ t("client never re-implements a rule (no burst arithmetic in game.js)", () => {
   ok(!/>=\s*5\b|BURST\s*-|tiles\[[^\]]+\]\s*\+=/.test(g));
 });
 
+// ---- phase D wiring (REDESIGN.md 1.3, 3.5, 5.6, 7.3, 8.4, 9.5) ----
+t("phase D client: first visit on Easy, progress put, trophy events by 8.4's names, music duck, motion via NumbericsMotion", () => {
+  const g = fs.readFileSync(path.join(__dirname, "..", "five/game.js"), "utf8"), h = fs.readFileSync(path.join(__dirname, "..", "five/index.html"), "utf8");
+  ok(/saved\.level : "easy"/.test(g), "first visit on Easy, saved level kept");
+  ok(/NP\.put\("five", \{ best:/.test(g) && /live:/.test(g) && /liveText:/.test(g), "progress put on persist");
+  ok(/report\("round", \{ won: won, burstAt: burstAt \}\)/.test(g) && /report\("match", \{ won: state\.matchOver === "p", level: state\.level,\s*p: state\.wins\.p, c: state\.wins\.c, down02: run\.down02 === true \}\)/.test(g), "8.4 events and fields");
+  ok(/NumbericsMusic\.duck\(on\)/.test(g), "music duck");
+  ok(/M\.ms\("fly"\)/.test(g) && /M\.T\.burst/.test(g) && /M\.seq\(\)/.test(g) && !/K\.reducedMotion\(\)/.test(g) && !/var reduce\b/.test(g), "motion read live through NumbericsMotion");
+  ok(/seenHowto\("five"\)/.test(g) && /markHowto\("five"\)/.test(g), "how-to once");
+  ok(/<details class="how"><summary>How to play<\/summary>/.test(h) && /id="over-pills" class="tro-pills"/.test(h) && /<div id="games" class="cards"/.test(h), "how-to row, pills, cards");
+  ["Tap your tile, then a tile to add it onto.", "A tile at five or more bursts.", "Burst both of the computer's tiles to win the round. First to three."].forEach(s => ok(g.indexOf(s) >= 0, s));
+});
+
 require("./conventions")(t, ok, ["five/engine.js", "five/game.js", "five/index.html", "five/style.css"]);
 console.log(pass + " passed, " + fail + " failed");
 process.exit(fail ? 1 : 0);

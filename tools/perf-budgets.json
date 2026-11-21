@@ -2,39 +2,117 @@
   "_license": "SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)",
   "_doc": "Budgets for tools/perf.cjs (read tools/PERF.md). Each metric: max for both views, or phone/desktop. A game entry overrides the default for that metric only. Measured 2026-11-20, median of 3 runs, 20 s play; the measured values are in each why.",
   "defaults": {
-    "weightKB": { "max": 250, "why": "No build step, so every byte is hand-written. Games weighed 52 to 74 KB before the redesign's shared modules and 153 to 184 KB with them (20 Nov, mid-redesign; Six is higher, see its override). 250 KB leaves room to finish the redesign and still catches a stray image, font, audio file or vendored library." },
-    "requests": { "max": 24, "why": "15 to 16 same-origin files per game now (7 before the shared modules). 24 allows a few more shared modules but catches per-tile or per-frame fetching." },
-    "external": { "max": 0, "why": "Owner rule: zero external requests, content never depends on a CDN." },
-    "pageErrors": { "max": 0, "why": "An uncaught error during load or play is a broken game, whatever the timings say." },
-    "fcpMs": { "phone": 1000, "desktop": 500, "why": "Local static files: measured 130 to 280 ms on the 4x throttled phone, 36 to 90 ms desktop. Generous over a no-network load, but a blocking script or a big sync start-up shows." },
-    "dclMs": { "phone": 1000, "desktop": 500, "why": "Measured 140 to 260 ms phone, 37 to 65 ms desktop. Same reasoning as FCP." },
-    "loadLongTaskMs": { "phone": 250, "desktop": 100, "why": "Start-up work in one go: measured up to 130 ms phone (Three, worst run), 0 desktop. Above 250 ms the throttled phone visibly freezes on open." },
-    "loadCls": { "max": 0.05, "why": "Measured 0 everywhere. The board must not jump while the page settles (good CLS is under 0.1; we hold 0.05)." },
-    "playLongTaskMs": { "phone": 200, "desktop": 100, "why": "No long task (50 ms+) at all during 20 s of play today. A 200 ms task on the phone is a felt stall on a tap or a swipe." },
-    "p95FrameMs": { "phone": 33, "desktop": 25, "why": "Measured 17.5 to 20 ms phone, 17 ms desktop (60 Hz is 16.7). 33 ms is 30 fps on a throttled phone, the floor for animation that still reads as smooth." },
-    "droppedPct": { "phone": 10, "desktop": 5, "why": "Share of 60 Hz frames missed in play: medians 0.3 to 4.6 percent phone (Four is highest), under 1.5 desktop; one Nine phone run hit 8.6, so 10 keeps the median stable and still catches steady jank." },
-    "cls": { "max": 0.05, "why": "Layout shift in play not caused by the player's own input (for example the computer's move or a toast moving the board). Measured 0 everywhere." },
-    "cpuMs": { "phone": 250, "desktop": 80, "why": "The engine call that chooses the computer's move, worst in play. Four is the heaviest search: 106 to 121 ms phone, 24 to 33 ms desktop; the others take under 6 ms. Past 250 ms it eats into the designed thinking pause." },
-    "cpuLongTaskMs": { "phone": 250, "desktop": 80, "why": "The longest long task overlapping the computer's move (the frame the move freezes). Same reasoning as cpuMs." },
-    "replyMs": { "max": 600, "why": "Player's move to the computer's move on screen, designed pause included. 600 ms is the default for a new game against the computer; games with a longer designed pause override it." },
-    "cpuMovesMin": { "max": 3, "why": "The median run must see at least this many computer moves, so the reply budgets never pass by measuring nothing (medians 7 to 20 today)." }
+    "weightKB": {
+      "max": 250,
+      "why": "No build step, so every byte is hand-written. Games weighed 52 to 74 KB before the redesign's shared modules and 153 to 184 KB with them (20 Nov, mid-redesign; Six is higher, see its override). 250 KB leaves room to finish the redesign and still catches a stray image, font, audio file or vendored library."
+    },
+    "requests": {
+      "max": 24,
+      "why": "15 to 16 same-origin files per game now (7 before the shared modules). 24 allows a few more shared modules but catches per-tile or per-frame fetching."
+    },
+    "external": {
+      "max": 0,
+      "why": "Owner rule: zero external requests, content never depends on a CDN."
+    },
+    "pageErrors": {
+      "max": 0,
+      "why": "An uncaught error during load or play is a broken game, whatever the timings say."
+    },
+    "fcpMs": {
+      "phone": 1000,
+      "desktop": 500,
+      "why": "Local static files: measured 130 to 280 ms on the 4x throttled phone, 36 to 90 ms desktop. Generous over a no-network load, but a blocking script or a big sync start-up shows."
+    },
+    "dclMs": {
+      "phone": 1000,
+      "desktop": 500,
+      "why": "Measured 140 to 260 ms phone, 37 to 65 ms desktop. Same reasoning as FCP."
+    },
+    "loadLongTaskMs": {
+      "phone": 250,
+      "desktop": 100,
+      "why": "Start-up work in one go: measured up to 130 ms phone (Three, worst run), 0 desktop. Above 250 ms the throttled phone visibly freezes on open."
+    },
+    "loadCls": {
+      "max": 0.05,
+      "why": "Measured 0 everywhere. The board must not jump while the page settles (good CLS is under 0.1; we hold 0.05)."
+    },
+    "playLongTaskMs": {
+      "phone": 200,
+      "desktop": 100,
+      "why": "No long task (50 ms+) at all during 20 s of play today. A 200 ms task on the phone is a felt stall on a tap or a swipe."
+    },
+    "p95FrameMs": {
+      "phone": 33,
+      "desktop": 25,
+      "why": "Measured 17.5 to 20 ms phone, 17 ms desktop (60 Hz is 16.7). 33 ms is 30 fps on a throttled phone, the floor for animation that still reads as smooth."
+    },
+    "droppedPct": {
+      "phone": 10,
+      "desktop": 5,
+      "why": "Share of 60 Hz frames missed in play: medians 0.3 to 4.6 percent phone (Four is highest), under 1.5 desktop; one Nine phone run hit 8.6, so 10 keeps the median stable and still catches steady jank."
+    },
+    "cls": {
+      "max": 0.05,
+      "why": "Layout shift in play not caused by the player's own input (for example the computer's move or a toast moving the board). Measured 0 everywhere."
+    },
+    "cpuMs": {
+      "phone": 250,
+      "desktop": 80,
+      "why": "The engine call that chooses the computer's move, worst in play. Four is the heaviest search: 106 to 121 ms phone, 24 to 33 ms desktop; the others take under 6 ms. Past 250 ms it eats into the designed thinking pause."
+    },
+    "cpuLongTaskMs": {
+      "phone": 250,
+      "desktop": 80,
+      "why": "The longest long task overlapping the computer's move (the frame the move freezes). Same reasoning as cpuMs."
+    },
+    "replyMs": {
+      "max": 600,
+      "why": "Player's move to the computer's move on screen, designed pause included. 600 ms is the default for a new game against the computer; games with a longer designed pause override it."
+    },
+    "cpuMovesMin": {
+      "max": 3,
+      "why": "The median run must see at least this many computer moves, so the reply budgets never pass by measuring nothing (medians 7 to 20 today)."
+    },
+    "musicKB": {
+      "max": 60,
+      "why": "shared/music.js (about 46 KB) loads lazily after the first gesture and only when Music is on, so it is budgeted on its own instead of inside each page's weight (21 Nov). 60 KB catches a style bank that grows without review."
+    }
   },
   "games": {
     "six": {
-      "weightKB": { "max": 300, "why": "Six ships its verified line bank (six/bank.js, 13 KB) and the largest engine and client (34 + 26 KB): 102 KB before the shared modules, 211 KB with them. 300 KB, the same headroom as the default." }
+      "weightKB": {
+        "max": 300,
+        "why": "Six ships its verified line bank (six/bank.js, 13 KB) and the largest engine and client (34 + 26 KB): 102 KB before the shared modules, 211 KB with them. 300 KB, the same headroom as the default."
+      }
     },
     "four": {
-      "replyMs": { "max": 600, "why": "Designed pause THINK = 380 ms; measured 415 to 444 ms phone, 408 desktop." }
+      "replyMs": {
+        "max": 600,
+        "why": "Designed pause THINK = 380 ms; measured 415 to 444 ms phone, 408 desktop."
+      }
     },
     "five": {
-      "replyMs": { "max": 1400, "why": "Designed pause THINK = 520 ms, plus 500 ms more when the computer opens a round, plus the tile flight; measured medians 750 to 1050 ms (it depends how many openers a run sees)." },
-      "cpuMovesMin": { "max": 2, "why": "Five's moves need two taps (own tile, then a target), so scripted play lands fewer: medians 6 to 8, single runs as low as 1." }
+      "replyMs": {
+        "max": 1400,
+        "why": "Designed pause THINK = 520 ms, plus 500 ms more when the computer opens a round, plus the tile flight; measured medians 750 to 1050 ms (it depends how many openers a run sees)."
+      },
+      "cpuMovesMin": {
+        "max": 2,
+        "why": "Five's moves need two taps (own tile, then a target), so scripted play lands fewer: medians 6 to 8, single runs as low as 1."
+      }
     },
     "fifteen": {
-      "replyMs": { "max": 700, "why": "Designed pause THINK = 520 ms; measured 546 to 556 ms." }
+      "replyMs": {
+        "max": 700,
+        "why": "Designed pause THINK = 520 ms; measured 546 to 556 ms."
+      }
     },
     "nine": {
-      "replyMs": { "max": 850, "why": "Designed pause CPU_MS = 650 ms; measured 675 to 683 ms." }
+      "replyMs": {
+        "max": 850,
+        "why": "Designed pause CPU_MS = 650 ms; measured 675 to 683 ms."
+      }
     }
   }
 }
