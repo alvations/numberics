@@ -62,7 +62,7 @@
     // sheet (focus left on the page) never reaches the game.
     w.addEventListener("keydown", function (e) {
       if (!cur) return;
-      var inside = cur.sheet.contains(e.target);
+      var inside = !!(e.target && e.target.nodeType === 1 && cur.sheet.contains(e.target));
       if (e.key === "Escape" || e.key === "Esc") { e.preventDefault(); e.stopPropagation(); close(); return; }
       if (e.key === "Tab") {
         var f = focusables(cur.sheet); if (!f.length) { e.preventDefault(); return; }
