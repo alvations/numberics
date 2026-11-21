@@ -10,7 +10,7 @@
 (function () {
   "use strict";
   var S = window.NumbericsSudoku, Kit = window.NumbericsKit, Power = window.NumbericsPower;
-  var M = window.NumbericsMotion || null, A = window.NumbericsAudio || null;
+  var M = window.NumbericsMotion || null;
   var TR = window.NumbericsTrophies || null, PR = window.NumbericsProgress || null;
   var LEVELS = ["easy", "medium", "hard"];
   var cap = function (l) { return l[0].toUpperCase() + l.slice(1); };
@@ -34,7 +34,7 @@
   var freshSeed = Kit.freshSeed;
 
   // ---- small safe wrappers: a missing module costs a nicety, never the game ----
-  function sfx(name, arg) { try { if (A && typeof A[name] === "function") A[name](arg); } catch (e) { /* no sound */ } }
+  function sfx(name, arg) { if (M && M.sfx) M.sfx(name, arg); } // the shared call (shared/motion.js, TRIAGE4 D7)
   function buzz(kind) { sfx("buzz", kind); }
   function report(ev, data, opts) { try { return (TR && TR.report("sudoku", ev, data, opts)) || []; } catch (e) { return []; } }
   function duck(on) { try { if (window.NumbericsMusic && window.NumbericsMusic.duck) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
@@ -468,24 +468,20 @@
 
   // ---- How to play (REDESIGN.md 1.3, 9.10): three steps, each a small drawn picture and one sentence ----
   var STEPS = [
-    ['<div class="sq9"><span>5</span><span class="u">3</span><span>7</span><span class="u">6</span><span>1</span><span>9</span>' +
-      '<span class="u">2</span><span>4</span><span>8</span></div>', "Fill every row, column and box with 1 to 9."],
-    ['<div class="hw"><div class="sq9"><span>5</span><span></span><span>7</span><span>6</span><span class="s"></span><span>9</span>' +
-      '<span>2</span><span></span><span>8</span></div><span class="key">4</span></div>', "Tap a cell, then a number."],
-    ['<div class="sq9"><span>5</span><span class="n">1 4<br>8</span><span>7</span><span class="x">6</span><span></span><span>9</span>' +
-      '<span>2</span><span class="x">6</span><span>8</span></div>', "Notes are pencil marks. Red shows a clash."]
+    { picture: '<div class="sq9"><span>5</span><span class="u">3</span><span>7</span><span class="u">6</span><span>1</span><span>9</span>' +
+      '<span class="u">2</span><span>4</span><span>8</span></div>', text: "Fill every row, column and box with 1 to 9." },
+    { picture: '<div class="hw"><div class="sq9"><span>5</span><span></span><span>7</span><span>6</span><span class="s"></span><span>9</span>' +
+      '<span>2</span><span></span><span>8</span></div><span class="key">4</span></div>', text: "Tap a cell, then a number." },
+    { picture: '<div class="sq9"><span>5</span><span class="n">1 4<br>8</span><span>7</span><span class="x">6</span><span></span><span>9</span>' +
+      '<span>2</span><span class="x">6</span><span>8</span></div>', text: "Notes are pencil marks. Red shows a clash." }
   ];
-  function howto() {
-    var UI = window.NumbericsUI;
-    try { if (PR) PR.markHowto("sudoku"); } catch (e) { /* remembered in memory only */ }
-    if (!UI || !UI.sheet) { $("how").open = true; return; }
-    UI.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
-      }).join("") + "</div>";
-    }, { title: "How to play" });
-  }
-  $("how-steps").addEventListener("click", function () { sfx("tick"); howto(); });
+  // the family's one sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, never with a saved game
+  var how = null;
+  function howto() { if (how) how.open(); else $("how").open = true; }
+  document.addEventListener("DOMContentLoaded", function () {
+    var UI = window.NumbericsUI; if (!UI || !UI.howto) return;
+    how = UI.howto("sudoku", { title: "Sudoku", steps: STEPS, saved: !firstVisit, onButton: function () { sfx("tick"); } });
+  });
 
   window.addEventListener("keydown", function (e) {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -518,9 +514,6 @@
   unstash();
   if (!saved || askDaily) save();
   startTimer(); render();
-  // a first visit opens How to play by itself, once (REDESIGN.md 1.3); ui.js loads after this file
-  function firstHowto() { try { if (firstVisit && PR && !PR.seenHowto("sudoku") && !sheetOpen()) howto(); } catch (e) { /* no sheet */ } }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", firstHowto); else setTimeout(firstHowto, 0);
 
   // Screenshot hook (tools/shots.cjs): a fixed puzzle with a few moves and notes. Not reachable from the UI.
   window.__demo = function () {

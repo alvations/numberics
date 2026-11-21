@@ -3,19 +3,18 @@
  * A drop returns a wave-by-wave trace; the client plays it on NumbericsMotion's keyed layer (REDESIGN.md 5.5): the disc
  * falls with gravity and settles, each wave pops, cracks its eggs and lets the column above fall, the rising row slides
  * up. Every disc keeps its node (identity-keyed, never rebuilt per drop). A new input finishes the running animation
- * (end state at once, pending sounds dropped) and is applied at once. Under reduced motion (Settings, then the OS, read
+ * (end state at once, the pending sounds at once, one of each: TRIAGE4 D7) and is applied at once. Under reduced motion (Settings, then the OS, read
  * at each drop) the settled well shows at once and new discs fade in. */
 (function () {
   "use strict";
   var N = window.NumbericsSeven, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
-  var A = window.NumbericsAudio, TR = window.NumbericsTrophies, PG = window.NumbericsProgress;
+  var TR = window.NumbericsTrophies, PG = window.NumbericsProgress;
   var W = N.W, H = N.H, T = M.T, E = M.E;
   var store = K.store("numberics_seven_v1");
-  // sounds and haptics (REDESIGN.md 6.4, 7.3), called at the visual moment from inside the motion timeline; while
-  // finish() runs the pending steps at once, `skipping` drops their sounds instead of bunching them
-  var skipping = false;
-  function sfx(name, arg) { if (skipping || !A || typeof A[name] !== "function") return; try { A[name](arg); } catch (e) { /* silent */ } }
-  function buzz(kind) { if (skipping || !A || typeof A.buzz !== "function") return; try { A.buzz(kind); } catch (e) { /* silent */ } }
+  // sounds and haptics (REDESIGN.md 6.4, 7.3), called at the visual moment from inside the motion timeline; the
+  // family's one rule (shared/motion.js, TRIAGE4 D7): while finish() runs the pending steps at once, their sounds play
+  // then, one of each (a chain's pops sound once), never dropped
+  var sfx = M.sfx, buzz = M.buzz;
   function duck(on) { try { if (window.NumbericsMusic && window.NumbericsMusic.duck) window.NumbericsMusic.duck(on); } catch (e) { /* silent */ } }
   function trophy(ev, data) {
     if (!TR || !TR.report) return [];
@@ -121,7 +120,7 @@
   function keyed(grid) { for (var c = 0; c < W * H; c++) if (!grid[c] !== !ids[c]) return false; return true; }
   var drawn = "";
   // while finish() runs the steps left, each lands without motion (no pitch read, no animation made and then cancelled)
-  function syncLayer(grid, fx) { drawn = grid.join(","); layer.sync(tilesOf(grid, ids), skipping ? {} : fx); }
+  function syncLayer(grid, fx) { drawn = grid.join(","); layer.sync(tilesOf(grid, ids), seq.finishing() ? {} : fx); }
   function nodeAt(cell) { return ids[cell] ? layer.get(ids[cell]) : null; }
   function mini(v, cls) {
     var m = document.createElement("em"); m.className = "mini" + (v === N.EGG ? " egg" : v === N.CRACKED ? " cracked" : "") + (cls ? " " + cls : "");
@@ -339,11 +338,10 @@
     fxAnims.forEach(function (a) { try { a.cancel(); } catch (e) { /* gone */ } }); fxAnims = [];
     discsEl.classList.remove("rising");
   }
-  // a new input: the running animation ends now (every pending step runs, its sounds dropped), then the input applies
+  // a new input: the running animation ends now (every pending step runs, its sounds once each), then the input applies
   function flush() {
     if (!busy()) return;
-    skipping = true;
-    try { seq.finish(); } finally { skipping = false; }
+    seq.finish(true);
     clearFx(); layer.finish();
   }
   function play(trace, done) {
@@ -576,26 +574,20 @@
   }
   function well(cols, cells) { return '<div class="mg" style="grid-template-columns:repeat(' + cols + ',20px)">' + cells.join("") + "</div>"; }
   var STEPS = [
-    { t: "Tap a column to drop the Next disc.", pv: well(5, [md(0), md(0), md(4, "ring"), md(0), md(0), md(0), md(0), md(0, "col"), md(0), md(0),
+    { text: "Tap a column to drop the Next disc.", picture: well(5, [md(0), md(0), md(4, "ring"), md(0), md(0), md(0), md(0), md(0, "col"), md(0), md(0),
       md(2), md(0), md(0, "col"), md(6), md(5)]) },
-    { t: "A disc pops when its number equals how many discs are in its line.", pv: well(5, [md(0), md(0), md(0), md(0), md(0),
+    { text: "A disc pops when its number equals how many discs are in its line.", picture: well(5, [md(0), md(0), md(0), md(0), md(0),
       md(0), md(0), md(0), md(0), md(0), md(0), md(2), md(3, "ring"), md(5), md(0)]) },
-    { t: "Grey eggs crack when a disc pops beside them.", pv: '<div class="mg" style="grid-template-columns:repeat(5,20px);align-items:center">' +
+    { text: "Grey eggs crack when a disc pops beside them.", picture: '<div class="mg" style="grid-template-columns:repeat(5,20px);align-items:center">' +
       md(0, "egg") + md(2, "ring") + md(0) + '<span class="to">&#8594;</span>' + md(0, "cracked") + "</div>" },
   ];
-  function howto() {
-    var U = window.NumbericsUI;
-    try { if (PG && PG.markHowto) PG.markHowto("seven"); } catch (e) { /* a nicety */ }
-    if (!U || !U.sheet) { $("how").open = true; return; }
-    U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s.pv + "</div><p>" + s.t + "</p></div>";
-      }).join("") + "</div>";
-    });
-  }
-  $("how-steps").addEventListener("click", function () { sfx("tick"); howto(); });
-  var seen = true; try { seen = !PG || !PG.seenHowto || PG.seenHowto("seven"); } catch (e) { seen = true; }
-  if (!loaded && !seen) window.addEventListener("load", function () { if (!window.NumbericsUI || !window.NumbericsUI.open()) howto(); });
+  // the family's one sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, never with a saved game
+  var how = null;
+  function howto() { if (how) how.open(); else $("how").open = true; }
+  document.addEventListener("DOMContentLoaded", function () {
+    var U = window.NumbericsUI; if (!U || !U.howto) return;
+    how = U.howto("seven", { title: "Seven", steps: STEPS, saved: !!loaded, onButton: function () { sfx("tick"); } });
+  });
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {

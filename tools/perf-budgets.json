@@ -4,7 +4,7 @@
   "defaults": {
     "weightKB": {
       "max": 250,
-      "why": "No build step, so every byte is hand-written. Games weighed 52 to 74 KB before the redesign's shared modules and 153 to 184 KB with them (20 Nov, mid-redesign; Six is higher, see its override). 250 KB leaves room to finish the redesign and still catches a stray image, font, audio file or vendored library."
+      "why": "Owner decision after review round 4 (TRIAGE4 D6, critic S1; recorded in docs/OWNER-REQUESTS.md): the budget stays 250 KB. The spec's 110 to 140 KB (REDESIGN.md 10) assumed fewer shared modules; with no build step every shared module is hand-written, and the lazy music is budgeted separately. Games weighed 52 to 74 KB before the redesign's shared modules and 153 to 184 KB with them (20 Nov; Six is higher, see its override). 250 KB still catches a stray image, font, audio file or vendored library. Work per move is cut instead: the game save, progress and trophy writes are one batched idle localStorage write (NumbericsKit.store)."
     },
     "requests": {
       "max": 24,

@@ -469,7 +469,7 @@ t("D-Nine: how-to row, the three steps, end-card pills, cards, music duck, progr
   ok(/<div id="over-pills" class="tro-pills" hidden><\/div>/.test(H) && /class="over"[\s\S]*over-pills/.test(H), "pills inside the end card");
   ok(/id="games" class="cards"/.test(H), "the games cards at the page foot");
   ok(/NumbericsMusic\.duck\(up\)/.test(G) && !/music\.js/.test(H), "music ducks with the card; music.js is never loaded here");
-  ok(/PR\.put\("nine"/.test(G) && /seenHowto\("nine"\)/.test(G) && /markHowto\("nine"\)/.test(G), "progress and the how-to memory");
+  ok(/PR\.put\("nine"/.test(G) && /U\.howto\("nine", \{ title: "Nine", steps: STEPS, saved: !firstVisit/.test(G), "progress and the shared how-to (D8)");
 });
 t("D-Nine: the style animates nothing but transform and opacity", () => {
   ok(!/transition:[^;}]*(width|height|top|left|margin|padding)/.test(C) && !/@keyframes/.test(C), "no layout transitions or keyframes");

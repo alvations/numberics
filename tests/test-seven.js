@@ -383,7 +383,7 @@ t("client: trophy events are exactly Seven's three (8.4)", () => {
   eq(evs, ["drop", "end", "level"]);
   ok(/daily: mode === "daily"/.test(G), "end.daily must be a real boolean");
   ok(/PG\.put\("seven"/.test(G) && /PG\.daily\("seven"/.test(G), "progress put and the Daily record");
-  ok(/seenHowto\("seven"\)/.test(G) && /markHowto\("seven"\)/.test(G), "how-to seen and marked");
+  ok(/U\.howto\("seven", \{ title: "Seven", steps: STEPS, saved: !!loaded/.test(G), "the shared how-to (D8)");
 });
 t("trophies: the client's event shapes unlock each Seven trophy on its boundary", () => {
   const TR = require("../shared/trophies.js");

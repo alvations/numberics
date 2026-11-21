@@ -20,17 +20,55 @@
   // date seed for Daily modes: same for everyone on the same local date
   function daySeed(d) { d = d || new Date(); return (d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()) >>> 0; }
 
-  // storage: always try/catch, degrade to memory (sandboxes throw)
+  // storage: always try/catch, degrade to memory (sandboxes throw).
+  // Writes are batched (TRIAGE4 D6): save() keeps the text at once (every store of the same key reads it back) and
+  // one idle callback writes every pending key together, so a move costs no localStorage write. Nothing is lost on
+  // leaving: pagehide and a hidden tab flush at once, and a save made while the page is going away writes at once.
+  // Memory (shared/settings.js) calls freeze() before it writes a loaded save or erases, then reloads: from then on
+  // saves stay in memory and pending ones are dropped, so no page's own pagehide save can undo it (TRIAGE4 B1).
+  // Without page lifecycle events (Node tests, odd hosts) a flush on leaving cannot be promised, so saves write at once.
+  var PEND = {}, pendN = 0, idleT = null, frozen = false, leaving = true;
+  function hasWin() { return typeof window !== "undefined" && window; }
+  function writeNow(key, text) { try { window.localStorage.setItem(key, text); } catch (e) { /* in-memory only */ } }
+  function flush() {
+    if (idleT !== null) { try { (window.cancelIdleCallback || clearTimeout)(idleT); } catch (e) { /* gone */ } idleT = null; }
+    if (frozen || !pendN) return;
+    var all = PEND; PEND = {}; pendN = 0;
+    for (var k in all) writeNow(k, all[k]);
+  }
+  function schedule() {
+    if (idleT !== null || !hasWin()) return;
+    try {
+      idleT = window.requestIdleCallback ? window.requestIdleCallback(function () { idleT = null; flush(); }, { timeout: 1000 })
+        : setTimeout(function () { idleT = null; flush(); }, 300);
+    } catch (e) { idleT = null; flush(); }
+  }
+  if (hasWin() && window.addEventListener) {
+    try {
+      leaving = document.visibilityState === "hidden";
+      window.addEventListener("pagehide", function () { leaving = true; flush(); }, true);
+      window.addEventListener("pageshow", function () { leaving = false; }, true);
+      document.addEventListener("visibilitychange", function () {
+        leaving = document.visibilityState === "hidden"; if (leaving) flush();
+      }, true);
+    } catch (e) { leaving = true; /* no events: every save is written at once */ }
+  }
+  function freeze() { frozen = true; PEND = {}; pendN = 0; }
+  function thaw() { frozen = false; }
   function store(key) {
     var mem = null;
     return {
       load: function () {
+        if (Object.prototype.hasOwnProperty.call(PEND, key)) { try { return JSON.parse(PEND[key]); } catch (e) { /* fall through */ } }
         try { var v = window.localStorage.getItem(key); if (v) return JSON.parse(v); } catch (e) { /* fall through */ }
         try { return mem ? JSON.parse(mem) : null; } catch (e) { return null; }
       },
       save: function (obj) {
         mem = JSON.stringify(obj);
-        try { window.localStorage.setItem(key, mem); } catch (e) { /* in-memory only */ }
+        if (frozen) return;                                // Memory is reloading the page: nothing may overwrite it
+        if (leaving) { if (Object.prototype.hasOwnProperty.call(PEND, key)) { delete PEND[key]; pendN--; } writeNow(key, mem); return; }
+        if (!Object.prototype.hasOwnProperty.call(PEND, key)) pendN++;
+        PEND[key] = mem; schedule();
       },
     };
   }
@@ -122,6 +160,7 @@
   function hue(level) { return (level * 43 + 30) % 360; }
   function fmt(n) { return Number(n).toLocaleString("en-US"); }
   function clock(t) { return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2); }
-  return { rand: rand, rng: rng, freshSeed: freshSeed, daySeed: daySeed, store: store, reducedMotion: reducedMotion,
+  return { rand: rand, rng: rng, freshSeed: freshSeed, daySeed: daySeed, store: store, flush: flush, freeze: freeze, thaw: thaw,
+           frozen: function () { return frozen; }, reducedMotion: reducedMotion,
            toast: toast, clearToast: clearToast, twoStep: twoStep, swipe: swipe, arrowKey: arrowKey, hue: hue, fmt: fmt, clock: clock };
 });

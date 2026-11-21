@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * Browser checks for shared/trophies.js + shared/progress.js on tests/fixtures/trophies.html (REDESIGN.md 8.1, 11 B4):
- * the earned-only sheet (no padlocks, no counts, secrets absent from the DOM until earned), the unseen dot, the toast,
+ * the sheet (TRIAGE4 D3: a count, earned first, then the non-secret goals dimmed; secrets absent from the DOM until
+ * earned), the unseen dot, the toast,
  * the end-card pill path, persistence, blocked storage, reduced motion, zero external requests.
  * Run: NODE_PATH=$(npm root -g) node tests/emu/run.cjs shared-trophies */
 "use strict";
@@ -12,7 +13,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
     return s ? s.textContent : null;
   });
   const dotOn = p => p.evaluate(() => { const d = document.querySelector("#topbar .tb-dot"); return !!d && !d.hidden && d.offsetParent !== null; });
-  const COUNT = /\d+\s*(of|\/)\s*\d+|\b84\b|total|locked|padlock/i;
+  const T0 = require("../../shared/trophies.js"), PLAIN = T0.REG.filter(x => !x.secret).length;
+  const countOf = p => p.evaluate(() => { const c = document.querySelector(".scrim:not([hidden]) .tro-count"); return c ? c.textContent : null; });
+  const goals = p => p.evaluate(() => [...document.querySelectorAll('.scrim:not([hidden]) .tr[data-locked]')].map(e => e.getAttribute("data-trophy")));
+  const earnedTiles = p => p.evaluate(() => [...document.querySelectorAll(".scrim:not([hidden]) .tr:not([data-locked])")].map(e => e.getAttribute("data-trophy")).sort().join());
   // Night owl (hour < 4) must never fire by accident when the suite runs after midnight: pin every page's clock to
   // noon of the real day (the day stays real for Daily and streak checks). The Night owl check sets 3 am itself.
   const PIN = () => {
@@ -32,7 +36,11 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await open(p);
   let txt = await sheetText(p);
   ck("fresh: the sheet opens and says Nothing yet", txt !== null && /Nothing yet\. Play any game to begin\./.test(txt), txt);
-  ck("fresh: no count, total or padlock in the sheet", txt !== null && !COUNT.test(txt), txt);
+  ck("fresh: the count reads 0 of " + PLAIN + " trophies (every non-secret one)", (await countOf(p)) === "0 of " + PLAIN + " trophies", await countOf(p));
+  ck("fresh: every non-secret trophy is listed as a dimmed goal with its description", JSON.stringify((await goals(p)).sort()) ===
+    JSON.stringify(T0.REG.filter(x => !x.secret).map(x => x.id).sort()) && await p.evaluate(() => [...document.querySelectorAll(".tr[data-locked]")].every(e =>
+      e.classList.contains("locked") && e.querySelector("small").textContent.length > 4 && getComputedStyle(e).borderStyle === "dashed")));
+  await shot(p, "sheet-goals");
   let html = await p.content();
   ck("fresh: no secret trophy's name or description anywhere in the DOM", SECRETS.every(([id, n, d]) => html.indexOf(n) < 0 && html.indexOf(d) < 0 && html.indexOf(id) < 0));
   await p.keyboard.press("Escape"); await p.waitForTimeout(50);
@@ -50,9 +58,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await open(p);
   txt = await sheetText(p);
   ck("the sheet lists the earned trophies under Two", /Two/.test(txt) && /Warming up/.test(txt) && /The old finish line/.test(txt), txt);
-  ck("only earned ones are drawn", await p.evaluate(() => [...document.querySelectorAll("[data-trophy]")].map(e => e.getAttribute("data-trophy")).sort().join()) === "two_128,two_2048");
+  ck("the earned ones come first, not dimmed; the rest are goals", (await earnedTiles(p)) === "two_128,two_2048" && await p.evaluate(() => {
+    const all = [...document.querySelectorAll(".scrim:not([hidden]) .tr")]; return all.slice(0, 2).every(e => !e.hasAttribute("data-locked")) && all.slice(2).every(e => e.hasAttribute("data-locked")); }));
   ck("every tile has a drawn line glyph", await p.evaluate(() => [...document.querySelectorAll(".tr")].every(t => t.querySelector("svg path, svg rect, svg circle"))));
-  ck("no count, total or padlock after earning", !COUNT.test(txt.replace(/\b(128|2048)\b/g, "")), txt);
+  ck("the count reads 2 of " + PLAIN + " trophies", (await countOf(p)) === "2 of " + PLAIN + " trophies", await countOf(p));
   ck("opening the sheet clears the dot and the unseen list", !(await dotOn(p)) && (await p.evaluate(() => NumbericsTrophies.unseen().length)) === 0);
   await shot(p, "sheet");
   await p.keyboard.press("Escape"); await p.waitForTimeout(30);
@@ -60,8 +69,10 @@ module.exports = async function ({ browser, url, ck, shot }) {
   // 3. a secret: absent before, shown with its real description and the gold edge after
   html = await p.content();
   ck("secret Night owl not in the DOM before earning", html.indexOf("Night owl") < 0 && html.indexOf("fam_night") < 0);
-  await p.evaluate(() => { NumbericsProgress._clock(() => new Date(2026, 10, 20, 3, 10)); NumbericsTrophies.report("two", "move", { top: 2 }); NumbericsProgress._clock(window.__noon); });
+  await p.evaluate(() => { NumbericsProgress._clock(() => new Date(2026, 10, 20, 3, 10)); NumbericsTrophies.report("two", "end", { top: 2 }); NumbericsProgress._clock(window.__noon); });
+  await p.evaluate(() => NumbericsKit.clearToast());
   await open(p);
+  ck("an earned secret joins the count (4 of " + (PLAIN + 1) + ": two_128, two_2048, fam_first, fam_night)", (await countOf(p)) === "4 of " + (PLAIN + 1) + " trophies", await countOf(p));
   ck("earned secret shows once earned, marked secret, with its description", await p.evaluate(() => {
     const e = document.querySelector('.tr.secret[data-trophy="fam_night"]'); return !!e && /Night owl/.test(e.textContent) && /Played well past bedtime\./.test(e.textContent); }));
   ck("Everywhere is the first group", await p.evaluate(() => document.querySelector(".tro-game").textContent === "Everywhere"));
@@ -133,20 +144,21 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const tState = () => p.evaluate(() => { const t = document.getElementById("toast"); return t.classList.contains("on") ? [...t.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join("") : ""; });
   const q = await p.evaluate(() => NumbericsTrophies.report("two", "end", { top: 3, score: 10 }, { quiet: true }));
   ck("quiet: earns, no toast, and the cup's unseen dot shows", q.indexOf("fam_first") >= 0 && (await tState()) === "" && await dotOn(p), JSON.stringify(q));
-  await p.evaluate(() => { NumbericsProgress._clock(() => new Date(2026, 10, 20, 3, 10)); window.__fr = NumbericsTrophies.report("two", "move", { top: 7 }); NumbericsProgress._clock(window.__noon); });
-  ck("mid-play: the game's trophy toasts at once, the family one is held back", JSON.stringify(await p.evaluate(() => window.__fr.slice().sort())) === '["fam_night","two_128"]' &&
+  await p.evaluate(() => { ["fibonacci", "three", "four", "five"].forEach(g => NumbericsTrophies.report(g, "x", {}, { quiet: true })); window.__fr = NumbericsTrophies.report("two", "move", { top: 7 }); });
+  ck("mid-play: the game's trophy toasts at once, the family one (High five, the fifth game) is held back", JSON.stringify(await p.evaluate(() => window.__fr.slice().sort())) === '["fam_five","two_128"]' &&
     (await tState()) === "Trophy: Warming up", await tState());
   await p.evaluate(() => NumbericsKit.clearToast());
   let shown = false;
-  for (let k = 0; k < 10; k++) { await p.keyboard.press("Shift"); await p.waitForTimeout(250); if (/Night owl/.test(await tState())) shown = true; }
+  for (let k = 0; k < 10; k++) { await p.keyboard.press("Shift"); await p.waitForTimeout(250); if (/High five/.test(await tState())) shown = true; }
   ck("mid-play: no family toast while the player keeps playing", !shown);
-  await p.waitForFunction(() => /Night owl/.test(document.getElementById("toast").textContent) && document.getElementById("toast").classList.contains("on"), null, { timeout: 4000 }).catch(() => {});
-  ck("mid-play: the family toast shows at the next pause", /Trophy: Night owl/.test(await tState()), await tState());
+  await p.waitForFunction(() => /High five/.test(document.getElementById("toast").textContent) && document.getElementById("toast").classList.contains("on"), null, { timeout: 4000 }).catch(() => {});
+  ck("mid-play: the family toast shows at the next pause", /Trophy: High five/.test(await tState()), await tState());
   ck("integration checks: no page errors", e8.length === 0, e8.join(" | "));
   await ctx.close();
 
-  // 9. integration: many trophies on one end card, every game, phone widths: the pill row scrolls inside the card and
-  // nothing on the card (title, text, buttons) spills outside it (one shared rule in theme.css / style.css)
+  // 9. integration: many trophies on one end card, every game, phone widths (TRIAGE4 family: pills never clipped): every
+  // pill is laid out in full (the row never clips), the card itself scrolls when a small board cannot hold seven, and
+  // nothing spills outside the card; the game glyph tops the card
   const games = require("../../games.json"), list = Array.isArray(games) ? games : games.games;
   const SEEN = JSON.stringify({ v: 1, games: {}, howto: Object.fromEntries(list.map(g => [g.id, true])), daily: {} });
   for (const vw of [{ width: 375, height: 667 }, { width: 320, height: 568 }]) {
@@ -158,11 +170,13 @@ module.exports = async function ({ browser, url, ck, shot }) {
         const pl = document.querySelector(".over .tro-pills"); if (!pl) return null;
         const o = pl.closest(".over"); o.hidden = false;
         NumbericsTrophies.pills(pl, NumbericsTrophies.REG.filter(t => t.game !== "fam").slice(0, 7).map(t => t.id));
-        const or = o.getBoundingClientRect();
-        const out = [...o.children].filter(k => !k.hidden && k.offsetParent !== null).filter(k => { const b = k.getBoundingClientRect(); return b.top < or.top - 1 || b.bottom > or.bottom + 1; });
-        return { out: out.map(k => k.id || k.className || k.tagName), scrolls: pl.scrollHeight > pl.clientHeight + 1, rowH: pl.clientHeight };
+        const or = o.getBoundingClientRect(), cs = getComputedStyle(o);
+        const pr = [...pl.querySelectorAll(".trophy")].map(e => e.getBoundingClientRect());
+        return { rowClips: pl.scrollHeight > pl.clientHeight + 1 || pl.scrollWidth > pl.clientWidth + 1, n: pr.length,
+          wide: pr.filter(b => b.left < or.left - 1 || b.right > or.right + 1).length, scrollable: cs.overflowY === "auto" || o.scrollHeight <= o.clientHeight + 1,
+          glyph: !!(o.firstElementChild && o.firstElementChild.classList.contains("glyph")) };
       });
-      ck(g.id + " " + vw.width + ": seven pills scroll inside the end card, nothing spills out", r && !r.out.length && r.scrolls && r.rowH >= 36, JSON.stringify(r));
+      ck(g.id + " " + vw.width + ": seven pills laid out in full, the card scrolls, the glyph on top", r && !r.rowClips && r.n === 7 && !r.wide && r.scrollable && r.glyph, JSON.stringify(r));
       await p.close();
     }
     await ctx.close();

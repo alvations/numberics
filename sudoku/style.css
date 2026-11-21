@@ -265,3 +265,67 @@ details.how .how-more{ display:flex; justify-content:center; margin:0 14px 12px;
 #win{ overflow:hidden; }
 #win > *{ flex:none; }
 #win > #win-pills{ flex:0 1 auto; min-height:44px; overflow:auto; overscroll-behavior:contain; align-content:flex-start; padding:2px 0; }
+
+/* B3 (Sudoku's own): with Larger text below 400 px the four power-up labels cannot share one row, so the tray is 2 x 2 */
+@media (max-width:400px){ :root[data-text="large"] .tray{ grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* ===== R4 shared (TRIAGE4; copied byte for byte into style.css and sudoku/style.css, tests/test-theme.js) ===== */
+/* B3: the top bar never scrolls sideways and its buttons stay 44 x 44. Nothing in it shrinks; on narrow screens the
+   "Numberics" word hides first, then the "Games" word (both stay as the accessible names). Larger text hides them
+   sooner, since its words are wider. */
+.topbar > *{ flex:none; }
+.topbar > .tb-sp{ flex:1 1 0; min-width:0; }
+.tb-btn{ min-width:var(--tap); flex:none; }
+@media (max-width:419px){ .tb-word{ display:none; } }
+@media (max-width:339px){ .tb-games .tb-lbl{ display:none; } .tb-btn.tb-games{ width:var(--tap); padding:0; justify-content:center; } }
+@media (max-width:479px){ :root[data-text="large"] .tb-word{ display:none; } }
+@media (max-width:359px){ :root[data-text="large"] .tb-games .tb-lbl{ display:none; }
+  :root[data-text="large"] .tb-btn.tb-games{ width:var(--tap); padding:0; justify-content:center; } }
+/* D2: the one-tap mute; pressed (muted) shows the struck speaker */
+.tb-mute .tb-off{ display:none; }
+.tb-mute.muted .tb-on{ display:none; } .tb-mute.muted .tb-off{ display:inline; }
+.tb-mute.muted{ color:var(--mute); }
+/* B3: the power-up tray and the stat row fit at 320 px with Larger text (labels wrap instead of pushing out) */
+.tray{ grid-template-columns:repeat(4,minmax(0,1fr)); }
+.pw{ min-width:0; }
+@media (max-width:400px){ :root[data-text="large"] .pw{ white-space:normal; line-height:1.15; padding:4px 2px; font-size:.78rem; }
+  :root[data-text="large"] .pw i{ margin-left:2px; padding:0 4px; } }
+@media (max-width:360px){ :root[data-text="large"] .stat{ min-width:0; padding-left:7px; padding-right:7px; } }
+/* Light: the cream 1 and 2 tiles keep an edge on the cream preview wells (cards and how-to pictures) */
+/* B3: the equation previews (Five, Six) fit a 320 px card */
+@media (max-width:360px){ .cards .pv .eq{ gap:2px; } .cards .pv .eq .mt{ width:22px !important; height:22px !important; font-size:12px; } }
+:root[data-theme="light"] .pv .mt.lo,:root[data-theme="light"] .pv .mt.lo2{ box-shadow:inset 0 -2px 0 rgba(0,0,0,.14), 0 0 0 1px #b9ab90; }
+/* end cards: fade in (opacity is not motion, so it stays under Less motion), the game glyph on top (ui.js adds it),
+   and every trophy pill shows: the pills wrap in full, smaller, and the card scrolls when a small board cannot hold it */
+.over:not([hidden]){ animation:nm-fadein 220ms ease-out both; }
+.over{ overflow:auto; overscroll-behavior:contain; justify-content:safe center; }
+.over > .tro-pills{ flex:none; min-height:0; overflow:visible; }
+.over .tro-pills .trophy{ padding:4px 12px 4px 6px; font-size:var(--fs-xs); }
+.over .tro-pills .trophy svg{ width:18px; height:18px; }
+.over > .glyph{ flex:none; }
+#win.over{ overflow:auto; }
+#win > #win-pills{ flex:none; min-height:0; overflow:visible; }
+@media (max-width:400px){ .over > .glyph{ width:40px; height:40px; } .over{ gap:8px; padding:14px; }
+  .over:has(> .tro-pills:not([hidden])) > .glyph{ display:none; } } /* a small board gives the room to the pills */
+/* a card that must scroll keeps its buttons in view: the last row sticks to the bottom (over the scrolled pills, with
+   a soft edge as the sign that more is above); when the card fits, nothing moves */
+.over{ padding-bottom:0; }
+.over > .row:last-child,.over > .acts:last-child{ position:sticky; bottom:0; z-index:1; margin-bottom:0; padding:8px 0 20px; margin-top:-8px;
+  background:var(--bg); border-radius:0; box-shadow:0 -10px 10px -6px var(--bg); }
+@media (max-width:400px){ .over > .row:last-child,.over > .acts:last-child{ padding-bottom:14px; } }
+.over.more > .row:last-child,.over.more > .acts:last-child{ border-top:1px solid var(--line-2); box-shadow:0 -10px 14px -6px rgba(0,0,0,.35); }
+/* D3: the Trophies sheet lists goals too: a not-yet-earned trophy is dimmed with its description */
+.tro-count{ margin:0 0 4px; color:var(--mute); font-size:var(--fs-sm); font-weight:650; }
+.tr.locked{ background:none; border-style:dashed; }
+.tr.locked svg{ color:var(--faint); }
+.tr.locked b{ color:var(--mute); }
+.vh{ position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+/* D4, D9: the Today card's streak line and the Daily chips */
+.today .streak.zero{ color:var(--mute); font-weight:700; }
+.today .when{ flex-wrap:wrap; gap:2px 12px; }
+.chip small.lv{ color:var(--accent-text); }
+/* Memory: the status line and the Load confirm */
+.memst{ margin:8px 0 0; color:var(--ink); font-size:var(--fs-sm); display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.memst[hidden]{ display:none; }
+.memst .mem2{ display:flex; gap:8px; }
+/* ===== end R4 shared ===== */

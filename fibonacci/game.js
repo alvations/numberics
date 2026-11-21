@@ -5,7 +5,8 @@
  * Motion (docs/design/REDESIGN.md 5.3): tiles are kept by identity in the shared keyed layer (shared/motion.js), so every
  * tile slides from its old cell to its new one as in the original 2048; a joined tile pops on top after the slide and a
  * new tile appears after it. A new input finishes the running animation and is applied at once (5.11). Sounds, haptics
- * and the move's trophy check run on one timeline, so finishing it drops nothing and bunches nothing (7.3). */
+ * and the move's trophy check run on one timeline; sounds follow the family's one rule (shared/motion.js, TRIAGE4 D7):
+ * an input that ends a running animation plays the pending sounds at once (one of each) and its own with it. */
 (function () {
   "use strict";
   var N = window.NumbericsFibonacci, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
@@ -58,9 +59,8 @@
       liveText: "Score " + fmt(state.score) });
   }
   var fmt = K.fmt;
-  // sounds and haptics (shared/audio.js); a missing module costs a sound, never the game
-  function sfx(name, arg) { var A = window.NumbericsAudio; try { if (A && A[name]) A[name](arg); } catch (e) { /* silent */ } }
-  function buzz(kind) { sfx("buzz", kind); }
+  // sounds and haptics (shared/audio.js through shared/motion.js); a missing module costs a sound, never the game
+  var sfx = M.sfx, buzz = M.buzz;
   function trophy(event, data) {
     var T = window.NumbericsTrophies; if (!T || !T.report) return [];
     try { return T.report(ID, event, data) || []; } catch (e) { return []; }
@@ -108,8 +108,8 @@
     if (again) rekey();
     layer.sync(tiles(), f || {});
   }
-  // Whatever is still animating ends now; pending sounds are dropped with it (5.11).
-  function settle() { fx.finish(); layer.finish(); }
+  // Whatever is still animating ends now; its pending sounds play at once, one of each (5.11, D7).
+  function settle() { fx.finish(layer.busy()); layer.finish(); }
 
   function render() {
     $("score").textContent = fmt(state.score);
@@ -277,16 +277,16 @@
     sfx("slide");
     if (r.merges.length) {
       var k = Math.max.apply(null, r.merges);
-      fx.at(slide, function () { sfx("merge", k); buzz("merge"); });
+      fx.sound(slide, function () { sfx("merge", k); buzz("merge"); });
     }
     var topId = top >= N.AWARD_FROM_INDEX ? ids[state.grid.indexOf(top)] : 0, paid = r.awarded.length > 0;
     if (topId) {
       var rg = ring(topId);
-      fx.at(after, function () { sfx("best"); buzz("big"); });
+      fx.sound(after, function () { sfx("best"); buzz("big"); });
       fx.at(after + 420 + 20, function () { if (rg && rg.parentNode) rg.parentNode.removeChild(rg); });
     }
-    if (paid) fx.at(after + 140, function () { sfx("power"); });
-    if (state.over) fx.at(after, function () { sfx("lose"); buzz("lose"); });
+    if (paid) fx.sound(after + 140, function () { sfx("power"); });
+    if (state.over) fx.sound(after, function () { sfx("lose"); buzz("lose"); });
     // the move's trophy check runs at the pop, so its toast and chime land with what it names (8.4)
     var data = { value: N.value(state.top), merges: r.merges.length, grid: state.grid.map(N.value), moves: state.moves, run: { used: run.used } };
     var ended = state.over;
@@ -418,32 +418,22 @@
     return '<span class="mt' + (lv === 1 ? " lo" : "") + '" style="--h:' + hue(lv) + '">' + N.label(lv) + "</span>";
   }
   var STEPS = [
-    ['<div class="mg" style="grid-template-columns:repeat(3,26px)">' + mt(1) + '<span class="op">&rarr;</span>' + mt(2) + "</div>",
-      "Swipe to slide every tile."],
-    ['<div class="eq">' + mt(2) + '<span class="op">+</span>' + mt(3) + '<span class="op">=</span>' + mt(4) + "</div>",
-      "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5."],
-    ['<div class="eq">' + mt(3) + '<span class="op">+</span>' + mt(3) + '<span class="op no">no</span></div>',
-      "Equal tiles do not join, except 1 and 1."]
+    { picture: '<div class="mg" style="grid-template-columns:repeat(3,26px)">' + mt(1) + '<span class="op">&rarr;</span>' + mt(2) + "</div>",
+      text: "Swipe to slide every tile." },
+    { picture: '<div class="eq">' + mt(2) + '<span class="op">+</span>' + mt(3) + '<span class="op">=</span>' + mt(4) + "</div>",
+      text: "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5." },
+    { picture: '<div class="eq">' + mt(3) + '<span class="op">+</span>' + mt(3) + '<span class="op no">no</span></div>',
+      text: "Equal tiles do not join, except 1 and 1." }
   ];
-  function howto() {
-    var U = window.NumbericsUI; if (!U || !U.sheet) return null;
-    var NP = window.NumbericsProgress; if (NP && NP.markHowto) { try { NP.markHowto(ID); } catch (e) { /* a nicety */ } }
-    return U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
-      }).join("") + "</div>";
-    }, { title: "How to play Fibonacci" });
-  }
-  $("how-steps").addEventListener("click", function () { howto(); });
+  var how = null;
+  function howto() { if (how) how.open(); }
+  // the shared sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, never with a saved game; ui.js loads last
+  window.addEventListener("DOMContentLoaded", function () {
+    var U = window.NumbericsUI; if (U && U.howto) how = U.howto(ID, { title: "Fibonacci", steps: STEPS, saved: !fresh });
+  });
 
   board({}, true);
   render();
-  // the first visit to Fibonacci (no saved game, sheet never seen) opens the how-to once; ui.js loads after this file
-  window.addEventListener("DOMContentLoaded", function () {
-    var NP = window.NumbericsProgress, seen = true;
-    try { seen = NP && NP.seenHowto ? NP.seenHowto(ID) : true; } catch (e) { seen = true; }
-    if (fresh && !seen) howto();
-  });
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
     settle(); targeting = null;

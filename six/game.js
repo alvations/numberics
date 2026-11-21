@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   var E = window.NumbericsSix, K = window.NumbericsKit, P = window.NumbericsPower;
-  var M = window.NumbericsMotion, A = window.NumbericsAudio, TR = window.NumbericsTrophies, PG = window.NumbericsProgress;
+  var M = window.NumbericsMotion, TR = window.NumbericsTrophies, PG = window.NumbericsProgress;
   var store = K.store("numberics_six_v1");
   var $ = function (id) { return document.getElementById(id); };
 
@@ -67,7 +67,7 @@
   function ord(k) { return ["1st", "2nd", "3rd", "4th", "5th", "6th"][k] || (k + 1) + "th"; }
 
   // ---------- sound, haptics, trophies, music (every call is safe when its module is missing) ----------
-  function snd(name, arg) { try { if (A && typeof A[name] === "function") A[name](arg); } catch (e) { /* silent */ } }
+  function snd(name, arg) { if (M && M.sfx) M.sfx(name, arg); } // the shared call (shared/motion.js, TRIAGE4 D7)
   function report(ev, d) { try { return TR ? TR.report("six", ev, d) || [] : []; } catch (e) { return []; } }
   function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
   // roots and factorials in the made line (a number's sign and a bracket's sign): 1 root, 2 !, 3 two roots, 4 (root)!
@@ -82,17 +82,17 @@
   // ---------- motion (REDESIGN.md 5.9, 5.11, 5.12) ----------
   // Effective motion is read from NumbericsMotion at each animation (Settings first, then the device). Every
   // animation is tracked; a new input calls hush() first, which ends them all and runs the pending steps at once
-  // (pending sounds are dropped), so an input is never delayed and never lands on a stale picture.
+  // (the pending sounds play then, one of each: the family's one rule, D7), so an input is never delayed and never
+  // lands on a stale picture.
   var T = M ? M.T : { flip: 160, pop: 180 }, EZ = M ? M.E : { out: "ease-out", pop: "ease-out" };
-  var seq = M ? M.seq() : null, anims = [], ghosts = [], hushing = false;
+  var seq = M ? M.seq() : null, anims = [], ghosts = [];
   function play(el, frames, opts, red) { var a = M && M.play ? M.play(el, frames, opts, red) : null; if (a) anims.push(a); return a; }
   function later(ms, fn, sound) {
     if (!seq) { if (!sound) fn(); return; }
-    seq.at(ms, function () { if (sound && hushing) return; fn(); });
+    if (sound) seq.sound(ms, fn); else seq.at(ms, fn);
   }
   function hush() {
-    hushing = true;
-    try { if (seq) seq.finish(); } finally { hushing = false; }
+    if (seq) seq.finish(anims.length > 0);
     var a = anims; anims = [];
     a.forEach(function (x) { try { x.cancel(); } catch (e) { /* already gone */ } });
     ghosts.forEach(function (g) { if (g.parentNode) g.parentNode.removeChild(g); }); ghosts = [];
@@ -538,23 +538,17 @@
   // ---------- how to play (REDESIGN.md 1.3, 9.6): three steps, a small picture and one sentence each ----------
   function mt(v, cls) { return '<span class="mt' + (cls ? " " + cls : "") + '"' + (cls ? "" : ' style="--h:' + K.hue(level(String(v))) + '"') + ">" + v + "</span>"; }
   var STEPS = [
-    ['<div class="eq">' + mt(2) + '<span class="hg">+</span>' + mt(2) + "</div>", "Tap a gap to put a sign there."],
-    ['<div class="eq sm">' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">=</span>' + mt(6, "gold") + "</div>", "Make the line equal six."],
-    ['<div class="eq"><span class="op">(</span>' + mt(3) + '<span class="op">)!</span><span class="op">=</span>' + mt(6, "gold") + "</div>", "Use brackets, roots and ! when you need them."]
+    { picture: '<div class="eq">' + mt(2) + '<span class="hg">+</span>' + mt(2) + "</div>", text: "Tap a gap to put a sign there." },
+    { picture: '<div class="eq sm">' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">+</span>' + mt(2) + '<span class="op">=</span>' + mt(6, "gold") + "</div>", text: "Make the line equal six." },
+    { picture: '<div class="eq"><span class="op">(</span>' + mt(3) + '<span class="op">)!</span><span class="op">=</span>' + mt(6, "gold") + "</div>", text: "Use brackets, roots and ! when you need them." }
   ];
-  function howto() {
-    var U = window.NumbericsUI; if (!U || !U.sheet) return;
-    U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (st) { return '<div class="step"><div class="pv" aria-hidden="true">' + st[0] + "</div><p>" + st[1] + "</p></div>"; }).join("") + "</div>";
-    }, { title: "How to play Six" });
-    try { if (PG) PG.markHowto("six"); } catch (e) { /* seen in memory only */ }
-  }
-  $("howto-open").addEventListener("click", howto);
-  // opens by itself once, on a first visit with nothing saved (ui.js loads after this file, so once the page is parsed)
-  var firstVisit = !loaded; try { firstVisit = firstVisit && !(PG && PG.seenHowto("six")); } catch (e) { /* keep */ }
-  var demoed = false;
-  function autoHowto() { if (!demoed) howto(); }
-  if (firstVisit) { if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", autoHowto); else setTimeout(autoHowto, 0); }
+  // the family's one sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, on a first visit with nothing saved
+  var how = null, demoed = false;
+  function howto() { if (how) how.open(); }
+  document.addEventListener("DOMContentLoaded", function () {
+    var U = window.NumbericsUI; if (!U || !U.howto) return;
+    how = U.howto("six", { title: "Six", steps: STEPS, saved: !!loaded || demoed });
+  });
   // Screenshot hook (tools/shots.cjs): a fixed mid-round state, not reachable from the UI.
   window.__demo = function () {
     demoed = true; if (window.NumbericsUI && window.NumbericsUI.current() === "howto") window.NumbericsUI.close();

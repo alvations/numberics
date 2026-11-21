@@ -26,7 +26,7 @@ const VIEWS = [
   const b = await chromium.launch();
   let bad = 0;
   for (const g of games) for (const v of VIEWS) {
-    const ctx = await b.newContext({ viewport: v.viewport, deviceScaleFactor: 2, reducedMotion: "reduce" });
+    const ctx = await b.newContext({ viewport: v.viewport, deviceScaleFactor: 2, reducedMotion: "reduce", colorScheme: "dark" }); // the README shots stay in the Dark identity (Theme follows the device since TRIAGE4 D5)
     const p = await ctx.newPage(); const errs = []; p.on("pageerror", e => errs.push(e.message));
     await p.goto("http://127.0.0.1:" + port + "/" + g.path);
     await p.evaluate(() => { if (typeof window.__demo === "function") window.__demo(); });

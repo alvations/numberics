@@ -45,9 +45,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
     const g = [...document.querySelectorAll("#sh-settings .seg3")].map(s => [...s.children].map(b => b.textContent.replace(/\u00a0/g, " ")).join("/"));
     return g.join("|") === "Auto (per game)/Chill/Drift/Pocket/Quest/Blocks/Pulse/Epic|Device/Less/Full|Dark/Light/Device" && [...document.querySelectorAll("#sh-settings .seg3 button")].every(b => b.getBoundingClientRect().height >= 38 && b.hasAttribute("aria-pressed")); }));
   ck("Vibration shows where navigator.vibrate exists", await p.isVisible('#sh-settings [data-sw="haptics"]'));
-  ck("defaults shown: sound on, Motion Device, Theme Dark, volume 50", await p.evaluate(() =>
+  ck("defaults shown: sound on, Motion Device, Theme Device (TRIAGE4 D5), volume 50", await p.evaluate(() =>
     document.querySelector('[data-sw="sound"]').getAttribute("aria-checked") === "true" && document.querySelector('[data-seg="motion"][data-v="auto"]').getAttribute("aria-pressed") === "true" &&
-    document.querySelector('[data-seg="theme"][data-v="dark"]').getAttribute("aria-pressed") === "true" && document.querySelector("[data-vol]").value === "50"));
+    document.querySelector('[data-seg="theme"][data-v="auto"]').getAttribute("aria-pressed") === "true" && document.querySelector("[data-vol]").value === "50"));
   // Music controls (docs/design/MUSIC.md, Settings fields)
   ck("Music sits right under Sound and Volume: Sound, Volume, Music, Music volume, Style, then Vibration", await p.evaluate(() =>
     [...document.querySelectorAll("#sh-settings [data-sw], #sh-settings [data-vol], #sh-settings [data-mvol], #sh-settings [data-mstyle]")]
@@ -198,7 +198,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await openSettings(q);
   const fc = q.waitForEvent("filechooser"); await q.click('#sh-settings [data-mem="load"]'); const chooser = await fc;
   ck("Load opens a .json file picker", /\.json/.test(await q.evaluate(() => document.querySelector("#sh-settings [data-file]").accept)));
-  const nav = q.waitForNavigation(); await chooser.setFiles(file); await nav;
+  await chooser.setFiles(file); await q.waitForSelector('#sh-settings [data-mem="yes"]');
+  ck("Load asks first (TRIAGE4 family): 'Load the save from <date>?'", /Load the save from \d{4}-\d\d-\d\d\?/.test(await q.textContent("#sh-settings [data-memst]")));
+  const nav = q.waitForNavigation(); await q.click('#sh-settings [data-mem="yes"]'); await nav;
   const after = await nmKeys(q);
   ck("Load replaced every numberics_* key in the file, byte for byte", Object.keys(before).every(k => after[k] === before[k]), JSON.stringify(after).slice(0, 200));
   // the file holds every numberics_* key on the device at Save (the seeded ones plus any the page wrote itself), and no other

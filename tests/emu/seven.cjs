@@ -348,7 +348,9 @@ module.exports = async function ({ browser, url, ck, shot }) {
   await p.keyboard.press("ArrowRight"); await p.keyboard.press("Enter"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("ArrowRight"); await p.keyboard.press("Enter");
   s = await st(p);
   ck("two quick drops during an animation are both applied at once", s.drops === dq + 2 && JSON.stringify(s.grid) === JSON.stringify(want2), JSON.stringify(s.grid.slice(42)));
-  ck("finishing an animation drops its pending sounds (no bunching)", await p.evaluate(() => window.__snd.filter(x => x[0] === "pop").length) === 0);
+  // D7: finishing an animation plays its pending sounds at once, one of each: the chain's pops sound once, never dropped
+  ck("finishing an animation plays its pending pops at once, one of each (D7)", await p.evaluate(() => window.__snd.filter(x => x[0] === "pop").length) === 1,
+    JSON.stringify(await p.evaluate(() => window.__snd.map(x => x[0]))));
   await idle(p);
   ck("after the second drop settles the drawn discs match the grid", await p.locator("#discs > .tile").count() === (await st(p)).grid.filter(Boolean).length);
   // trophies: every Seven event on a scripted line

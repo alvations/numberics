@@ -42,15 +42,16 @@ const KEY = "numberics_settings_v1";
 
 t("defaults match REDESIGN.md 6.1", () => {
   const S = load().NumbericsSettings;
-  ok(JSON.stringify(S.get()) === JSON.stringify({ v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "dark", text: "normal", contrast: "normal",
-    music: true, musicVolume: 0.5, musicStyle: "auto" }), "with the music fields of MUSIC.md");
+  ok(JSON.stringify(S.get()) === JSON.stringify({ v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "auto", text: "normal", contrast: "normal",
+    music: true, musicVolume: 0.5, musicStyle: "auto", unmute: "both" }), "with the music fields of MUSIC.md; theme follows the device (TRIAGE4 D5)");
   ok(S.KEY === KEY);
 });
 t("malformed fields fall back to the default one by one", () => {
   const S = load({ stored: { [KEY]: JSON.stringify({ sound: "yes", volume: 7, haptics: false, motion: "full", theme: "purple", text: "large", contrast: 1 }) } }).NumbericsSettings;
   const s = S.get();
-  ok(s.sound === true && s.volume === 1 && s.haptics === false && s.motion === "full" && s.theme === "dark" && s.text === "large" && s.contrast === "normal", JSON.stringify(s));
-  ok(load({ stored: { [KEY]: "{not json" } }).NumbericsSettings.get().theme === "dark", "corrupt JSON -> defaults");
+  ok(s.sound === true && s.volume === 1 && s.haptics === false && s.motion === "full" && s.theme === "auto" && s.text === "large" && s.contrast === "normal", JSON.stringify(s));
+  ok(load({ stored: { [KEY]: "{not json" } }).NumbericsSettings.get().theme === "auto", "corrupt JSON -> defaults");
+  ok(load({ stored: { [KEY]: JSON.stringify({ theme: "dark" }) } }).NumbericsSettings.get().theme === "dark", "a saved Dark is kept (D5 changes only the default)");
   ok(S.normalize({ volume: NaN }).volume === 0.5 && S.normalize({ volume: -1 }).volume === 0 && S.normalize(null).sound === true);
 });
 t("set() saves, re-applies the html attributes live, and returns the new settings", () => {
@@ -137,7 +138,7 @@ const SAVES = {
   numberics_trophies_v1: JSON.stringify({ got: { fam_first: 20261120 } }),
   numberics_progress_v1: "{\"two\":{\"best\":\"Best 2048\"}}",
   [KEY]: JSON.stringify({ v: 1, sound: false, volume: 0.25, haptics: true, motion: "reduced", theme: "light", text: "large", contrast: "high",
-    music: false, musicVolume: 0.3, musicStyle: "pulse" })
+    music: false, musicVolume: 0.3, musicStyle: "pulse", unmute: "both" })
 };
 t("the blob is the melon-eight keystream XOR (FNV-1a seed of 'numberics', xorshift) and round-trips UTF-8", () => {
   const M = load().NumbericsSettings.memory, obj = { a: "café 数", n: [1, 2, 3] };
@@ -195,6 +196,55 @@ t("the sheet entry points are safe without the UI module", () => {
 t("settings.js never touches storage outside try/catch helpers and has no em-dash", () => {
   const s = read("shared/settings.js");
   ok(!/—/.test(s)); ok((s.match(/localStorage\./g) || []).length === (s.match(/try \{[^\n]*localStorage\./g) || []).length, "every localStorage use on a try line");
+});
+// ---- TRIAGE4 D2: the one-tap mute ----
+t("toggleMute: mutes Sound and Music together and brings back exactly what was on", () => {
+  const S = load().NumbericsSettings;
+  ok(S.muted() === false);
+  S.toggleMute(); ok(S.muted() && !S.get().sound && !S.get().music && S.get().unmute === "both", JSON.stringify(S.get()));
+  S.toggleMute(); ok(!S.muted() && S.get().sound && S.get().music);
+  S.set({ music: false }); S.toggleMute(); ok(S.muted() && S.get().unmute === "sound");
+  S.toggleMute(); ok(S.get().sound === true && S.get().music === false, "only Sound comes back");
+  S.set({ sound: false, music: true }); S.toggleMute(); S.toggleMute(); ok(S.get().sound === false && S.get().music === true, "only Music comes back");
+  const c = load({ stored: { [KEY]: JSON.stringify({ sound: false, music: false, unmute: "music" }) } }).NumbericsSettings;
+  ok(c.muted()); c.toggleMute(); ok(!c.get().sound && c.get().music, "remembered across a reload");
+  ok(load({ stored: { [KEY]: JSON.stringify({ unmute: "nonsense" }) } }).NumbericsSettings.get().unmute === "both", "a bad unmute falls back");
+});
+// ---- TRIAGE4 D6 and B1: the kit's batched store and Memory's freeze ----
+t("kit store: a save is kept at once and written once, in one batch, later; every store of the key reads it", () => {
+  const c = load(), K = c.NumbericsKit, a = K.store("numberics_a_v1"), a2 = K.store("numberics_a_v1"), b = K.store("numberics_b_v1");
+  a.save({ n: 1 }); a.save({ n: 2 }); b.save({ m: 1 });
+  ok(c.localStorage.getItem("numberics_a_v1") === null && c.localStorage.getItem("numberics_b_v1") === null, "nothing written inside the call");
+  ok(a.load().n === 2 && a2.load().n === 2 && b.load().m === 1, "pending saves read back, through any store of the key");
+  K.flush();
+  ok(c.localStorage.getItem("numberics_a_v1") === '{"n":2}' && c.localStorage.getItem("numberics_b_v1") === '{"m":1}', "one flush writes the latest of each");
+});
+t("kit store: pagehide flushes the batch, and a save made while leaving writes at once", () => {
+  const c = load(), K = c.NumbericsKit, a = K.store("numberics_a_v1");
+  a.save({ n: 1 });
+  (c.listeners.pagehide || []).forEach(f => f({ type: "pagehide" }));
+  ok(c.localStorage.getItem("numberics_a_v1") === '{"n":1}', "flushed on pagehide");
+  a.save({ n: 2 }); ok(c.localStorage.getItem("numberics_a_v1") === '{"n":2}', "a pagehide save (Sudoku's) is written at once");
+  (c.listeners.pageshow || []).forEach(f => f({ type: "pageshow" }));
+  a.save({ n: 3 }); ok(c.localStorage.getItem("numberics_a_v1") === '{"n":2}', "back on the page: batched again");
+});
+t("Memory freezes the store: pending saves are dropped and no later save (pagehide included) overwrites a Load or an Erase", () => {
+  const c = load({ stored: SAVES }), K = c.NumbericsKit, M = c.NumbericsSettings.memory, text = M.pack();
+  const two = K.store("numberics_endless_v1"); two.save({ dirty: 1 });
+  const d = load({ stored: SAVES }), K2 = d.NumbericsKit, st = K2.store("numberics_endless_v1");
+  st.save({ pending: 1 });
+  ok(d.NumbericsSettings.memory.loadText(text) === true && K2.frozen(), "Load freezes");
+  st.save({ pagehide: 1 }); (d.listeners.pagehide || []).forEach(f => f({ type: "pagehide" })); st.save({ late: 1 }); K2.flush();
+  ok(d.localStorage.getItem("numberics_endless_v1") === SAVES.numberics_endless_v1, d.localStorage.getItem("numberics_endless_v1"));
+  const e = load({ stored: SAVES }), K3 = e.NumbericsKit, s3 = K3.store("numberics_sudoku_v1");
+  s3.save({ pending: 1 }); e.NumbericsSettings.memory.erase();
+  s3.save({ pagehide: 1 }); (e.listeners.pagehide || []).forEach(f => f({ type: "pagehide" })); K3.flush();
+  ok(e.localStorage.getItem("numberics_sudoku_v1") === null, "Erase stays erased");
+  ok(JSON.parse(c.NumbericsSettings.memory.unpack(c.NumbericsSettings.memory.pack()).numberics_endless_v1).dirty === 1, "Save flushes pending writes first, so the file holds them");
+});
+t("a Load the browser refuses thaws the store again (nothing reloads, play goes on saving)", () => {
+  const c = load({ blocked: true }), text = load({ stored: SAVES }).NumbericsSettings.memory.pack();
+  ok(c.NumbericsSettings.memory.loadText(text) === false && c.NumbericsKit.frozen() === false);
 });
 require("./conventions")(t, ok, ["shared/settings.js", "shared/ui.js"]);
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

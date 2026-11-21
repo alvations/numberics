@@ -451,7 +451,7 @@ t("client wiring for the redesign", () => {
   const src = fs.readFileSync(path.join(__dirname, "../six/game.js"), "utf8"), html = fs.readFileSync(path.join(__dirname, "../six/index.html"), "utf8");
   ok(/report\("solve", \{ tier: L\.t, helped: !!state\.helped, sqrt: n\.sqrt, fact: n\.fact, mode: state\.mode, round: state\.round,\s+streak: runs\[mode\]\.streak/.test(src), "solve fields");
   ok(/report\("end", \{ mode: state\.mode, solved: state\.solved, round: state\.round/.test(src), "end fields");
-  ok(/PG\.put\("six"/.test(src) && /PG\.daily\("six"/.test(src) && /seenHowto\("six"\)/.test(src) && /markHowto\("six"\)/.test(src), "progress");
+  ok(/PG\.put\("six"/.test(src) && /PG\.daily\("six"/.test(src) && /U\.howto\("six", \{ title: "Six", steps: STEPS, saved: !!loaded \|\| demoed \}\)/.test(src), "progress and the shared how-to (D8)");
   ok(/NumbericsMusic\.duck\(on\)/.test(src) && /TR\.pills\(\$\("over-pills"\)/.test(src), "duck and pills");
   ok(/<details class="how"><summary>How to play<\/summary>/.test(html) && /id="over-pills" class="tro-pills"/.test(html) && /id="games" class="cards"/.test(html), "page parts");
   ok(!/<p class="how">/.test(html), "the how-to paragraph moved into the row");

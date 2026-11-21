@@ -19,6 +19,18 @@ const tokens = block(read(CSS[0]), CSS[0]);
 t("the token block is byte-identical in shared/theme.css, style.css and sudoku/style.css", () => {
   CSS.slice(1).forEach(f => ok(block(read(f), f) === tokens, f + " differs from shared/theme.css"));
 });
+t("the R4 shared block (top bar at 320 px, mute, end cards, trophy goals, Today, Memory) is byte-identical in all three", () => {
+  const A = "/* ===== R4 shared (TRIAGE4;", Z = "/* ===== end R4 shared ===== */";
+  const get = f => { const s = read(f), a = s.indexOf(A), b = s.indexOf(Z); ok(a >= 0 && b > a, f + ": R4 markers"); return s.slice(a, b + Z.length); };
+  const r = get(CSS[0]); CSS.slice(1).forEach(f => ok(get(f) === r, f + " differs from shared/theme.css"));
+  ok(/\.tb-btn\{ min-width:var\(--tap\); flex:none; \}/.test(r) && /\.tb-word\{ display:none; \}/.test(r), "the top bar never shrinks a button");
+});
+t("the top bar: four 44 px buttons (Games, Sound, Trophies, Settings), the Settings icon a gear, the words hideable", () => {
+  const u = read("shared/ui.js");
+  ok(/data-open="games"[\s\S]*data-open="mute"[\s\S]*data-open="trophies"[\s\S]*data-open="settings"/.test(u), "order");
+  ok(/class="tb-word">Numberics</.test(u) && /class="tb-lbl">Games</.test(u) && /aria-label="Games"/.test(u), "words in spans, names kept");
+  ok(!/M12 3v2\.5M12 18\.5V21/.test(u), "the old sun rays are gone");
+});
 t("the token block comes first in each file (nothing above it but the SPDX comment)", () => {
   CSS.forEach(f => { const s = read(f); ok(!/[{}]/.test(s.slice(0, s.indexOf(BEGIN)).replace(/\/\*[\s\S]*?\*\//g, "")), f); });
 });
@@ -137,7 +149,7 @@ t("stub modules define their globals with the spec API, and every call is safe w
   const c = load(["shared/boot.js"].concat(MODS));
   const S = c.NumbericsSettings, M = c.NumbericsMotion, A = c.NumbericsAudio, T = c.NumbericsTrophies, P = c.NumbericsProgress, U = c.NumbericsUI;
   ok(S && M && A && T && P && U, "globals");
-  const s = S.get(); ok(s.v === 1 && s.theme === "dark" && s.motion === "auto" && s.volume === 0.5 && s.sound === true, "settings defaults");
+  const s = S.get(); ok(s.v === 1 && s.theme === "auto" && s.motion === "auto" && s.volume === 0.5 && s.sound === true, "settings defaults");
   S.set({ theme: "light" }); ok(typeof S.reducedMotion() === "boolean");
   ok(M.T.slide === 110 && M.T.pop === 180 && M.E.slide === "cubic-bezier(.45,0,.55,1)", "motion T/E");
   ok(M.fallMs(1) === 130 && M.fallMs(6) === 217, "fallMs");
@@ -168,7 +180,7 @@ t("boot applies stored settings and falls back to defaults with storage blocked"
     localStorage: { getItem: () => JSON.stringify({ theme: "purple", text: 3, motion: "full" }) } };
   w2.window = w2; vm.runInContext(read("shared/boot.js"), vm.createContext(w2));
   const g = doc2.documentElement.dataset;
-  ok(g.theme === "dark" && g.text === "normal" && g.motion === "full", "malformed fields fall back one by one, Full beats the OS " + JSON.stringify(g));
+  ok(g.theme === "light" && g.text === "normal" && g.motion === "full", "malformed fields fall back one by one (theme to Device, light here), Full beats the OS " + JSON.stringify(g));
 });
 require("./conventions")(t, ok, ["style.css", "sudoku/style.css"]); // the shared modules are checked in test-shared.js
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

@@ -431,7 +431,7 @@ t("D-Two motion (REDESIGN.md 5.3, 5.11, 5.12): a keyed layer, never a rebuilt bo
   ok(/M\.layer\(tilesEl,/.test(g) && /M\.track\(ids, r\.trace, r\.spawned, nextId\)/.test(g), "layer + track");
   ok(!/tilesEl\.textContent\s*=/.test(g) && !/innerHTML/.test(g.replace(/body\.innerHTML/, "")), "the board's DOM is never rebuilt");
   ok(!/var ANIM\b/.test(g) && !/K\.reducedMotion\(\)/.test(g), "no motion constant cached at load");
-  ok(/function flush\(\) \{ layer\.finish\(\); snd\.cancel\(\); clearRing\(\); \}/.test(g) && /function doMove\(dir\) \{\s*flush\(\);/.test(g), "a new input finishes the running animation first");
+  ok(/function flush\(\) \{ snd\.finish\(layer\.busy\(\)\); layer\.finish\(\); clearRing\(\); \}/.test(g) && !/snd\.cancel\(\)/.test(g) && /function doMove\(dir\) \{\s*flush\(\);/.test(g), "a new input finishes the running animation first");
   const blk = (s, a, z) => s.slice(s.indexOf(a), s.indexOf(z) + z.length);
   ok(blk(c, "/* ===== B2 motion", "/* ===== end B2 motion ===== */") === blk(th, "/* ===== B2 motion", "/* ===== end B2 motion ===== */"), "B2 block mirrored byte for byte");
   ok(/:root\[data-motion="full"\]\{ --anim:var\(--m-slide\); \}/.test(c) && /:root\[data-motion="reduced"\]\{ --anim:0ms; \}/.test(c), "B1 motion lines");
@@ -443,7 +443,7 @@ t("D-Two trophies, progress, how-to and music (REDESIGN.md 8.4, 3.5, 1.3, MUSIC.
   ok(/merges: r\.merges\.length, grid: state\.grid\.slice\(\),\s*moves: state\.moves, stuck: !N\.canMove\(state\), run: run/.test(g), "move fields");
   ok(/run: run \}\);\s*\/\/ the card summary/.test(g) || /store\.save\(\{ state: state, bestScore: best\.score, bestTop: best\.top, bestBefore: bestBefore, run: run \}\)/.test(g), "the run record is saved with the game");
   ok(/NP\.put\("two", \{ best:/.test(g), "progress put on persist");
-  ok(/seenHowto\("two"\)/.test(g) && /markHowto\("two"\)/.test(g) && /var firstVisit = !saved;/.test(g), "how-to once, never for a saved player");
+  ok(/UI\.howto\("two", \{ title: "Two", steps: STEPS, saved: !!saved \|\| state\.moves > 0 \}\)/.test(g) && !/seenHowto|markHowto/.test(g), "the shared how-to (D8): once, never for a saved player");
   ok(/<details class="how"><summary>How to play<\/summary>/.test(h) && /<div id="over-pills" class="tro-pills" hidden><\/div>/.test(h), "how-to row and pill row");
   ok(/TR\.pills\(\$\("over-pills"\), endIds\)/.test(g) && /NumbericsMusic\.duck\(on\)/.test(g) && !/music\.js/.test(h), "pills, duck; music.js is never loaded by the page");
 });

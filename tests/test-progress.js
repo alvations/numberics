@@ -92,4 +92,20 @@ t("the record is plain JSON (Settings Save/Load round-trips it)", () => {
   const s = LS.m[P.KEY]; LS.m[P.KEY] = JSON.stringify(JSON.parse(s));
   ok(LS.m[P.KEY] === s && P.get("three").liveText === "Score 30" && P.today().seven === "88" && P.seenHowto("three"));
 });
+// TRIAGE4 D9 and D4: the day's best on the chip, the Daily Sudoku level, the streak always in the card
+t("daily(id, text, { score, low }) keeps the day's best: higher scores, or lower times; plain text keeps the latest", () => {
+  fresh();
+  ok(P.daily("seven", "807", { score: 807 }) === true && P.daily("seven", "300", { score: 300 }) === false && P.today().seven === "807");
+  ok(P.daily("seven", "1,204", { score: 1204 }) === true && P.today().seven === "1,204");
+  P.daily("sudoku", "6:10", { score: 370, low: true }); P.daily("sudoku", "7:00", { score: 420, low: true }); ok(P.today().sudoku === "6:10");
+  P.daily("sudoku", "4:12", { score: 252, low: true }); ok(P.today().sudoku === "4:12");
+  P.daily("six", "3 made"); P.daily("six", "2 made"); ok(P.today().six === "2 made", "no score: the latest");
+  LS.m[P.KEY] = JSON.stringify({ v: 1, daily: { "20261120": { seven: { t: 5 }, six: "ok", sudoku: { t: "1:00", s: "x" } } } });
+  ok(JSON.stringify(P.today()) === '{"six":"ok","sudoku":"1:00"}', JSON.stringify(P.today()));
+});
+t("dailyLevel: Easy Monday to Thursday, Medium Friday and Saturday, Hard Sunday; the Today card carries it and the streak", () => {
+  ok(["hard", "easy", "easy", "easy", "easy", "medium", "medium"].every((l, w) => P.dailyLevel(new Date(2026, 10, 22 + w)) === l));
+  fresh(); at(2026, 11, 21); const c = P.todayCard(); ok(c.levels.sudoku === "medium" && c.streak === 0 && c.day === "20261121", JSON.stringify(c));
+  at(2026, 11, 25, 23); ok(P.msToMidnight() === 3600 * 1000 + 1000, String(P.msToMidnight()));
+});
 console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0);

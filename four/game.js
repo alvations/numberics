@@ -4,11 +4,12 @@
  * Motion (docs/design/REDESIGN.md 5.5): every disc is a keyed node in a NumbericsMotion layer. A dropped disc (yours
  * or the computer's) falls from one slot above the board with gravity and settles; Pop drops the discs above by one
  * slot; the winning line is drawn through the four centres. A new input finishes the running animation first and is
- * applied at once; sounds sit on a timeline that a new input drops. */
+ * applied at once; sounds sit on their own timeline and follow the family's one rule (shared/motion.js, TRIAGE4 D7):
+ * a new input plays the pending ones at once, one of each, never dropped. */
 (function () {
   "use strict";
   var F = window.NumbericsFour, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
-  var A = window.NumbericsAudio, TR = window.NumbericsTrophies, NP = window.NumbericsProgress;
+  var TR = window.NumbericsTrophies, NP = window.NumbericsProgress;
   var store = K.store("numberics_four_v1");
   var COLS = F.COLS, ROWS = F.ROWS;
   var THINK = 380, OVER_DELAY = 1500; // the winning line stays in view before the result card
@@ -28,7 +29,7 @@
   var LEVEL_NAMES = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
   // sounds and haptics never break the page (a missing module costs a nicety)
-  function sfx(name, arg) { try { if (A && typeof A[name] === "function") A[name](arg); } catch (e) { /* silent */ } }
+  var sfx = M.sfx; // the shared call (shared/motion.js)
   function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* silent */ } }
   function sheetOpen() { try { return !!(window.NumbericsUI && window.NumbericsUI.open()); } catch (e) { return false; } }
 
@@ -107,16 +108,17 @@
     return { out: out, falls: falls };
   }
 
-  // ---- timelines: `beats` holds visual steps (a new input runs them now), `sounds` holds sounds (a new input drops them) ----
+  // ---- timelines: `beats` holds visual steps, `sounds` holds sounds; a new input runs both now, the sounds one of each ----
   var beats = M.seq(), sounds = M.seq(), lineAnim = null;
   function settle() { // REDESIGN.md 5.11: the end state now, then the new input is applied
-    layer.finish(); beats.finish(); sounds.cancel();
+    var running = layer.busy() || beats.busy() || sounds.busy();
+    layer.finish(); M.together(function () { beats.finish(); sounds.finish(running); });
     if (lineAnim) { try { lineAnim.finish(); } catch (e) { /* gone */ } lineAnim = null; }
   }
   // a disc lands after its fall: the land sound and tap at impact; the reward chime; the line for a winning drop
   function landed(rows, r) {
     var t = M.reduced() ? 0 : M.fallMs(rows);
-    sounds.at(t, function () { sfx("land"); sfx("buzz", "tap"); if (r.award) sfx("power"); });
+    sounds.sound(t, function () { sfx("land"); sfx("buzz", "tap"); if (r.award) sfx("power"); });
     if (r.win || (state.over && state.over.winner === 0)) {
       lineShown = false;
       beats.at(t, function () {
@@ -395,7 +397,7 @@
       state = r.state; targeting = null;
       layer.sync(tilesOf(), { out: p.out, falls: p.falls }); // the popped disc fades; the column drops one slot
       sfx("pop", 1);
-      if (p.falls.length) sounds.at(M.reduced() ? 0 : M.fallMs(1), function () { sfx("land"); });
+      if (p.falls.length) sounds.sound(M.reduced() ? 0 : M.fallMs(1), function () { sfx("land"); });
       persist(); K.toast("Pop!");
     } else { sfx("bad"); K.toast("That pop would complete a line", "bad"); }
     render();
@@ -498,31 +500,25 @@
   function md(n, who) { return '<span class="md" style="--h2:' + (who === 1 ? "var(--accent)" : who === 2 ? "var(--cool)" : "var(--cell)") + '">' + (n || "") + "</span>"; }
   function well(cells) { return '<div class="mg" style="grid-template-columns:repeat(5,20px)">' + cells.map(function (x) { return md(x[0], x[1]); }).join("") + "</div>"; }
   var STEPS = [
-    [well([[0, 0], [0, 0], [3, 1], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [2, 2], [1, 1], [0, 0], [0, 0]]),
-      "Tap a column to drop your disc."],
-    [well([[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [1, 2], [0, 0], [2, 2], [0, 0], [1, 1], [3, 1], [2, 1], [1, 1], [4, 2]]),
-      "Win with four of your colour in a row."],
-    [well([[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [1, 1], [0, 0], [0, 0], [0, 0], [4, 1], [1, 2], [2, 1], [3, 2]]),
-      "Or four in a row that add up to ten, two of them yours."]
+    { picture: well([[0, 0], [0, 0], [3, 1], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [2, 2], [1, 1], [0, 0], [0, 0]]),
+      text: "Tap a column to drop your disc." },
+    { picture: well([[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [1, 2], [0, 0], [2, 2], [0, 0], [1, 1], [3, 1], [2, 1], [1, 1], [4, 2]]),
+      text: "Win with four of your colour in a row." },
+    { picture: well([[0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [0, 0], [1, 1], [0, 0], [0, 0], [0, 0], [4, 1], [1, 2], [2, 1], [3, 2]]),
+      text: "Or four in a row that add up to ten, two of them yours." }
   ];
-  function howto() {
-    var U = window.NumbericsUI; if (!U || !U.sheet) return;
-    U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
-      }).join("") + "</div>";
-    }, { title: "How to play" });
-  }
-  $("howto-open").addEventListener("click", function () { sfx("tick"); howto(); });
+  // the family's one sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, never with a saved game
+  var how = null;
+  function howto() { if (how) how.open(); }
+  document.addEventListener("DOMContentLoaded", function () {
+    var U = window.NumbericsUI; if (!U || !U.howto) return;
+    how = U.howto("four", { title: "Four", steps: STEPS, saved: !!saved, onButton: function () { sfx("tick"); } });
+  });
 
   rekey(false);
   render();
   if (state.over) { lineShown = true; renderBoard(); drawLine(false); showOver(); clearTimeout(overTimer); overTimer = null; card(); }
   else if (state.turn === 2) scheduleCpu();
-  if (!saved) { // a first visit: the how-to opens by itself, once (after ui.js, which loads last, has run)
-    var first = function () { try { if (NP && !NP.seenHowto("four") && window.NumbericsUI) { NP.markHowto("four"); howto(); } } catch (e) { /* a nicety */ } };
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", first); else setTimeout(first, 0);
-  }
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {

@@ -351,7 +351,7 @@ t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move neve
   });
   t("D: sounds on the beats (slide, merge(index), best, power, lose) through one timeline", () => {
     ["slide", "merge", "best", "power", "lose"].forEach(n => ok(new RegExp('sfx\\("' + n + '"').test(js), n));
-    ok(/fx\.at\(slide, function \(\) \{ sfx\("merge", k\)/.test(js), "merge at the end of the slide");
+    ok(/fx\.sound\(slide, function \(\) \{ sfx\("merge", k\)/.test(js), "merge at the end of the slide (a sound step, D7)");
   });
   t("D: trophy events and fields exactly as 8.4", () => {
     ok(/trophy\("move", data\)/.test(js) && /value: N\.value\(state\.top\), merges: r\.merges\.length, grid: state\.grid\.map\(N\.value\), moves: state\.moves, run:/.test(js));
@@ -367,7 +367,7 @@ t("R2 property, by tile: Boost or Swap, 0 to 5 neutral moves, then any move neve
     ok(/<details class="how" id="how"><summary>How to play<\/summary>/.test(html) && !/<p class="how">/.test(html));
     ["Swipe to slide every tile.", "Neighbours in the run join: 1 and 1, 1 and 2, 2 and 3, 3 and 5.", "Equal tiles do not join, except 1 and 1."]
       .forEach(s => ok(js.indexOf('"' + s + '"') >= 0, s));
-    ok(/seenHowto\(ID\)/.test(js) && /markHowto\(ID\)/.test(js));
+    ok(/U\.howto\(ID, \{ title: "Fibonacci", steps: STEPS, saved: !fresh \}\)/.test(js)); // the shared how-to (D8)
   });
   t("D: the games list on the page is the cards (NumbericsNav)", () => ok(/<div id="games" class="cards" data-root="\.\.\/" data-current="fibonacci">/.test(html)));
   t("round 2: the help line, the tray and the engine agree on the 55 floor", () => {

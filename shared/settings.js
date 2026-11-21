@@ -5,20 +5,24 @@
  * Every change fires `numberics:settings` on window (detail: the full settings) and calls the on("change") listeners
  * with (settings, changedKeys). Loaded right after kit.js; it makes NumbericsKit.reducedMotion() follow the in-app
  * Motion setting, which beats the OS (Motion "Full" plays motion even when the device asks for less).
- * Music fields: docs/design/MUSIC.md, Settings fields. */
+ * Music fields: docs/design/MUSIC.md, Settings fields. Theme defaults to "auto" (the device; TRIAGE4 D5): a saved choice
+ * is kept as it was. muted() / toggleMute() are the top bar's one-tap mute (TRIAGE4 D2): it turns Sound and Music off
+ * together and remembers which were on (the `unmute` field), so the next tap brings back exactly those.
+ * Memory never races a page's own save (TRIAGE4 B1): it flushes the batched writes before Save, and freezes the kit's
+ * store (NumbericsKit.freeze) before Load or Erase writes, so no pagehide save during the reload can undo it. */
 (function (w) {
   "use strict";
   var KEY = "numberics_settings_v1", PREFIX = "numberics_";
-  var DEF = { v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "dark", text: "normal", contrast: "normal",
-    music: true, musicVolume: 0.5, musicStyle: "auto" };
+  var DEF = { v: 1, sound: true, volume: 0.5, haptics: true, motion: "auto", theme: "auto", text: "normal", contrast: "normal",
+    music: true, musicVolume: 0.5, musicStyle: "auto", unmute: "both" };
   // the music styles in menu order: [id, name, blurb] (keep in step with ORDER and STYLES in music.js; a test checks it)
   var STY = [["chill", "Chill", "Slow warm keys and a lazy beat."], ["drift", "Drift", "Soft bells and a slow pad, no drums."],
     ["pocket", "Pocket", "A bright little town tune on a pocket console."], ["quest", "Quest", "A march over open country, bound for somewhere far."],
     ["blocks", "Blocks", "A quick folk dance on an old handheld chip."], ["pulse", "Pulse", "Four on the floor, a pumping pad and a bright hook."],
     ["epic", "Epic", "Big drums, brass and a long climb."]];
-  var OK = { motion: ["auto", "reduced", "full"], theme: ["dark", "light", "auto"], text: ["normal", "large"], contrast: ["normal", "high"],
+  var OK = { motion: ["auto", "reduced", "full"], theme: ["dark", "light", "auto"], text: ["normal", "large"], contrast: ["normal", "high"], unmute: ["both", "sound", "music"],
     musicStyle: ["auto"].concat(STY.map(function (x) { return x[0]; })) };
-  var FIELDS = ["sound", "volume", "haptics", "motion", "theme", "text", "contrast", "music", "musicVolume", "musicStyle"];
+  var FIELDS = ["sound", "volume", "haptics", "motion", "theme", "text", "contrast", "music", "musicVolume", "musicStyle", "unmute"];
 
   // ---- the data: normalise field by field ----
   function normalize(raw) {
@@ -79,6 +83,13 @@
     if (changed.length) emit(changed);
     return get();
   }
+  // the one-tap mute: muted when neither Sound nor Music plays
+  function muted() { var s = current(); return !s.sound && !s.music; }
+  function toggleMute() {
+    var s = current();
+    if (s.sound || s.music) return set({ sound: false, music: false, unmute: s.sound && s.music ? "both" : s.sound ? "sound" : "music" });
+    return set({ sound: s.unmute !== "music", music: s.unmute !== "sound" });
+  }
   function reducedMotion() {
     try { return w.document.documentElement.dataset.motion === "reduced"; } catch (e) { return false; }
   }
@@ -132,8 +143,10 @@
     return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2);
   }
   // every numberics_* key, as the raw stored text, so a load writes back exactly what was there
+  function K() { return w.NumbericsKit || null; }
   function snapshot() {
     var data = {};
+    try { if (K() && K().flush) K().flush(); } catch (e) { /* nothing pending */ }
     rawKeys().forEach(function (k) { var v = rawGet(k); if (v != null) data[k] = v; });
     data[KEY] = JSON.stringify(current()); // settings travel even when storage is blocked
     return data;
@@ -153,12 +166,16 @@
   // write a loaded save: every key it holds replaces ours. False when storage refuses (nothing reloads then).
   function restore(data) {
     var ok = true, k;
+    freeze();
     for (k in data) if (!rawSet(k, data[k])) ok = false;
     if (data[KEY]) { try { cur = normalize(JSON.parse(data[KEY])); mem = data[KEY]; } catch (e) { /* keep ours */ } }
     return ok;
   }
   // remove every numberics_* key except the settings (a player who needs large text keeps it)
-  function wipe() { rawKeys().forEach(function (k) { if (k !== KEY) rawDel(k); }); }
+  function wipe() { freeze(); rawKeys().forEach(function (k) { if (k !== KEY) rawDel(k); }); }
+  // from the moment Memory writes until the reload, no page save reaches storage (B1); thaw() when nothing reloads
+  function freeze() { try { if (K() && K().freeze) K().freeze(); } catch (e) { /* no kit */ } }
+  function thaw() { try { if (K() && K().thaw) K().thaw(); } catch (e) { /* no kit */ } }
   function reload() { try { w.location.reload(); } catch (e) { /* no location */ } }
   function toast(msg) { if (w.NumbericsKit && w.NumbericsKit.toast) w.NumbericsKit.toast(msg, "info"); }
 
@@ -174,22 +191,47 @@
     return true;
   }
   var BAD_FILE = "That file is not a Numberics save.";
-  function loadText(text) {
-    var data = unpack(text);
-    if (!data) { toast(BAD_FILE); return false; }
-    if (!restore(data)) { toast("This browser blocks saving, so the file could not load."); return false; }
+  var BLOCKED = "This browser blocks saving, so the file could not load.";
+  function apply(data) {
+    if (!restore(data)) { thaw(); toast(BLOCKED); status(BLOCKED); return false; }
     reload(); return true;
   }
+  // the API path (tests, scripts): load at once. The sheet's Load button asks first (confirmLoad).
+  function loadText(text) {
+    var data = unpack(text);
+    if (!data) { bad(); return false; }
+    return apply(data);
+  }
+  function bad() { toast(BAD_FILE); status(BAD_FILE + " Nothing changed."); }
+  function savedOn(text) { try { var f = JSON.parse(text); return typeof f.saved === "string" && /^\d{4}-\d\d-\d\d$/.test(f.saved) ? f.saved : ""; } catch (e) { return ""; } }
   function loadFile(file) {
     if (!file) return;
     try {
       var r = new w.FileReader();
-      r.onload = function () { loadText(String(r.result || "")); };
-      r.onerror = function () { toast(BAD_FILE); };
+      r.onload = function () { var t = String(r.result || ""), d = unpack(t); if (!d) bad(); else confirmLoad(d, savedOn(t)); };
+      r.onerror = function () { bad(); };
       r.readAsText(file);
-    } catch (e) { toast(BAD_FILE); }
+    } catch (e) { bad(); }
   }
   function erase() { wipe(); reload(); }
+  // the Memory line under the buttons: a plain status (role=status), or the Load confirm
+  function status(msg) {
+    var el = X && X.isConnected ? X.querySelector("[data-memst]") : null; if (!el) return;
+    el.textContent = msg || ""; el.hidden = !msg;
+  }
+  function confirmLoad(data, day) {
+    var el = X && X.isConnected ? X.querySelector("[data-memst]") : null;
+    if (!el) { apply(data); return; }
+    el.hidden = false;
+    el.innerHTML = '<span class="memq">Load the save' + (day ? " from " + day : "") + "? It replaces the games, bests and trophies it holds.</span>" +
+      '<span class="mem2"><button class="btn primary" type="button" data-mem="yes">Load it</button><button class="btn" type="button" data-mem="no">Cancel</button></span>';
+    var yes = el.querySelector('[data-mem="yes"]');
+    yes.addEventListener("click", function () { tick(); apply(data); });
+    el.querySelector('[data-mem="no"]').addEventListener("click", function () {
+      tick(); status(""); var l = X && X.querySelector('[data-mem="load"]'); if (l) l.focus();
+    });
+    try { yes.focus({ preventScroll: false }); } catch (e) { yes.focus(); }
+  }
 
   // ---- the Settings sheet (REDESIGN.md 6.2), inside NumbericsUI.sheet ----
   var X = null; // the open sheet's controls, for sync()
@@ -226,9 +268,10 @@
       seg("theme", "Theme", [["dark", "Dark"], ["light", "Light"], ["auto", "Device"]]) +
       sw("text", "Larger text") + sw("contrast", "High contrast") +
       '<div class="sec">Memory</div>' +
-      '<p style="margin:2px 0 8px;color:var(--mute);font-size:var(--fs-sm)">Your games, bests and trophies live on this device. Save them to a file to move them to another one.</p>' +
+      '<p style="margin:2px 0 8px;color:var(--mute);font-size:var(--fs-sm)">Your games, bests and trophies live on this device. Save them to a file to move them to another one; Load puts a saved file back.</p>' +
       '<div class="mem"><button class="btn" type="button" data-mem="save">Save</button><button class="btn" type="button" data-mem="load">Load</button>' +
       '<button class="btn danger" type="button" data-mem="erase">Erase</button></div>' +
+      '<div class="memst" role="status" aria-live="polite" data-memst hidden></div>' +
       '<input type="file" accept=".json,application/json" hidden data-file>';
     X = el;
     Array.prototype.forEach.call(el.querySelectorAll("[data-sw]"), function (b) {
@@ -247,7 +290,7 @@
     var file = el.querySelector("[data-file]");
     file.addEventListener("change", function () { loadFile(file.files && file.files[0]); file.value = ""; });
     el.querySelector('[data-mem="save"]').addEventListener("click", function () { tick(); saveFile(); });
-    el.querySelector('[data-mem="load"]').addEventListener("click", function () { tick(); file.click(); });
+    el.querySelector('[data-mem="load"]').addEventListener("click", function () { tick(); status(""); file.click(); });
     var er = el.querySelector('[data-mem="erase"]');
     if (w.NumbericsKit && w.NumbericsKit.twoStep) w.NumbericsKit.twoStep(er, function () { return true; }, erase, "Sure? Erase everything");
     else er.addEventListener("click", erase);
@@ -278,8 +321,8 @@
 
   watch();
   w.NumbericsSettings = {
-    KEY: KEY, DEFAULTS: DEF, STYLES: STY.map(function (x) { return { id: x[0], name: x[1], blurb: x[2] }; }), get: get, set: set, on: on, off: off, reducedMotion: reducedMotion, open: open, normalize: normalize,
-    memory: { pack: pack, unpack: unpack, snapshot: snapshot, restore: restore, loadText: loadText, save: saveFile, erase: erase, wipe: wipe,
+    KEY: KEY, DEFAULTS: DEF, STYLES: STY.map(function (x) { return { id: x[0], name: x[1], blurb: x[2] }; }), get: get, set: set, on: on, off: off, muted: muted, toggleMute: toggleMute, reducedMotion: reducedMotion, open: open, normalize: normalize,
+    memory: { pack: pack, unpack: unpack, snapshot: snapshot, restore: restore, loadText: loadText, confirmLoad: confirmLoad, save: saveFile, erase: erase, wipe: wipe,
       enc: enc, dec: dec, BAD_FILE: BAD_FILE }
   };
 })(typeof window !== "undefined" ? window : this);

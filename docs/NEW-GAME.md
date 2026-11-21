@@ -60,6 +60,13 @@ games row. Turn-based games against the computer put the difficulty `.seg` row u
 - Storage only through `NumbericsKit.store(key)` (key `numberics_<id>_v1`), validate what you load.
 - Reduced motion: no movement animation (opacity fades are fine). Respect it via CSS and `NumbericsKit.reducedMotion()`.
 - Guard every async UI callback (timers, animation ends) against a state change in between.
+- How to play: one call, `NumbericsUI.howto(id, { title: "<Game>", steps: [{ text, picture(el) }], saved })` at
+  DOMContentLoaded (shared/howto.js, loaded before game.js; TRIAGE4 D8). It titles the sheet "How to play <Game>", adds
+  Play, opens itself once on a first visit (never with a saved game) and labels the row's `data-howto` button
+  "Show the three steps". Never build the sheet or the first-visit check yourself.
+- Sounds: `NumbericsMotion.sfx(name, arg)` and `.buzz(kind)`, never a wrapper of your own. A sound-only beat is
+  `seq.sound(ms, fn)`; a new input calls `seq.finish(running)`, never `cancel()`, so pending sounds play at once, one of
+  each, and the new input's own sounds play with it (TRIAGE4 D7). `cancel()` is for resets (New game, load).
 - Phone first: works at 375px wide with a 16px gutter, no horizontal scroll; keyboard and touch both work.
 - No em-dashes, SPDX header on every file, no `eval`/`Function`, no external requests, no new fonts.
 - Colours only from theme tokens and `NumbericsKit.hue(level)`; the accent gold marks the player / success.

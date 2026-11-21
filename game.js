@@ -5,13 +5,13 @@
  * Motion (docs/design/REDESIGN.md 5.3): like the original 2048, every tile keeps its element (NumbericsMotion.layer,
  * keyed by an id per cell that lives only here, never in the engine or the save) and slides by transform; a merged
  * tile pops on top after the slide, a spawned tile appears after it. A new input finishes the running animation and
- * is applied at once (5.11). Sounds play inside a generation-guarded timeline, so a new input drops pending ones. */
+ * is applied at once (5.11). Sounds follow the family's one rule (shared/motion.js, TRIAGE4 D7): a new input that ends
+ * a running animation plays the pending sounds at once (one of each), and its own sounds play with it, never late. */
 (function () {
   "use strict";
   var N = window.Numberics, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
   // optional modules: a missing one costs a nicety, never the game
-  function A(name, arg) { try { var a = window.NumbericsAudio; if (a && typeof a[name] === "function") a[name](arg); } catch (e) { /* silent */ } }
-  function buzz(kind) { A("buzz", kind); }
+  var A = M.sfx, buzz = M.buzz;   // the shared sound and haptic calls (shared/motion.js: one rule under fast play)
   function trophy(event, data) {
     try { var T = window.NumbericsTrophies; return T && T.report ? T.report("two", event, data) || [] : []; } catch (e) { return []; }
   }
@@ -94,7 +94,7 @@
     var rk = M.rekey(state.grid, nextId); ids = rk.ids; nextId = rk.next;
     layer.sync(tilesOf(), fx || {});
   }
-  var snd = M.seq();              // sounds and the ring, at their visual moment; a new input drops what is pending
+  var snd = M.seq();              // the move's sounds, at their visual moment (D7: a new input plays what is pending)
   var ringNode = null, ringT = null;
   function clearRing() { clearTimeout(ringT); ringT = null; if (ringNode) ringNode.classList.remove("ring"); ringNode = null; }
   function ring(node) {
@@ -210,12 +210,12 @@
   function toast(msg, kind) { K.toast(msg, kind); }
 
   // ---- input during motion: end the running animation now (end state at once), then apply the new input ----
-  function flush() { layer.finish(); snd.cancel(); clearRing(); }
+  function flush() { snd.finish(layer.busy()); layer.finish(); clearRing(); }
 
   // the run just ended on this action: report it and keep the trophies for the card's pills
   function ended(ids0) {
     endIds = (ids0 || []).concat(trophy("end", { score: state.score, top: state.top, run: run }));
-    snd.at(M.ms("slide") + M.ms("pop"), function () { A("lose"); buzz("lose"); });
+    snd.sound(M.ms("slide") + M.ms("pop"), function () { A("lose"); buzz("lose"); });
   }
 
   function doMove(dir) {
@@ -244,16 +244,16 @@
     if (r.gained) plus(r.gained);
     A("slide");
     var slide = M.ms("slide"), hi = r.merges.length ? Math.max.apply(null, r.merges) : 0;
-    if (hi) snd.at(slide, function () { A("merge", hi); buzz("merge"); });
+    if (hi) snd.sound(slide, function () { A("merge", hi); buzz("merge"); });
     if (top >= N.AWARD_FROM_LEVEL && state.top > top0) {
       var m = fx.merges.filter(function (x) { return state.grid[x.to] === top; })[0];
       ring(m ? layer.get(m.id) : null);
-      snd.at(slide + M.ms("pop"), function () { A("best"); buzz("big"); });
-      if (r.awarded.length) snd.at(slide + M.ms("pop") + 240, function () { A("power"); });
+      snd.sound(slide + M.ms("pop"), function () { A("best"); buzz("big"); });
+      if (r.awarded.length) snd.sound(slide + M.ms("pop") + 240, function () { A("power"); });
     }
     if (!bestRung && bestBefore > 0 && state.score > bestBefore) {
       bestRung = true; bestMoment();
-      if (!(top >= N.AWARD_FROM_LEVEL)) snd.at(slide, function () { A("best"); });
+      if (!(top >= N.AWARD_FROM_LEVEL)) snd.sound(slide, function () { A("best"); });
     }
     var got = trophy("move", { top: state.top, score: state.score, merges: r.merges.length, grid: state.grid.slice(),
       moves: state.moves, stuck: !N.canMove(state), run: run });
@@ -384,30 +384,21 @@
   $("again").addEventListener("click", startNew);
   $("over-view").addEventListener("click", function () { view(true); });
 
-  // ---- how to play (REDESIGN.md 1.3, 9.1): three steps in a sheet; it opens by itself once, on a first visit ----
+  // ---- how to play (REDESIGN.md 1.3, 9.1; TRIAGE4 D8): three steps in the family's one sheet (shared/howto.js) ----
   var STEPS = [
-    ['<div class="mg" style="grid-template-columns:repeat(2,26px)"><span class="mt lo">2</span><span class="mt lo">2</span></div>',
-      "Swipe, or press an arrow key. Every tile slides as far as it can."],
-    ['<div class="eq"><span class="mt lo">2</span><span class="op">+</span><span class="mt lo">2</span><span class="op">=</span><span class="mt lo2">4</span></div>',
-      "Two tiles with the same number join into one."],
-    ['<span class="mt" style="--h:245;width:40px;height:40px;font-size:15px">32</span>',
-      "Make a new biggest tile from 32 up to earn a power-up. There is no top tile."]
+    { picture: '<div class="mg" style="grid-template-columns:repeat(2,26px)"><span class="mt lo">2</span><span class="mt lo">2</span></div>',
+      text: "Swipe, or press an arrow key. Every tile slides as far as it can." },
+    { picture: '<div class="eq"><span class="mt lo">2</span><span class="op">+</span><span class="mt lo">2</span><span class="op">=</span><span class="mt lo2">4</span></div>',
+      text: "Two tiles with the same number join into one." },
+    { picture: '<span class="mt" style="--h:245;width:40px;height:40px;font-size:15px">32</span>',
+      text: "Make a new biggest tile from 32 up to earn a power-up. There is no top tile." }
   ];
-  function howto() {
-    var UI = window.NumbericsUI; if (!UI || !UI.sheet) return;
-    try { if (window.NumbericsProgress) window.NumbericsProgress.markHowto("two"); } catch (e) { /* a nicety */ }
-    UI.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
-      }).join("") + "</div>";
-    }, { title: "How to play Two" });
-  }
-  $("how-steps").addEventListener("click", howto);
-  // Never for a player who has a Two save (numberics_endless_v1), and only once (NumbericsProgress.seenHowto)
-  var firstVisit = !saved;
+  var how = null;
+  function howto() { if (how) how.open(); }
+  // it opens by itself once (NumbericsProgress), never for a player who has a Two save (numberics_endless_v1)
   document.addEventListener("DOMContentLoaded", function () {
-    var NP = window.NumbericsProgress;
-    if (firstVisit && NP && !NP.seenHowto("two") && state.moves === 0) howto();
+    var UI = window.NumbericsUI;
+    if (UI && UI.howto) how = UI.howto("two", { title: "Two", steps: STEPS, saved: !!saved || state.moves > 0 });
   });
 
   rekey(); render();
@@ -423,5 +414,5 @@
   window.__numberics = { get state() { return state; }, set state(s) { flush(); state = s; rekey(); render(); }, render: render,
     get targeting() { return targeting; }, get cursor() { return cur; }, get bestBefore() { return bestBefore; },
     get viewing() { return viewing; }, get holding() { return holding; }, get run() { return run; },
-    get ids() { return ids.slice(); }, get layer() { return layer; }, showCard: function () { view(false); } };
+    get ids() { return ids.slice(); }, get layer() { return layer; }, howto: howto, showCard: function () { view(false); } };
 })();

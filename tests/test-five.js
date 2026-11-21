@@ -419,7 +419,7 @@ t("phase D client: first visit on Easy, progress put, trophy events by 8.4's nam
   ok(/report\("round", \{ won: won, burstAt: burstAt \}\)/.test(g) && /report\("match", \{ won: state\.matchOver === "p", level: state\.level,\s*p: state\.wins\.p, c: state\.wins\.c, down02: run\.down02 === true \}\)/.test(g), "8.4 events and fields");
   ok(/NumbericsMusic\.duck\(on\)/.test(g), "music duck");
   ok(/M\.ms\("fly"\)/.test(g) && /M\.T\.burst/.test(g) && /M\.seq\(\)/.test(g) && !/K\.reducedMotion\(\)/.test(g) && !/var reduce\b/.test(g), "motion read live through NumbericsMotion");
-  ok(/seenHowto\("five"\)/.test(g) && /markHowto\("five"\)/.test(g), "how-to once");
+  ok(/U\.howto\("five", \{ title: "Five", steps: STEPS, saved: !!saved/.test(g) && /onFirstClose: function \(\) \{ scheduleComputer\(\); \}/.test(g), "the shared how-to once (D8)");
   ok(/<details class="how"><summary>How to play<\/summary>/.test(h) && /id="over-pills" class="tro-pills"/.test(h) && /<div id="games" class="cards"/.test(h), "how-to row, pills, cards");
   ["Tap your tile, then a tile to add it onto.", "A tile at five or more bursts.", "Burst both of the computer's tiles to win the round. First to three."].forEach(s => ok(g.indexOf(s) >= 0, s));
 });

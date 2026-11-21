@@ -61,7 +61,7 @@
     <p>A chain of 3 waves or a Lucky Seven earns a power-up. A power-up never earns one: the drop right after Smash,
      Hold or Crack still scores, but pays no power-up.</p>
     <p class="keys">Keys: Left and Right pick a column. Enter, Space or Down drops. 1 to 4 use a power-up, U is Undo, Esc cancels.</p>
-    <div class="row"><button id="how-steps" class="btn" type="button">Show the steps</button></div>
+    <div class="row"><button id="how-steps" class="btn" type="button" data-howto>Show the three steps</button></div>
   </details>
   <nav id="games" class="cards" data-root="../" data-current="seven" aria-label="Numberics games"></nav>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -74,6 +74,7 @@
 <script src="../shared/progress.js"></script>
 <script src="../shared/power.js"></script>
 <script src="engine.js"></script>
+<script src="../shared/howto.js"></script>
 <script src="game.js"></script>
 <script src="../shared/nav.js"></script>
 <script src="../shared/ui.js"></script>

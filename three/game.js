@@ -5,7 +5,8 @@
  * slides one cell over T.step; a merge pops on top after the slide; the dealt tile enters from outside the edge it was
  * swiped away from; a Flush plays after the slide: the rainbow sweeps the run, then each run tile shrinks away.
  * The state is authoritative before any animation starts: a new input finishes the running timeline at once
- * (flush()) and is applied immediately, so no input is ever dropped or delayed (5.11). */
+ * (flush()) and is applied immediately, so no input is ever dropped or delayed (5.11). Sounds follow the family's one
+ * rule (shared/motion.js, TRIAGE4 D7): the pending ones play at once, one of each, and the new input's own play with it. */
 (function () {
   "use strict";
   var E = window.NumbericsThree, K = window.NumbericsKit, P = window.NumbericsPower, M = window.NumbericsMotion;
@@ -44,10 +45,8 @@
   var boardEl = $("board"), tilesEl = $("tiles"), cellsEl = $("cells");
   for (var i = 0; i < 16; i++) cellsEl.appendChild(document.createElement("div"));
 
-  // ---- sound and haptics: called inside the timeline, never while a timeline is being finished at once ----
-  var A = window.NumbericsAudio, quiet = false;
-  function snd(name, arg) { if (quiet || !A || typeof A[name] !== "function") return; try { A[name](arg); } catch (e) { /* a nicety */ } }
-  function buzz(kind) { if (quiet || !A || typeof A.buzz !== "function") return; try { A.buzz(kind); } catch (e) { /* a nicety */ } }
+  // ---- sound and haptics: the shared calls (shared/motion.js), on their own timeline `sounds` (D7) ----
+  var snd = M.sfx, buzz = M.buzz, atOnce = false; // atOnce: the final step runs inside flush(), its earlier steps skipped
   function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
 
   function persist() {
@@ -89,11 +88,14 @@
   function rekey() { var r = M.rekey(state.grid, nextId); ids = r.ids; nextId = r.next; }
   function node(cell) { return ids[cell] ? L.get(ids[cell]) : null; }
 
-  // ---- the timeline: one per move; flush() ends it now (the final board, no pending sounds) ----
-  var tl = M.seq(), finalFn = null;
+  // ---- the timeline: one per move; flush() ends it now: the final board, and the pending sounds at once (one of each) ----
+  var tl = M.seq(), sounds = M.seq(), finalFn = null;
   function flush() {
-    tl.cancel();
-    if (finalFn) { var f = finalFn; finalFn = null; quiet = true; try { f(); } finally { quiet = false; } }
+    var running = tl.busy() || L.busy();
+    M.together(function () {
+      sounds.finish(running); tl.cancel();
+      if (finalFn) { var f = finalFn; finalFn = null; atOnce = true; try { f(); } finally { atOnce = false; } }
+    });
     L.finish();
   }
   function begin(fin) { finalFn = fin; }
@@ -116,8 +118,8 @@
         el.classList.add("run"); el.classList.toggle("still", red);
       });
     });
+    sounds.sound(t + sweep, function () { snd("pop", w); buzz("merge"); });
     tl.at(t + sweep, function () {
-      snd("pop", w); buzz("merge");
       runIds.forEach(function (id, k) {
         var el = L.get(id); if (!el) return;
         var face = el.querySelector(".face");
@@ -253,7 +255,7 @@
     return function () {
       // finished at once by a new input: the intermediate steps never ran, so draw the final board now (an
       // in-flight slide is not snapped: the transition retargets from where the tile is)
-      if (quiet) L.sync(tilesOf(state.grid, ids), {});
+      if (atOnce) L.sync(tilesOf(state.grid, ids), {});
       Array.prototype.forEach.call(tilesEl.querySelectorAll(".tile.run"), function (el) { el.classList.remove("run", "still"); });
       chrome();
       if (swipe) { var got = report("swipe", swipe); if (state.over) { pills = got.slice(); if (T) T.pills($("over-pills"), pills); } }
@@ -293,7 +295,7 @@
     if (sp >= 0 && k === 0) { map = map.slice(); map[sp] = spId; tiles.push({ id: spId, cell: sp, v: old.next }); fx.enter = enterFx(sp, spId, dir); }
     L.sync(tiles, fx);
     snd("slide"); buzz("tap");
-    if (topMerge) tl.at(STEP, function () { snd("merge", E.rung(topMerge)); buzz("merge"); });
+    if (topMerge) sounds.sound(STEP, function () { snd("merge", E.rung(topMerge)); buzz("merge"); });
     // then each flush in turn (a second one starts 80 ms after the first ends); a tile dealt after a flush
     // enters once that flush has cleared its cell
     var t = STEP, w = 1, curMap = map;
@@ -313,7 +315,7 @@
     tl.at(fl.length ? t - 80 : Math.max(STEP, 1), done);
 
     announce(fl);
-    if (fl.some(function (f) { return f.power; })) tl.at(STEP, function () { snd("power"); });
+    if (fl.some(function (f) { return f.power; })) sounds.sound(STEP, function () { snd("power"); });
     if (state.top > prevTop && state.top >= 96) buzz("big");
     if (newBest) ring();
     persist();
@@ -436,28 +438,25 @@
     duck(false);
   }
 
-  // ---- How to play: three steps in the shared sheet (REDESIGN.md 1.3, 9.3); opens by itself once, on a first visit ----
+  // ---- How to play: three steps in the family's one sheet (REDESIGN.md 1.3, 9.3; shared/howto.js, TRIAGE4 D8) ----
   function tiny(v) { var s = document.createElement("span"); s.className = "mt"; paint(s, v); return s.outerHTML; }
   var STEPS = [
-    ['<div class="mg" style="grid-template-columns:repeat(3,26px)">' + tiny(3) + '<span class="op">&rarr;</span><span class="mt hole"></span></div>',
-      "Each swipe moves tiles one step."],
-    ['<div class="eq">' + tiny(1) + '<span class="op">+</span>' + tiny(2) + '<span class="op">=</span>' + tiny(3) + "</div>",
-      "1 and 2 make 3. From 3 up, equal tiles join."],
-    ['<div class="eq">' + tiny(3) + tiny(6) + tiny(9) + "</div>", "Line up 3, 6, 9 for a rainbow flush."]
+    { picture: '<div class="mg" style="grid-template-columns:repeat(3,26px)">' + tiny(3) + '<span class="op">&rarr;</span><span class="mt hole"></span></div>',
+      text: "Each swipe moves tiles one step." },
+    { picture: '<div class="eq">' + tiny(1) + '<span class="op">+</span>' + tiny(2) + '<span class="op">=</span>' + tiny(3) + "</div>",
+      text: "1 and 2 make 3. From 3 up, equal tiles join." },
+    { picture: '<div class="eq">' + tiny(3) + tiny(6) + tiny(9) + "</div>", text: "Line up 3, 6, 9 for a rainbow flush." }
   ];
-  function seenHowto() { try { return !!(PR && PR.seenHowto(ID)); } catch (e) { return false; } }
   function markHowto() { try { if (PR) PR.markHowto(ID); } catch (e) { /* in memory */ } }
-  function openHowto() {
-    var U = ui(); if (!U || !U.sheet) return;
-    flush(); targeting = null; chrome();
-    U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
-      }).join("") + '</div><div class="row"><button class="btn primary" type="button" id="howto-play">Play</button></div>';
-      body.querySelector("#howto-play").addEventListener("click", function () { U.close(); });
-    }, { title: "How to play Three", onClose: function () { if (!seen) { seen = true; persist(); } markHowto(); } });
-  }
-  $("howto-open").addEventListener("click", function (e) { e.preventDefault(); openHowto(); });
+  var how = null;
+  function openHowto() { if (how) how.open(); }
+  // it opens by itself once on a first visit (no saved run, never seen), after ui.js has loaded
+  document.addEventListener("DOMContentLoaded", function () {
+    var U = ui(); if (!U || !U.howto) return;
+    how = U.howto(ID, { title: "Three", steps: STEPS, saved: hadSave,
+      onOpen: function () { flush(); targeting = null; chrome(); },
+      onClose: function () { if (!seen) { seen = true; persist(); } } });
+  });
   K.twoStep($("new"), function () { return state.moves > 0 && !state.over; }, startNew);
   $("again").addEventListener("click", function () { snd("tick"); startNew(); });
   $("over-view").addEventListener("click", function () { view(true); });
@@ -466,10 +465,6 @@
   render(false);
   if (hadSave) persist(); // keeps the card summary current for a run saved before progress existed
   if (state.over) duck(true);
-  // the first visit (no saved run, how-to never seen): the how-to opens by itself once, after ui.js has loaded
-  if (!hadSave && !seenHowto()) {
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", openHowto); else setTimeout(openHowto, 0);
-  }
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-game. Not reachable from the UI.
   window.__demo = function () {
     flush(); targeting = null; note = ""; viewing = false; if (sheetOpen()) ui().close();

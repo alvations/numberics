@@ -139,7 +139,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   ck("headline fits one line at 375px", await p.evaluate(() => { const h = document.querySelector("#over h2"); return h.getBoundingClientRect().height < parseFloat(getComputedStyle(h).fontSize) * 1.6; }));
   await shot(p, "over-best");
   await p.click("#again");
-  await p.evaluate(() => { localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 1000, bestTop: 8, bestBefore: 1000, state: window.__numberics.state })); });
+  await p.evaluate(() => { NumbericsKit.flush(); localStorage.setItem("numberics_endless_v1", JSON.stringify({ bestScore: 1000, bestTop: 8, bestBefore: 1000, state: window.__numberics.state })); });
   await p.reload();
   await p.evaluate(() => { const s = window.__numberics.state; s.grid = [3,4,3,4,4,3,4,3,3,4,3,4,4,3,4,3]; s.score = 900; s.over = true; window.__numberics.state = s; });
   ck("a run below the saved best does not claim one", await card(p) && !(await p.isVisible("#over-best")));
@@ -452,7 +452,7 @@ const ck = (n, c, d) => { if (c) pass++; else { fail++; console.log("FAIL", n, d
   await p.click("#again");
   ck("...and comes back for the new game", await p.evaluate(() => window.__duck[window.__duck.length - 1] === false));
   ck("New game starts a fresh run record", await p.evaluate(() => window.__numberics.run.used === 0 && window.__numberics.run.stuckUse === null));
-  const saved2 = await p.evaluate(() => JSON.parse(localStorage.getItem("numberics_endless_v1")));
+  const saved2 = await p.evaluate(() => { NumbericsKit.flush(); return JSON.parse(localStorage.getItem("numberics_endless_v1")); }); // saves are batched (TRIAGE4 D6)
   ck("the run record is saved with the game, under the old key", saved2 && saved2.run && saved2.run.used === 0 && saved2.state && typeof saved2.bestScore === "number");
   ck("progress is put on persist (best, live)", await p.evaluate(() => { const g = window.NumbericsProgress.get("two"); return !!g && /^Best /.test(g.best) && g.live === false; }));
   ck("no page errors in trophy checks", e10.length === 0, e10.join("|"));

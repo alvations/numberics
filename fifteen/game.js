@@ -5,7 +5,7 @@
 (function () {
   "use strict";
   var F = window.NumbericsFifteen, K = window.NumbericsKit, P = window.NumbericsPower;
-  var M = window.NumbericsMotion, A = window.NumbericsAudio, TR = window.NumbericsTrophies, PR = window.NumbericsProgress;
+  var M = window.NumbericsMotion, TR = window.NumbericsTrophies, PR = window.NumbericsProgress;
   var ID = "fifteen";
   var store = K.store("numberics_fifteen_v1");
   var THINK = 520;                       // the computer's pause (a delay, not motion)
@@ -49,11 +49,11 @@
   var claiming = {};                     // claim fills playing (5.8)
   var cardIds = [];                      // trophies of this result: pills on its card (8.1)
   // motion (5.8, 5.11): one guarded timeline; an input finishes it (animations first, so a step measures the end layout)
+  // and its pending sounds play at once, one of each (the family's one rule, shared/motion.js, TRIAGE4 D7)
   var tl = M.seq(), anims = [];
   function endAnims() { var a = anims; anims = []; a.forEach(function (x) { try { x.finish(); } catch (e) { /* done */ } }); }
-  function finishFx() { endAnims(); tl.finish(); endAnims(); }
-  function snd(name, arg) { try { A[name](arg); } catch (e) { /* no sound */ } }
-  function buzz(kind) { snd("buzz", kind); }
+  function finishFx() { var running = anims.length > 0; endAnims(); tl.finish(running); endAnims(); }
+  var snd = M.sfx, buzz = M.buzz;
   function duck(on) { try { window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
   function trophy(ev, data, quiet) { try { return TR.report(ID, ev, data, quiet && { quiet: true }) || []; } catch (e) { return []; } }
   function uiOpen() { try { return window.NumbericsUI.open(); } catch (e) { return false; } }
@@ -447,29 +447,19 @@
   }
   var G = "var(--accent)", PL = '<span class="op">+</span>';
   var STEPS = [
-    ['<div class="mg" style="grid-template-columns:repeat(5,18px)">' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (k) { return chip(k, k === 5 && G, 18); }).join("") +
-      "</div>", "Pick a number from 1 to 9."],
-    ['<div class="eq">' + chip(5, G) + chip(8, "var(--cool)") + "</div>", "The computer picks too."],
-    ['<div class="eq">' + chip(8, G) + PL + chip(1, G) + PL + chip(6, G) + '<span class="op">=</span><span>15</span></div>',
-      "Hold three numbers that add up to fifteen to win."]
+    { picture: '<div class="mg" style="grid-template-columns:repeat(5,18px)">' + [1, 2, 3, 4, 5, 6, 7, 8, 9].map(function (k) { return chip(k, k === 5 && G, 18); }).join("") +
+      "</div>", text: "Pick a number from 1 to 9." },
+    { picture: '<div class="eq">' + chip(5, G) + chip(8, "var(--cool)") + "</div>", text: "The computer picks too." },
+    { picture: '<div class="eq">' + chip(8, G) + PL + chip(1, G) + PL + chip(6, G) + '<span class="op">=</span><span>15</span></div>',
+      text: "Hold three numbers that add up to fifteen to win." }
   ];
-  function howto() {
-    var U = window.NumbericsUI; if (!U) return;
-    U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + s[0] + "</div><p>" + s[1] + "</p></div>";
-      }).join("") + '</div><div class="row"><button class="btn primary" type="button" data-play>Play</button></div>';
-      body.querySelector("[data-play]").addEventListener("click", function () { U.close(); });
-    }, { title: "How to play Fifteen" });
-    try { PR.markHowto(ID); } catch (e) { /* in memory only */ }
-  }
-  $("how-steps").addEventListener("click", function () { snd("tick"); howto(); });
-  function autoHow() {
-    var seenIt = true; try { seenIt = PR.seenHowto(ID); } catch (e) { /* no progress */ }
-    if (first && !seenIt) howto();
-  }
-  // ui.js loads after this file: open once the page's scripts have all run
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", autoHow); else setTimeout(autoHow, 0);
+  // the family's one sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, never with a saved game
+  var how = null;
+  function howto() { if (how) how.open(); }
+  document.addEventListener("DOMContentLoaded", function () {
+    var U = window.NumbericsUI; if (!U || !U.howto) return;
+    how = U.howto(ID, { title: "Fifteen", steps: STEPS, saved: !first, onButton: function () { snd("tick"); } });
+  });
 
   render();
   if (cpuPending()) schedule();

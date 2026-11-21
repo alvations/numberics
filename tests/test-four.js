@@ -515,7 +515,7 @@ t("client: keyed disc layer, first visit on Easy, quiet trophy report with pills
   ok(!/slot\.textContent = ""/.test(g) && !/createElement\("div"\)[^\n]*disc/.test(g.split("function renderBoard")[1].split("function render()")[0]), "renderBoard never creates discs");
   ok(/: "easy";/.test(g), "first visit Easy");
   ok(/TR\.report\("four", "end", \{ won:/.test(g) && /\{ quiet: true \}/.test(g) && /TR\.pills\(\$\("tro"\)/.test(g), "trophies");
-  ok(/NP\.put\("four"/.test(g) && /seenHowto\("four"\)/.test(g) && /markHowto\("four"\)/.test(g), "progress + how-to");
+  ok(/NP\.put\("four"/.test(g) && /U\.howto\("four", \{ title: "Four", steps: STEPS, saved: !!saved/.test(g), "progress + the shared how-to (D8)");
   ok(/NumbericsMusic\.duck\(on\)/.test(g) && /duck\(true\)/.test(g) && /duck\(false\)/.test(g), "music duck");
   ok(!/K\.reducedMotion\(\)/.test(g) && !/ANIM\s*=/.test(g), "motion read at animation time");
   const h = fs.readFileSync(path.join(__dirname, "../four/index.html"), "utf8");

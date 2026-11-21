@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   var N = window.NumbericsNine, K = window.NumbericsKit, P = window.NumbericsPower;
-  var M = window.NumbericsMotion, A = window.NumbericsAudio, TR = window.NumbericsTrophies, PR = window.NumbericsProgress;
+  var M = window.NumbericsMotion, TR = window.NumbericsTrophies, PR = window.NumbericsProgress;
   var store = K.store("numberics_nine_v1");
   var CPU_MS = 650;               // the computer's think time: a pause, not motion, so reduced motion keeps it
   var HOLD_MS = 1500;             // R13: the last take stays on an undimmed board this long before the end card
@@ -128,16 +128,16 @@
   }
 
   // ---- motion (REDESIGN.md 5.7, 5.11, 5.12) ----
-  // the state is final before motion starts; every input calls fxFinish() first (ends it, drops pending sounds)
-  var tl = M ? M.seq() : null, anims = [], fxNodes = [], quiet = false;
-  function sfx(name, arg) { if (!quiet) try { A[name](arg); } catch (e) { /* sound is a nicety */ } }
+  // the state is final before motion starts; every input calls fxFinish() first: it ends the motion, and the pending
+  // sounds play at once, one of each (the family's one rule, shared/motion.js, TRIAGE4 D7)
+  var tl = M ? M.seq() : null, anims = [], fxNodes = [];
+  function sfx(name, arg) { if (M && M.sfx) M.sfx(name, arg); }
   function buzz(kind) { sfx("buzz", kind); }
   function at(ms, fn) { if (tl && ms > 0) tl.at(ms, fn); else fn(); }
   function anim(el, frames, opts, red) { var a = M.play(el, frames, opts, red); if (a) anims.push(a); }
   function drop(n) { if (n && n.parentNode) n.parentNode.removeChild(n); }
   function fxFinish() {
-    quiet = true;
-    try { if (tl) tl.finish(); } finally { quiet = false; }
+    if (tl) tl.finish(anims.length > 0);
     anims.forEach(function (a) { try { a.cancel(); } catch (e) { /* done */ } }); anims = [];
     fxNodes.forEach(drop); fxNodes = [];
     nodes.forEach(function (n, i) { var nm = state.heaps[i] && n.querySelector(".num"); if (nm) nm.textContent = state.heaps[i]; });
@@ -559,26 +559,17 @@
   }
   var EMPTY = '<span class="mt nt e"></span>';
   var STEPS = [
-    ['<div class="nrow">' + pv(7, 330, 2, "y") + pv(3, 160) + "</div>", "Tap a tile, then choose how many to take."],
-    ['<div class="nrow">' + pv(5, 250, 0, "y") + pv(4, 200, 0, "c") + "</div>", "You and the computer take turns."],
-    ['<div class="nrow">' + EMPTY + pv(1, 0, 1, "y") + EMPTY + "</div>", "Take the very last one to win the round."],
+    { picture: '<div class="nrow">' + pv(7, 330, 2, "y") + pv(3, 160) + "</div>", text: "Tap a tile, then choose how many to take." },
+    { picture: '<div class="nrow">' + pv(5, 250, 0, "y") + pv(4, 200, 0, "c") + "</div>", text: "You and the computer take turns." },
+    { picture: '<div class="nrow">' + EMPTY + pv(1, 0, 1, "y") + EMPTY + "</div>", text: "Take the very last one to win the round." }
   ];
-  function howto() {
-    var U = window.NumbericsUI; if (!U || !U.sheet) return;
-    fxFinish();
-    try { PR.markHowto("nine"); } catch (e) { /* a nicety */ }
-    U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (st) { return '<div class="step"><div class="pv" aria-hidden="true">' + st[0] + "</div><p>" + st[1] + "</p></div>"; }).join("") +
-        '</div><div class="row"><button type="button" class="btn primary">Play</button></div>';
-      body.querySelector(".btn").addEventListener("click", function () { U.close(); });
-    }, { title: "How to play Nine" });
-  }
-  $("howto").addEventListener("click", function () { sfx("tick"); howto(); });
-  function autoHowto() {
-    var seen = true; try { seen = PR.seenHowto("nine"); } catch (e) { /* no progress module: never auto-open */ }
-    if (firstVisit && !seen) howto();
-  }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", autoHowto); else setTimeout(autoHowto, 0);
+  // the family's one sheet (shared/howto.js, TRIAGE4 D8): it opens by itself once, never with a saved game
+  var how = null;
+  function howto() { if (how) how.open(); }
+  document.addEventListener("DOMContentLoaded", function () {
+    var U = window.NumbericsUI; if (!U || !U.howto) return;
+    how = U.howto("nine", { title: "Nine", steps: STEPS, saved: !firstVisit, onOpen: fxFinish, onButton: function () { sfx("tick"); } });
+  });
 
   prefs.diff = state.diff; prefs.misere = state.misere && prefs.unlocked;
   render(); schedule();

@@ -1,12 +1,14 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * NumbericsTrophies (docs/design/REDESIGN.md 8): the registry of every trophy, the earned store, the unlock moment
- * and the earned-only Trophies sheet. UMD: the registry and report() are pure enough to run in Node tests.
+ * and the Trophies sheet. UMD: the registry and report() are pure enough to run in Node tests.
  *   report(gameId, event, data[, opts])  -> the ids newly earned by this event (opts.quiet: no toast, no sound; the
  *     unseen dot still shows). A family trophy earned mid-play waits for the next idle moment for its toast.
  *   has(id), earned(), unseen(), fam(), find(id), glyph(name), pill(id), pills(el, ids), open(), html()
  * Store: numberics_trophies_v1 = { v:1, got:{ id:"YYYYMMDD" }, unseen:[id], fam:{ played, dailyDays, streak } },
  * always through NumbericsKit.store (try/catch, memory fallback). Nothing is ever sent anywhere.
- * The sheet shows only earned trophies: no padlocks, no counts, and a secret is not in the DOM until earned. */
+ * The sheet (TRIAGE4 D3, on panel evidence over melon-eight's earned-only list) shows a count "N of M trophies" (M: every
+ * non-secret trophy plus the secrets already earned), then the earned trophies, then every not-yet-earned NON-secret
+ * trophy dimmed with its description, as goals. A secret is not in the DOM, nor counted, until earned. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(root);
   else root.NumbericsTrophies = factory(root);
@@ -121,7 +123,9 @@
   T("fam_all", "fam", "The whole set", "Play all ten games.", "grid", 0, ANY, function (d, x) { return GAMES.every(function (g) { return !!x.fam.played[g]; }); });
   T("fam_daily", "fam", "Same for everyone", "Finish a Daily.", "cal", 0, ["end", "solve"], function (d, x, e) { return isDaily(e, d, x.game); });
   T("fam_week", "fam", "A week of dailies", "Finish a Daily seven days in a row.", "flame", 0, ["end", "solve"], function (d, x) { return x.fam.streak.n >= 7; });
-  T("fam_night", "fam", "Night owl", "Played well past bedtime.", "moon", 1, ANY, function (d, x) { return x.hour < 4; });
+  // Night owl needs real play: it is tested only when a game, round, match or puzzle ends between midnight and 4,
+  // never on a page load or a first tap (TRIAGE4 family: it was a free trophy for opening the page late)
+  T("fam_night", "fam", "Night owl", "Played well past bedtime.", "moon", 1, ["end", "round", "match", "solve"], function (d, x) { return x.hour < 4; });
   T("fam_keep", "fam", "Keepsake", "Kept a copy of everything.", "key", 1, ["saved"], function () { return true; });
   // Fibonacci: move {value, merges, grid, moves}, end {score, value}; run {used}
   T("fib_89", "fibonacci", "Golden start", "Make an 89.", "sq:89", 0, MOVE_END, function (d) { return num(d.value) >= 89; });
@@ -330,17 +334,34 @@
     GAMES.forEach(function (id) { if (out.indexOf(id) < 0) out.push(id); });
     return ["fam"].concat(out);
   }
-  // the sheet body: earned trophies only, grouped (Everywhere first, then games order); no counts, no padlocks
-  function html() {
-    var got = load().got, out = "";
+  // the counts the sheet shows: earned, and visible (every non-secret trophy plus the earned secrets)
+  function counts() {
+    var got = load().got, e = 0, v = 0;
+    REG.forEach(function (t) { if (got[t.id]) { e++; v++; } else if (!t.secret) v++; });
+    return { earned: e, visible: v };
+  }
+  // one group per game (Everywhere first, then games order) of the trophies that pass `keep`
+  function groups(keep, locked) {
+    var out = "";
     order().forEach(function (g) {
-      var mine = REG.filter(function (t) { return t.game === g && got[t.id]; }); if (!mine.length) return;
+      var mine = REG.filter(function (t) { return t.game === g && keep(t); }); if (!mine.length) return;
       out += '<div class="tro-game">' + esc(NAMES[g]) + '</div><div class="tro">' + mine.map(function (t) {
-        return '<div class="tr' + (t.secret ? " secret" : "") + '" data-trophy="' + t.id + '">' + glyph(t.glyph) +
-          "<div><b>" + esc(t.name) + "</b><small>" + esc(t.desc) + "</small></div></div>";
+        return '<div class="tr' + (t.secret ? " secret" : "") + (locked ? " locked" : "") + '" data-trophy="' + t.id + '"' +
+          (locked ? ' data-locked="1"' : "") + ">" + glyph(t.glyph) + "<div><b>" + esc(t.name) + "</b><small>" + esc(t.desc) +
+          (locked ? '<span class="vh"> Not earned yet.</span>' : "") + "</small></div></div>";
       }).join("") + "</div>";
     });
-    return out || '<p class="tro-none">Nothing yet. Play any game to begin.</p>';
+    return out;
+  }
+  // the sheet body: the count, the earned trophies, then the goals (not-yet-earned, non-secret, dimmed)
+  function html() {
+    var got = load().got, n = counts();
+    var out = '<p class="tro-count" data-count="' + n.earned + "/" + n.visible + '">' + n.earned + " of " + n.visible + " trophies</p>" +
+      (n.earned ? "" : '<p class="tro-none">Nothing yet. Play any game to begin.</p>');
+    if (n.earned) out += '<div class="sec">Earned</div>' + groups(function (t) { return !!got[t.id]; }, false);
+    var todo = groups(function (t) { return !got[t.id] && !t.secret; }, true);
+    if (todo) out += '<div class="sec">Still to find</div>' + todo;
+    return out;
   }
   function build(el) { if (el) el.innerHTML = html(); }
   function clearUnseen() { var s = load(); if (s.unseen.length) { s.unseen = []; store.save(s); } call(lib("NumbericsUI"), "dot", false); }
@@ -385,7 +406,7 @@
 
   return {
     KEY: KEY, GAMES: GAMES, REG: REG, GLYPHS: Object.keys(GLYPHS),
-    report: report, has: has, earned: earned, unseen: unseen, fam: fam, find: find,
+    report: report, has: has, earned: earned, unseen: unseen, fam: fam, find: find, counts: counts,
     glyph: glyph, pill: pill, pills: pills, html: html, build: build, open: open, close: fbClose,
     // pure board readers, exported for the tests
     _lines: { fibRun: fibRun, stair: stair, grownUp: grownUp }

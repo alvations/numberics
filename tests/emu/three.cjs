@@ -364,13 +364,14 @@ module.exports = async function ({ browser, url, ck, shot }) {
   const sAt = (n) => snd.filter(x => x[0] === n).map(x => x[1]);
   ck("sounds on the beats: slide at the input, pop(1) then pop(2) as each run clears", sAt("slide")[0] < 40 && snd.filter(x => x[0] === "pop").map(x => x[2]).join() === "1,2" &&
     sAt("pop")[0] > 600 && sAt("pop")[0] < 760 && sAt("pop")[1] > 1400, JSON.stringify(snd));
-  // a new input finishes the timeline at once: final board, and the pending sounds are dropped, not bunched
+  // a new input finishes the timeline at once: final board, and the pending sounds play then, one of each (D7)
   await set(p, [3, 0, 3, 0, 6, 0, 6, 0, 9, 0, 9, 0, 0, 0, 0, 0], { moves: 5, score: 0 });
   await p.evaluate(() => { window.__snd = []; window.__t0 = performance.now(); });
   pr = await probe("ArrowLeft", 600, "ArrowDown");
   snd = await p.evaluate(() => window.__snd);
   ck("two quick inputs during an animation give two moves", pr.moves === pr.m0 + 2, pr.m0 + " -> " + pr.moves);
-  ck("the second input dropped the first flush's pending sounds", !snd.some(x => x[0] === "pop"), JSON.stringify(snd));
+  const sl = snd.filter(x => x[0] === "slide"), pops = snd.filter(x => x[0] === "pop");
+  ck("the second input played the first flush's pending pop at once, once, before its own slide (D7)", pops.length === 1 && sl.length === 2 && pops[0][1] <= sl[1][1], JSON.stringify(snd));
   const last = pr.log[pr.log.length - 1].nodes;
   ck("after both, every node sits on its engine cell with its engine value", last.length === pr.grid.filter(Boolean).length &&
     last.every(n => String(pr.grid[n.r * 4 + n.c]) === n.v), JSON.stringify(last.map(n => [n.r, n.c, n.v])) + " " + pr.grid);

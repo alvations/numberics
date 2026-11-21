@@ -506,7 +506,7 @@ t("valid() rejects broken saves", () => {
     ok(/: "easy";/.test(js) && !/newMatch\(K\.freshSeed\(\), "medium"\)/.test(js));
     ok(/<details id="how" class="how"><summary>How to play<\/summary>/.test(html));
     ["Pick a number from 1 to 9.", "The computer picks too.", "Hold three numbers that add up to fifteen to win."].forEach((s) => ok(js.indexOf(s) >= 0, s));
-    ok(/seenHowto\(ID\)/.test(js) && /markHowto\(ID\)/.test(js));
+    ok(/U\.howto\(ID, \{ title: "Fifteen", steps: STEPS, saved: !first/.test(js)); // the shared how-to (D8)
     ok(/<div id="games" class="cards" data-root="\.\.\/" data-current="fifteen"/.test(html));
     ok(/NumbericsMusic\.duck\(on\)/.test(js) && /PR\.put\(ID,/.test(js));
   });

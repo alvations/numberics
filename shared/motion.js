@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * NumbericsMotion (docs/design/REDESIGN.md 5.2, 5.11 to 5.13): the timing and easing tokens, the effective motion
  * setting, an el.animate wrapper, a generation-guarded timeline, the pure identity tracker and the keyed tile layer.
- * Like the original 2048, every tile keeps its element and slides by transform; a merged tile pops on top after the
- * slide and a spawned tile appears after the slide. A new input calls finish() and is applied at once: nothing queues.
+ * Like the original 2048, every tile keeps its element and slides by transform; a merged tile is invisible until the
+ * slide lands, then pops on top, and a spawned tile appears after the slide. A new input calls finish() and is applied at once: nothing queues.
  * Only transform and opacity animate. Under reduced motion every change is instant or one opacity fade.
  * The CSS lives in shared/theme.css, in the block marked "B2 motion" (scoped under .nmm-layer, keyframes nmm-*).
- * UMD: the pure parts (T, E, ms, fallMs, track, rekey, seq) also run under require() for the Node tests. */
+ * Sounds follow one rule under fast play (sfx, buzz, seq().sound, TRIAGE4 D7): see seq below.
+ * UMD: the pure parts (T, E, ms, fallMs, track, rekey, seq, sfx) also run under require() for the Node tests. */
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory(root);
   else root.NumbericsMotion = factory(root);
@@ -58,13 +59,50 @@
     try { return el.animate(frames, o); } catch (e) { return null; }
   }
 
+  // ---- sounds (TRIAGE4 D7: one rule for sounds under fast play) ----
+  // sfx(name, arg) and buzz(kind) play through NumbericsAudio (a missing module costs a sound, never the game). While a
+  // timeline is being finished by a new input, its pending sounds play at once, deduplicated by name (at most one of
+  // each): never dropped, never bunched into a pile of the same sound.
+  var dedup = null; // the names played by the finish() that is running now, or null
+  function audio(name, arg) {
+    var A = (w && w.NumbericsAudio) || (typeof globalThis !== "undefined" && globalThis.NumbericsAudio) || null;
+    if (!A || typeof A[name] !== "function") return;
+    try { A[name](arg); } catch (e) { /* a sound is a nicety */ }
+  }
+  function sfx(name, arg) {
+    if (dedup) { if (dedup[name]) return; dedup[name] = 1; }
+    audio(name, arg);
+  }
+  function buzz(kind) {
+    if (dedup) { if (dedup["buzz:" + kind]) return; dedup["buzz:" + kind] = 1; }
+    audio("buzz", kind);
+  }
+  // together(fn, set): run fn with its sounds deduplicated by name as one group (joins a group already running).
+  // A game whose finish also runs its own final step (Three's settle) wraps both in one together().
+  function together(fn, set) {
+    if (dedup) return fn();
+    dedup = set || {};
+    try { return fn(); } finally { dedup = null; }
+  }
+
   // ---- seq: a generation-guarded timeline. s.at(ms, fn); s.finish() runs every pending fn now, in time order
-  // (steps a step schedules run too, so a cascade of waves completes at once); s.cancel() drops them. ----
+  // (steps a step schedules run too, so a cascade of waves completes at once); s.cancel() drops them (a reset).
+  // The sound rule (D7): s.sound(ms, fn) is a step that only makes sounds. finish(interrupted) is what a new input
+  // calls; it runs the pending steps at once, and their sfx()/buzz() calls are deduplicated by name. When that finish
+  // ended a running animation (a pending step, or interrupted: the caller's layer was still busy), the input is fast
+  // play, so the sound steps the same input schedules play at once instead of waiting for the slide to land: under
+  // quick play a join sounds with its own move, never on the next key and never dropped. s.finishing() is true while
+  // finish() runs its steps (a step can skip its visuals then). ----
   function seq() {
-    var q = [], gen = 0, n = 0, running = false;
+    var q = [], gen = 0, n = 0, running = false, fast = null, fastT = null; // fast: the at-once group, or null
     function fire(item) {
       var i = q.indexOf(item); if (i < 0) return;
       q.splice(i, 1); item.fn();
+    }
+    function hurry() { // fast play for the rest of this input's task: its sound steps play at once, one of each
+      fast = {};
+      if (fastT !== null) clearTimeout(fastT);
+      fastT = setTimeout(function () { fast = null; fastT = null; }, 0);
     }
     var s = {
       at: function (msec, fn) {
@@ -73,20 +111,30 @@
         if (!running) item.h = setTimeout(function () { if (item.g === gen) fire(item); }, item.t);
         return me;
       },
-      finish: function () {
-        var guard = 0; running = true;
+      sound: function (msec, fn) {
+        if (fast && !running) { together(fn, fast); return this; }
+        return this.at(msec, fn);
+      },
+      finish: function (interrupted) {
+        var guard = 0, had = q.length > 0;
+        running = true;
         try {
-          while (q.length && guard++ < 10000) {
-            q.sort(function (a, b) { return a.t - b.t || a.n - b.n; });
-            var item = q.shift(); if (item.h != null) clearTimeout(item.h); item.fn();
-          }
+          together(function () {
+            while (q.length && guard++ < 10000) {
+              q.sort(function (a, b) { return a.t - b.t || a.n - b.n; });
+              var item = q.shift(); if (item.h != null) clearTimeout(item.h); item.fn();
+            }
+          });
         } finally { running = false; gen++; q.length = 0; }
+        if (had || interrupted === true) hurry();
         return this;
       },
       cancel: function () {
         q.forEach(function (it) { if (it.h != null) clearTimeout(it.h); }); q.length = 0; gen++; return this;
       },
-      busy: function () { return q.length > 0; }
+      busy: function () { return q.length > 0; },
+      finishing: function () { return running; },
+      fast: function () { return !!fast; }
     };
     return s;
   }
@@ -135,7 +183,7 @@
       return { sync: function () {}, finish: function () {}, busy: function () { return false; }, get: function () { return null; }, count: function () { return 0; } };
     var cols = opts.cols || 4, rows = opts.rows || cols, slide = opts.slide || T.slide;
     var doc = el.ownerDocument || w.document;
-    var nodes = {}, last = {}, gone = [], anims = [], flagged = [], timer = null, gen = 0;
+    var nodes = {}, last = {}, gone = [], anims = [], flagged = [], timer = null, gen = 0, moving = false;
     el.classList.add("nmm-layer");
     if (opts.clip) el.classList.add("nmm-clip");
     el.style.setProperty("--cols", cols); el.style.setProperty("--rows", rows);
@@ -161,9 +209,11 @@
       for (k in a) if (k !== "cell" && k !== "r" && k !== "c" && !(k in b)) return false;
       return true;
     }
-    function place(node, rc) {
-      if (node._r !== rc.r) { node.style.setProperty("--r", rc.r); node._r = rc.r; }
-      if (node._c !== rc.c) { node.style.setProperty("--c", rc.c); node._c = rc.c; }
+    function place(node, rc) { // returns true when a placed node changes its cell (a slide, unless snapped or reduced)
+      var ch = false;
+      if (node._r !== rc.r) { ch = node._r != null; node.style.setProperty("--r", rc.r); node._r = rc.r; }
+      if (node._c !== rc.c) { ch = ch || node._c != null; node.style.setProperty("--c", rc.c); node._c = rc.c; }
+      return ch;
     }
     function flag(node, cls) { node.classList.add(cls); flagged.push([node, cls]); }
     function metrics() { // one read per sync, before any style write of that sync (5.13)
@@ -178,7 +228,7 @@
 
     function finish() {
       if (timer !== null) { clearTimeout(timer); timer = null; }
-      gen++;
+      gen++; moving = false;
       for (var i = 0; i < gone.length; i++) if (gone[i].parentNode) gone[i].parentNode.removeChild(gone[i]);
       gone = [];
       for (i = 0; i < flagged.length; i++) flagged[i][0].classList.remove(flagged[i][1]);
@@ -209,7 +259,7 @@
       (fx.out || []).forEach(function (id) { outs[id] = 1; });
       (fx.pop || []).forEach(function (id) { pops[id] = 1; });
       (fx.falls || []).forEach(function (f) { if (f.rows > 0) falls[f.id] = f.rows; });
-      var frag = null, seen = {};
+      var frag = null, seen = {}, slid = false;
       for (i = 0; i < tiles.length; i++) {
         var t = tiles[i], id = t.id, node = nodes[id], rc = cellOf(t), fresh = !node;
         seen[id] = 1;
@@ -218,9 +268,15 @@
           nodes[id] = node; paint(node, t); last[id] = t;
         } else if (!same(last[id], t)) { paint(node, t); last[id] = t; }
         if (falls[id] && !fresh) flag(node, "nmm-snap"); // the slot changes at once; the face carries the fall
-        place(node, rc);
+        if (place(node, rc) && !red && !falls[id]) slid = true;
         if (fresh) { if (!frag) frag = doc.createDocumentFragment(); frag.appendChild(node); }
-        if (merged[id]) flag(node, "merged");
+        if (merged[id]) {
+          flag(node, "merged");
+          // B2 (the original 2048): the merged tile is invisible until the slide has landed, then it pops. The pop's CSS
+          // keyframes start at scale .72 with a backwards fill through the slide-long delay; this hold keeps the face
+          // at opacity 0 for exactly that delay, so nothing new shows before the pair meets. finish() ends it at once.
+          if (!red) anim(face(node), [{ opacity: 0 }, { opacity: 0 }], { duration: slide, fill: "none" });
+        }
         else if (falls[id]) {
           if (red) { if (fresh) flag(node, "nmm-fadein"); }
           else {
@@ -251,6 +307,8 @@
         else if (outs[k]) { n.classList.add("gone", "nmm-out"); gone.push(n); }
         else if (n.parentNode) n.parentNode.removeChild(n);
       }
+      // busy() is true only while something really moves or plays (a re-key with no fade shows the board at once)
+      moving = slid || gone.length > 0 || anims.length > 0 || flagged.some(function (f) { return f[1] !== "nmm-snap"; });
       var wait = red ? T.fade : slide + Math.max(T.pop, T.appear) + 30; // 320 ms for Two's beats
       wait = Math.max(wait, longest + 30);
       timer = setTimeout(function () { if (g === gen) { timer = null; finish(); } }, wait);
@@ -258,11 +316,11 @@
     return {
       sync: sync,
       finish: finish,
-      busy: function () { return timer !== null; },
+      busy: function () { return timer !== null && moving; },
       get: function (id) { return nodes[id] || null; },
       count: function () { return el.querySelectorAll(":scope > .tile").length; }
     };
   }
 
-  return { T: T, E: E, reduced: reduced, ms: ms, fallMs: fallMs, play: play, seq: seq, track: track, rekey: rekey, layer: layer };
+  return { T: T, E: E, reduced: reduced, ms: ms, fallMs: fallMs, play: play, seq: seq, sfx: sfx, buzz: buzz, together: together, track: track, rekey: rekey, layer: layer };
 });

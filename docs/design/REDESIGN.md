@@ -68,7 +68,9 @@ Casual players from about 8 years old to 80. Three groups pull in different dire
   choice is always respected. (Today Sudoku, Four, Five and Fifteen open on Medium.)
 - **How to play sheet** (section 3.6): opens by itself on the first visit to a game that has no saved state, once; it is
   always reachable from a "How to play" row under the board. Three steps, each a small drawn picture and one sentence.
-  Two's root page never auto-opens it for a player who has `numberics_endless_v1` saved.
+  Two's root page never auto-opens it for a player who has `numberics_endless_v1` saved. One helper builds it for every
+  game (`NumbericsUI.howto`, shared/howto.js; TRIAGE4 D8): the title "How to play <Game>", a Play button, the
+  first-visit rule, and the row's one button "Show the three steps".
 - The long `.how` paragraph under each board becomes the body of a `<details class="how">` "How to play" row (collapsed),
   which also holds the key list for desktop players. The full rules text is kept word for word inside it (no rule copy is
   lost), with the R2 explanations.
@@ -194,10 +196,14 @@ compact list of cards at the bottom of the page (the same component, 2 columns o
 ### 3.2 Top bar (every page, `shared/ui.js` builds it into `<div id="topbar"></div>`)
 Height 52 px, `max-width:1100px` centred. Left: the family mark (a 2x2 of tiles: gold, hsl(159 66% 62%), hsl(202 66% 62%),
 hsl(330 66% 62%), 26 px) and "Numberics" (`--fs-sm`, weight 700, `--mute`), a link to the root (`href` from
-`data-root`), `aria-label="Numberics home, play Two"`. Right: three 44 px icon buttons with 1px `--line` border:
+`data-root`), `aria-label="Numberics home, play Two"`. Right: four 44 px icon buttons with 1px `--line` border:
 - **Games** (2x2 squares glyph + the word "Games"): opens the Games sheet.
+- **Sound** (speaker glyph, TRIAGE4 D2): one tap mutes Sound and Music together and the next tap brings back what was on
+  (`NumbericsSettings.toggleMute`, remembered); pressed and struck through while muted.
 - **Trophies** (cup glyph): opens the Trophies sheet. A 8 px gold dot sits on it while any trophy is unseen.
-- **Settings** (sun-gear glyph): opens the Settings sheet.
+- **Settings** (gear glyph; the round-4 panel read the old sun-gear as "brightness"): opens the Settings sheet.
+Nothing in the bar shrinks below 44 x 44 and it never scrolls sideways (TRIAGE4 B3): on narrow screens the "Numberics"
+word hides first (below 420 px, 480 px with Larger text), then the "Games" word (below 340 px, 360 px with Larger text).
 Glyph paths are in the prototype `two.html` (stroke 1.8, round caps, 22 px).
 
 ### 3.3 Games list and cards (one component: `NumbericsNav.cards(el, opts)` in `shared/nav.js`)
@@ -232,9 +238,11 @@ Glyph paths are in the prototype `two.html` (stroke 1.8, round caps, 22 px).
 
 ### 3.4 Today card (root page, and at the top of the Games sheet)
 Header: "Today · Fri 20 Nov" (local date, `toLocaleDateString(undefined,{weekday:"short",day:"numeric",month:"short"})`)
-and, when the daily streak is 2 or more, a flame glyph + "N days". Title: "Three dailies, the same for everyone". Three
+and always the daily streak (TRIAGE4 D4): a flame glyph + "N days" ("1 day"), or "Start a streak today" at 0. Title: "Three dailies, the same for everyone". Three
 52 px chips linking to the Daily of **Seven** (exists), **Six** (exists) and **Sudoku** (new: section 9.10). Each chip
-shows "Not yet", or "Done · <score or time>" with a `--good` edge. Links: `seven/?mode=daily`, `six/?mode=daily`,
+reads "Daily <Game>" (TRIAGE4 D9, so it never reads as the game card) and shows "Not yet", or "Best <score or time>"
+(the day's best, `NumbericsProgress.daily(id, text, { score, low })`) with a `--good` edge; the Sudoku chip puts the
+Daily's level first ("Medium · Not yet"). The card redraws at local midnight and when a tab returns on a new day. Links: `seven/?mode=daily`, `six/?mode=daily`,
 `sudoku/?mode=daily` (each game honours `?mode=daily` on load by switching to its Daily, with the usual two-step if a
 run is live).
 
@@ -327,6 +335,7 @@ NumbericsMotion = {
   fallMs(rows),         // Math.round(T.fallBase + T.fallK * Math.sqrt(rows)): 1 row 130 ms, 6 rows 217 ms
   play(el, frames, opts, reducedFrames),  // el.animate wrapper; reduced -> reducedFrames (opacity) or skip; returns Animation|null
   seq(),                // generation-guarded timeline: s.at(ms, fn); s.finish() runs every pending fn now, in order; s.cancel()
+                        // sound steps s.sound(ms, fn) and sfx/buzz/together follow the one sound rule (7.3, TRIAGE4 D7)
   track(ids, trace, spawned, nextId), // pure: engine trace {from,to,merge}[] -> {ids, moves:[{id,to}], merges:[{id,to,from:[id,id]}], spawns:[{id,cell}]}
   layer(el, opts)       // keyed tile layer, below
 };
@@ -335,7 +344,8 @@ NumbericsMotion = {
 - `sync(tiles, fx)`: `tiles` is `[{id, cell, ...}]` (the authoritative board). Existing ids move (set `--r`/`--c`,
   the CSS transition slides them); new ids are created; ids no longer present are removed, except merged-from ids listed
   in `fx.merges[].from`, which get class `gone` (z-index 0) and are removed by `finish()`. `fx.merges[].id` gets class
-  `merged`, `fx.spawns[].id` gets class `new`; `fx.enter[id] = {r, c}` starts a tile off-board (Three).
+  `merged`, `fx.spawns[].id` gets class `new`; `fx.enter[id] = {r, c}` starts a tile off-board (Three). The merged and the
+  spawned tile are invisible until the slide lands, then pop or appear (the original 2048; TRIAGE4 B2).
 - `finish()`: removes `gone` nodes and the `merged`/`new` classes at once; in-flight slides are **not** snapped (a CSS
   transition retargets smoothly from where the tile is). Called at the start of every input and by a 320 ms settle timer.
 - `busy()`: true while a settle timer is pending.
@@ -474,9 +484,10 @@ Key `numberics_settings_v1`, through `NumbericsKit.store` (try/catch, memory fal
 ```js
 { v:1, sound:true, volume:0.5, haptics:true,
   motion:"auto",      // "auto" (follow the device) | "reduced" ("Less") | "full" (beats the OS, as melon-eight h8_motion "0")
-  theme:"dark",       // "dark" | "light" | "auto"
+  theme:"auto",       // "dark" | "light" | "auto" (the device; TRIAGE4 D5, a saved choice is kept)
   text:"normal",      // "normal" | "large"
-  contrast:"normal" } // "normal" | "high"
+  contrast:"normal",  // "normal" | "high"
+  unmute:"both" }     // what the top bar's Sound button brings back: "both" | "sound" | "music"
 ```
 Defaults as shown. Unknown or malformed fields fall back to the default one by one. Sound defaults on (browsers stay
 silent until a gesture anyway) at 50%; haptics on (only Android browsers vibrate; others ignore it).
@@ -531,36 +542,40 @@ while the tab is hidden. No files, no network.
 
 ### 7.2 Notes
 Pentatonic ladder `P = [0, 2, 4, 7, 9]` semitones; `note(k) = 261.63 * 2 ** ((P[k % 5] + 12 * Math.floor(k / 5)) / 12)`
-(C4 upward), capped at k = 14 (about 1568 Hz).
+(C4 upward), capped at k = 14 (A6, 1760 Hz; k = 13 is G6, 1568 Hz).
 
 ### 7.3 The sounds
 | Name (call) | When | Recipe | Peak gain |
 |---|---|---|---|
-| `tick()` | any button, segment, switch, card tap | sine 880 Hz, attack 2 ms, decay 40 ms | .05 |
-| `slide()` | a move that changed the board (Two, Fibonacci, Three) | white noise through bandpass 1200 Hz Q .8, attack 4 ms, decay 60 ms | .04 |
-| `merge(k)` | the highest merge of a move; k = level (Two), index (Fibonacci), ladder rung (Three) | triangle `note(k)`, attack 5 ms, decay 180 ms, plus sine `2*note(k)` at a third of the gain | .08 |
-| `land()` | a disc lands (Seven, Four), a tile lands (Five) | sine 140 -> 90 Hz exponential over 80 ms, attack 2 ms, decay 110 ms | .10 |
-| `pop(w)` | a Seven wave w (1, 2, 3...), a Flush, a Sudoku unit complete (w = 1) | `merge(4 + w)` | .08 |
-| `burst()` | Five burst | noise through lowpass 2400 -> 400 Hz over 200 ms, decay 220 ms, plus `merge(9)` | .09 |
-| `pip()` | each pip taken in Nine | sine 1046 Hz, decay 50 ms | .035 |
-| `place()` | Sudoku digit, Fifteen claim, Six sign | sine 660 Hz, attack 3 ms, decay 90 ms | .05 |
-| `best()` | "New best." or a new highest tile from 32 up | triangle arpeggio C5 E5 G5 (523, 659, 784 Hz), 70 ms apart, each decay 160 ms | .07 |
-| `power()` | a power-up earned | two sines 1318 and 1976 Hz, attack 10 ms, decay 300 ms, 6 Hz vibrato 8 cents | .05 |
-| `trophy()` | a trophy unlocked | `best()` then a held G5+C6 chord, decay 600 ms | .07 |
-| `win()` | a round or match won, a puzzle solved, a Daily finished | triangle C5 E5 G5 C6, 90 ms apart, last decay 600 ms | .08 |
-| `lose()` | a run over, a round or match lost | sine G4 then E4 (392, 330 Hz), 160 ms apart, decay 400 ms | .05 |
-| `bad()` | a blocked action (illegal drop, a spent power-up tapped) | sine 180 Hz, decay 90 ms | .04 |
+| `tick()` | any button, segment, switch, card tap | sine 880 Hz, attack 2 ms, decay 40 ms | .21 |
+| `slide()` | a move that changed the board (Two, Fibonacci, Three) | white noise through bandpass 1200 Hz Q .8, attack 4 ms, decay 60 ms | .35 |
+| `merge(k)` | the highest merge of a move; k = level (Two), index (Fibonacci), ladder rung (Three) | triangle `note(k)`, attack 5 ms, decay 180 ms, plus sine `2*note(k)` at a third of the gain | .36 |
+| `land()` | a disc lands (Seven, Four), a tile lands (Five) | sine 140 -> 90 Hz exponential over 80 ms, attack 2 ms, decay 110 ms | .43 |
+| `pop(w)` | a Seven wave w (1, 2, 3...), a Flush, a Sudoku unit complete (w = 1) | `merge(4 + w)` | .36 |
+| `burst()` | Five burst | noise through lowpass 2400 -> 400 Hz over 200 ms, decay 220 ms, plus `merge(9)` | .28 (the `merge(9)` inside at .25) |
+| `pip()` | each pip taken in Nine | sine 1046 Hz, decay 50 ms | .22 |
+| `place()` | Sudoku digit, Fifteen claim, Six sign | sine 660 Hz, attack 3 ms, decay 90 ms | .21 |
+| `best()` | "New best." or a new highest tile from 32 up | triangle arpeggio C5 E5 G5 (523, 659, 784 Hz), 70 ms apart, each decay 160 ms | .16 |
+| `power()` | a power-up earned | two sines 1318 and 1976 Hz, attack 10 ms, decay 300 ms, 6 Hz vibrato 8 cents | .27 and .135 |
+| `trophy()` | a trophy unlocked | `best()` then a held G5+C6 chord, decay 600 ms | .16, then the chord at .09 |
+| `win()` | a round or match won, a puzzle solved, a Daily finished | triangle C5 E5 G5 C6, 90 ms apart, last decay 600 ms | .18 |
+| `lose()` | a run over, a round or match lost | sine G4 then E4 (392, 330 Hz), 160 ms apart, decay 400 ms | .11 |
+| `bad()` | a blocked action (illegal drop, a spent power-up tapped) | sine 180 Hz, decay 90 ms | .20 |
 Games call these at the moment the event is shown (for animated events, at the visual moment: `merge` at the end of the
-slide, `land` at impact), through the same `seq()` timeline so a `finish()` drops pending sounds instead of bunching them.
+slide, `land` at impact), through the same `seq()` timeline. When a new input finishes a running animation, its pending
+sounds play at once, deduplicated by name (at most one of each), never dropped and never late (TRIAGE4 D7). Peak gains
+are the lifted ones `MUSIC.md` decided (sound sits above the music bed); `shared/audio.js` is the source of truth.
 
 ---
 
 ## 8. Trophies and replay value (`shared/trophies.js`, global `NumbericsTrophies`)
 
 ### 8.1 Behaviour (melon-eight's Memory overlay, adapted)
-- The **Trophies sheet** (top bar cup, every page) shows **only earned trophies**, grouped by game in O-7 order with
-  "Everywhere" first; **no padlocks, no count, no total**. With none earned: "Nothing yet. Play any game to begin."
-  See `sheet-trophies-desktop.png`.
+- The **Trophies sheet** (top bar cup, every page; TRIAGE4 D3 changed melon-eight's earned-only list on panel
+  evidence) shows a count "N of M trophies" (M: every non-secret trophy plus the secrets already earned), then
+  **Earned**, then **Still to find**: every not-yet-earned non-secret trophy, dimmed (dashed edge, grey glyph) with its
+  description as a goal. Both lists are grouped by game in O-7 order with "Everywhere" first. With none earned the
+  count is followed by "Nothing yet. Play any game to begin." See `sheet-trophies-desktop.png`.
 - A trophy tile: a 30 px drawn line glyph in `--accent` (stroke 1.7, round caps and joins, no fill) + name (`--fs-sm`
   700) + description (`--fs-xs`, `--mute`). A **secret** trophy is not shown at all until earned; once earned its tile
   gets a gold edge and a small four-point star after the name, and it shows its real description (the earner already
@@ -634,7 +649,7 @@ Glyphs are composed from these paths; a trophy names one (`glyph:"bolt"`) or a n
 | fam_all | The whole set | Play all ten games. | `fam.played` holds all ten ids |
 | fam_daily | Same for everyone | Finish a Daily. | `end`/`solve` with `daily:true` |
 | fam_week | A week of dailies | Finish a Daily seven days in a row. | `fam.streak.n >= 7` |
-| fam_night (S) | Night owl | Played well past bedtime. | any event with `ctx.hour < 4` |
+| fam_night (S) | Night owl | Played well past bedtime. | a game, round, match or puzzle ends with `ctx.hour < 4` (never on a page load or a first tap, TRIAGE4) |
 | fam_keep (S) | Keepsake | Kept a copy of everything. | Settings Save completed (`report("fam","saved")`) |
 
 **Fibonacci** (events: `move {value, merges, grid:[values], moves}`, `end {score, value}`; run `{used}`)
@@ -840,6 +855,11 @@ while a sheet is open. How-to: (1) "Fill every row, column and box with 1 to 9."
 
 ## 10. Performance budgets (enforced by the perf tests in `tools/`)
 
+The enforced budgets are `tools/perf-budgets.json` (read `tools/PERF.md`); the table below is the original spec. Page
+weight stays at 250 KB per game (owner decision, TRIAGE4 D6, recorded in `docs/OWNER-REQUESTS.md`): with no build step the
+shared modules are hand-written, and lazy music is budgeted separately. Work per move is cut instead: the game save,
+progress and trophy writes are batched into one idle `localStorage` write (`NumbericsKit.store`).
+
 Measured baseline today (headless Chromium, local server, all same-origin bytes uncompressed): Endless 50.6 KB / 7
 requests, Sudoku 57.2, Fibonacci 56.6, Seven 67.5, Three 65.1, Four 73.1, Five 70.7, Six 100.9 / 9, Fifteen 67.7,
 Nine 66.9. Shared modules add about 30 KB (boot 1.5, settings 7, motion 6, audio 5, trophies 12 with the registry, ui and
@@ -902,8 +922,8 @@ count (10); reduced path renders final state with no transform animation.
 `OfflineAudioContext` with peak <= 0.5 and no clipping after the compressor; mute and volume ramp; voice cap 8; `buzz`
 throttled; all calls safe when Web Audio or vibrate is missing.
 **B4 Trophies + progress** (`trophies.js` registry of 8.4 and the sheet; `progress.js`). Acceptance: Node tests run every
-registry test against crafted events (each trophy unlocks on its boundary and not one below); earned-only sheet, secret
-hidden until earned, no counts anywhere in the DOM; unseen dot; streak logic across days (mocked dates, including a
+registry test against crafted events (each trophy unlocks on its boundary and not one below); the sheet's count, earned
+list and goals (TRIAGE4 D3), a secret hidden and uncounted until earned; unseen dot; streak logic across days (mocked dates, including a
 missed day and a month boundary); end-card pill path.
 
 ### Phase C: root and family (after A1 and B4)

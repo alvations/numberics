@@ -1,8 +1,13 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * NumbericsProgress (docs/design/REDESIGN.md 3.5, 8.5): the per-game summaries the cards and the Today card read.
  * One key, numberics_progress_v1, written by each game whenever it persists:
- *   { v:1, games:{ "<id>":{ best, live, liveText, at } }, howto:{ "<id>":true }, daily:{ "YYYYMMDD":{ "<id>":"text" } } }
- * Only today's daily entry is kept. Every read and write goes through NumbericsKit.store (try/catch, memory fallback);
+ *   { v:1, games:{ "<id>":{ best, live, liveText, at } }, howto:{ "<id>":true },
+ *     daily:{ "YYYYMMDD":{ "<id>":"text" | { t:"text", s:score, low:bool } } } }
+ * Only today's daily entry is kept. daily(id, text, { score, low }) keeps the day's BEST result (TRIAGE4 D9): a later
+ * result replaces it only when its score is higher (or lower, with low:true, as for a time); without a score the
+ * latest text is kept. Writes are batched by NumbericsKit.store (one idle write, flushed on pagehide).
+ * dailyLevel(date) is the Daily Sudoku's level (Easy Monday to Thursday, Medium Friday and Saturday, Hard Sunday): the
+ * Today chip shows it; one rule, one place. Every read and write goes through NumbericsKit.store (try/catch, memory fallback);
  * nothing is ever sent anywhere. Also holds the pure local-day helpers and the Daily streak rule that
  * NumbericsTrophies uses (one rule, one place). UMD: the pure parts run in Node tests. */
 (function (root, factory) {
@@ -59,10 +64,19 @@
     if (o.howto && typeof o.howto === "object") Object.keys(o.howto).forEach(function (id) { if (o.howto[id]) d.howto[id] = true; });
     var t = dayKey();
     if (o.daily && typeof o.daily === "object" && o.daily[t] && typeof o.daily[t] === "object") {
-      d.daily[t] = {}; Object.keys(o.daily[t]).forEach(function (id) { if (typeof o.daily[t][id] === "string") d.daily[t][id] = o.daily[t][id]; });
+      d.daily[t] = {}; Object.keys(o.daily[t]).forEach(function (id) { var e = entry(o.daily[t][id]); if (e) d.daily[t][id] = e; });
     }
     return d;
   }
+  // a daily entry: plain text, or { t, s, low } when the game gave a score; anything else is dropped
+  function entry(e) {
+    if (typeof e === "string") return e;
+    if (e && typeof e === "object" && typeof e.t === "string") {
+      var o = { t: e.t }; if (typeof e.s === "number" && isFinite(e.s)) { o.s = e.s; if (e.low === true) o.low = true; } return o;
+    }
+    return null;
+  }
+  function text(e) { return typeof e === "string" ? e : e && typeof e.t === "string" ? e.t : ""; }
   function load() { return clean(store.load()); }
   function save(d) { store.save(d); }
   function norm(id) { return id === "endless" ? "two" : String(id); }
@@ -95,26 +109,35 @@
     if (id === "two") { var t = fromTwoSave(); return t ? { best: t.best, live: t.live, liveText: t.liveText, at: t.at } : null; }
     return null;
   }
-  function daily(id, text) {
-    var d = load(), t = dayKey(), e = d.daily[t] || {};
-    e[norm(id)] = String(text); d.daily = {}; d.daily[t] = e; save(d);
+  function daily(id, txt, opts) {
+    var d = load(), t = dayKey(), e = d.daily[t] || {}, k = norm(id), old = e[k], sc = opts && typeof opts.score === "number" && isFinite(opts.score) ? opts.score : null;
+    var next = sc === null ? String(txt) : { t: String(txt), s: sc };
+    if (sc !== null && opts.low === true) next.low = true;
+    if (sc !== null && old && typeof old === "object" && typeof old.s === "number") {
+      var lower = next.low === true; if (lower ? !(sc < old.s) : !(sc > old.s)) return false; // not better: keep the day's best
+    }
+    e[k] = next; d.daily = {}; d.daily[t] = e; save(d); return true;
   }
-  function today() { var e = load().daily[dayKey()] || {}, o = {}; Object.keys(e).forEach(function (k) { o[k] = e[k]; }); return o; }
+  function today() { var e = load().daily[dayKey()] || {}, o = {}; Object.keys(e).forEach(function (k) { o[k] = text(e[k]); }); return o; }
+  function dailyLevel(dt) { var w = (dt || now()).getDay(); return w === 0 ? "hard" : w >= 5 ? "medium" : "easy"; }
   function seenHowto(id) { return !!load().howto[norm(id)]; }
   function markHowto(id) { var d = load(); d.howto[norm(id)] = true; save(d); }
   // the family-wide record lives with the trophies (REDESIGN.md 8.1 fam); read it there
   function fam() { var T = lib("NumbericsTrophies", "./trophies.js"); return T && T.fam ? T.fam() : { played: {}, dailyDays: [], streak: { n: 0, last: "" } }; }
   function played(id) { id = norm(id); return !!(fam().played[id] || load().games[id] || (id === "two" && fromTwoSave())); }
   function streak() { return streakNow(fam().streak, dayKey()); }
-  // everything the Today card draws: the local date line, the streak (shown from 2) and today's Daily results
+  // everything the Today card draws: the local date line, the streak (always shown, TRIAGE4 D4), today's Daily
+  // results (the day's best) and the Daily Sudoku's level
   function todayCard() {
     var d = now(), label = "";
     try { label = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); } catch (e) { label = dayKey(d); }
-    return { day: dayKey(d), label: label, streak: streak(), done: today() };
+    return { day: dayKey(d), label: label, streak: streak(), done: today(), levels: { sudoku: dailyLevel(d) } };
   }
+  // ms from now until the next local midnight (the Today card redraws then)
+  function msToMidnight() { var d = now(); return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1, 0, 0, 1).getTime() - d.getTime(); }
   return {
     KEY: KEY, put: put, get: get, daily: daily, today: today, seenHowto: seenHowto, markHowto: markHowto,
-    played: played, streak: streak, todayCard: todayCard,
+    played: played, streak: streak, todayCard: todayCard, dailyLevel: dailyLevel, msToMidnight: msToMidnight,
     // pure day helpers and the streak rule (NumbericsTrophies uses these)
     now: now, dayKey: dayKey, prevDay: prevDay, isDay: isDay, streakAfter: streakAfter, streakNow: streakNow,
     // tests only: pin the clock (a function returning a Date) and drop the memo of Two's save

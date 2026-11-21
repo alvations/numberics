@@ -6,7 +6,7 @@
  * settings.js re-runs NumbericsBoot.apply() after a change. */
 (function (w) {
   "use strict";
-  var KEY = "numberics_settings_v1", DEF = { motion: "auto", theme: "dark", text: "normal", contrast: "normal" };
+  var KEY = "numberics_settings_v1", DEF = { motion: "auto", theme: "auto", text: "normal", contrast: "normal" }; // theme: the device (TRIAGE4 D5)
   var OK = { motion: ["auto", "reduced", "full"], theme: ["dark", "light", "auto"], text: ["normal", "large"], contrast: ["normal", "high"] };
   var COLOR = { dark: "#12131a", light: "#f5f1e8" };
   function read() {

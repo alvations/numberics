@@ -4,7 +4,7 @@
 (function () {
   "use strict";
   var N = window.NumbericsFive, K = window.NumbericsKit, P = window.NumbericsPower;
-  var M = window.NumbericsMotion, A = window.NumbericsAudio, TR = window.NumbericsTrophies, NP = window.NumbericsProgress;
+  var M = window.NumbericsMotion, TR = window.NumbericsTrophies, NP = window.NumbericsProgress;
   var store = K.store("numberics_five_v1");
   // motion is read per animation (M.reduced, M.ms); THINK and HOLD are pauses, kept under reduced motion (5.12)
   var THINK = 520, HOLD = 1500; // R13: the result shows before the card
@@ -55,10 +55,9 @@
         live: N.played(state) && !state.matchOver, liveText: "Round " + state.round + ", " + state.wins.p + "-" + state.wins.c });
     }
   }
-  // sounds and haptics at the visual moment, inside seq(): a finish() drops pending sounds (7.3)
-  var hush = false;
-  function sfx(name, arg) { if (hush || !A || typeof A[name] !== "function") return; try { A[name](arg); } catch (e) { /* a sound is a nicety */ } }
-  function buzz(kind) { if (hush || !A || typeof A.buzz !== "function") return; try { A.buzz(kind); } catch (e) { /* no vibrate */ } }
+  // sounds and haptics at the visual moment, inside seq(); the family's one rule (shared/motion.js, TRIAGE4 D7): a
+  // finish() by a new input plays the pending sounds at once, one of each, never dropped
+  var sfx = M.sfx, buzz = M.buzz;
   function duck(on) { try { if (window.NumbericsMusic) window.NumbericsMusic.duck(on); } catch (e) { /* no music */ } }
   // trophies (8.4): reported quietly at a round's end; the card shows the pills and plays the sound
   function report(ev, data) {
@@ -211,7 +210,7 @@
   function hold() {
     holding = true; viewing = false; render();
     var rw = state.roundOver;
-    if (rw !== "draw") seq.at(320, function () { sfx(rw === "p" ? "win" : "lose"); buzz(rw === "p" ? "win" : "lose"); });
+    if (rw !== "draw") seq.sound(320, function () { sfx(rw === "p" ? "win" : "lose"); buzz(rw === "p" ? "win" : "lose"); });
     timer = setTimeout(function () { timer = null; holding = false; fxEl.textContent = ""; render(); }, HOLD);
   }
   function showCard() { // skip the hold, or come back from "See the board"
@@ -224,8 +223,8 @@
   var seq = M.seq();
   var running = []; // pops and outline fades on the board's own nodes
   function keep(a) { if (a) running.push(a); return a; }
-  function settle() { // end state now, sounds dropped
-    hush = true; try { seq.finish(); } finally { hush = false; }
+  function settle() { // end state now, the pending sounds at once (one of each)
+    seq.finish(running.length > 0);
     running.forEach(function (a) { try { a.finish(); } catch (e) { /* already gone */ } }); running = [];
   }
   function rectIn(el, b) {
@@ -329,7 +328,7 @@
     else if (res.unpaid && !state.roundOver) K.toast("Burst! No reward after Shield.", "info"); // R2
     else if (res.burst && who === "p" && !state.roundOver) K.toast("Burst!");
     animate(before, state.last, afterTurn);
-    if (res.awarded) seq.at(M.ms("fly") + 140, function () { sfx("power"); });
+    if (res.awarded) seq.sound(M.ms("fly") + 140, function () { sfx("power"); });
   }
   function afterTurn() {
     if (state.matchOver === "c") { // R7: no reward toast over a lost match
@@ -477,27 +476,24 @@
   function mt(v, bg) { return '<span class="mt" style="background:' + bg + '">' + v + "</span>"; }
   var BLUE = "hsl(205 70% 62%)", GREEN = "hsl(152 60% 58%)";
   var STEPS = [
-    ['<div class="eq">' + mt(2, BLUE) + '<span class="op">\u2192</span>' + mt(3, GREEN) + "</div>", "Tap your tile, then a tile to add it onto."],
-    ["", "A tile at five or more bursts."], // the card's own picture, 2 + 3 = 5!
-    ['<div class="five-pv3"><span class="five-out"></span><span class="five-out"></span><span class="five-pips"><i></i><i></i><i></i></span></div>',
-      "Burst both of the computer's tiles to win the round. First to three."]
+    { picture: '<div class="eq">' + mt(2, BLUE) + '<span class="op">\u2192</span>' + mt(3, GREEN) + "</div>", text: "Tap your tile, then a tile to add it onto." },
+    { picture: function (el) { el.innerHTML = window.NumbericsNav ? window.NumbericsNav.preview("five") : ""; }, // the card's own picture, 2 + 3 = 5!
+      text: "A tile at five or more bursts." },
+    { picture: '<div class="five-pv3"><span class="five-out"></span><span class="five-out"></span><span class="five-pips"><i></i><i></i><i></i></span></div>',
+      text: "Burst both of the computer's tiles to win the round. First to three." }
   ];
-  function howto(onClose) {
-    var U = window.NumbericsUI; if (!U || !U.sheet) { if (onClose) onClose(); return; }
-    U.sheet("howto", function (body) {
-      body.innerHTML = '<div class="howto">' + STEPS.map(function (s) {
-        return '<div class="step"><div class="pv" aria-hidden="true">' + (s[0] || (window.NumbericsNav ? window.NumbericsNav.preview("five") : "")) + "</div><p>" + s[1] + "</p></div>";
-      }).join("") + '</div><div class="row"><button class="btn primary" type="button" data-play>Play</button></div>';
-      body.querySelector("[data-play]").addEventListener("click", function () { sfx("tick"); U.close(); });
-    }, { title: "How to play Five", onClose: onClose });
-    try { if (NP) NP.markHowto("five"); } catch (e) { /* storage is a nicety */ }
-  }
-  $("howto-open").addEventListener("click", function () { sfx("tick"); howto(); });
+  // the family's one sheet (shared/howto.js, TRIAGE4 D8): a first visit opens it once (never with a saved game);
+  // the computer opens when it closes
+  var how = null;
+  function howto(onClose) { if (how) how.open(onClose); else if (onClose) onClose(); }
 
   render();
-  // a first visit opens the steps once (after ui.js loads); the computer opens when they close
-  var firstVisit = !saved && NP && !NP.seenHowto("five");
-  if (firstVisit) setTimeout(function () { howto(function () { scheduleComputer(); }); }, 0); else scheduleComputer();
+  document.addEventListener("DOMContentLoaded", function () {
+    var U = window.NumbericsUI;
+    if (U && U.howto) how = U.howto("five", { title: "Five", steps: STEPS, saved: !!saved, onButton: function () { sfx("tick"); },
+      onPlay: function () { sfx("tick"); }, onFirstClose: function () { scheduleComputer(); } });
+    if (!how || !how.shown) scheduleComputer();
+  });
 
   // Screenshot hook (tools/shots.cjs): a fixed, representative mid-match. Not reachable from the UI.
   window.__demo = function () {

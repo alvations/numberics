@@ -141,8 +141,14 @@ T.REG.forEach(x => {
   });
 });
 t("boundary: fam_night at 3 o'clock, not at 4", () => {
-  fresh(); at(2026, 11, 20, 4); ok(T.report("two", "move", {}).indexOf("fam_night") < 0);
-  at(2026, 11, 20, 3); ok(T.report("two", "move", {}).indexOf("fam_night") >= 0 && T.has("fam_night"));
+  fresh(); at(2026, 11, 20, 4); ok(T.report("two", "end", {}).indexOf("fam_night") < 0);
+  at(2026, 11, 20, 3); ok(T.report("two", "end", {}).indexOf("fam_night") >= 0 && T.has("fam_night"));
+});
+t("Night owl needs real play: no move, tap or first event earns it, only a finished game, round, match or puzzle", () => {
+  fresh(); at(2026, 11, 20, 2);
+  ["move", "swipe", "drop", "take", "claim", "place", "power", "x", "saved"].forEach(e => ok(T.report("five", e, {}).indexOf("fam_night") < 0, e));
+  ok(!T.has("fam_night"));
+  ok(T.report("five", "round", { won: false }).indexOf("fam_night") >= 0, "a finished round at 2 o'clock earns it");
 });
 t("boundary: fam_week on the seventh Daily day in a row (across a month end), not the sixth", () => {
   fresh();
@@ -217,22 +223,35 @@ t("earned() lists ids in registry order; unseen keeps order of earning", () => {
 });
 
 // ---- the sheet markup (pure html()) ----
-t("sheet: nothing earned says so; no padlocks and no counts", () => {
-  fresh(); const h = T.html(); ok(/Nothing yet\. Play any game to begin\./.test(h), h);
-  ok(!/lock|\d+\s*(of|\/)\s*\d+|84|total/i.test(h), h);
-});
-t("sheet: earned only, grouped Everywhere first then O-7 order; secrets absent until earned, then marked", () => {
-  fresh(); T.report("seven", "drop", { waves: 3 }); T.report("two", "move", { top: 7 }); T.report("fibonacci", "move", { value: 89 });
-  let h = T.html();
-  const heads = [...h.matchAll(/class="tro-game">([^<]+)</g)].map(m => m[1]);
-  ok(heads.join() === "Fibonacci,Two,Seven", heads.join());
+// D3 (TRIAGE4): a count, the earned trophies first, then every not-yet-earned NON-secret trophy dimmed as a goal
+const sect = h => { const a = h.indexOf('<div class="sec">Earned</div>'), b = h.indexOf('<div class="sec">Still to find</div>');
+  return { earned: a < 0 ? "" : h.slice(a, b < 0 ? h.length : b), todo: b < 0 ? "" : h.slice(b) }; };
+const plain = T.REG.filter(x => !x.secret).length;
+t("sheet: nothing earned says so, shows 0 of N (N = every non-secret trophy) and lists every non-secret goal, dimmed", () => {
+  fresh(); const h = T.html(), s = sect(h);
+  ok(/Nothing yet\. Play any game to begin\./.test(h), "the empty line");
+  ok(h.indexOf('data-count="0/' + plain + '"') > 0 && h.indexOf(">0 of " + plain + " trophies<") > 0, "count 0 of " + plain);
+  ok(!s.earned && s.todo, "no Earned section, a Still to find section");
+  T.REG.filter(x => !x.secret).forEach(x => ok(new RegExp('class="tr locked" data-trophy="' + x.id + '" data-locked="1">[\\s\\S]*?' + x.name.replace(/[.*+?^${}()|[\]\\!]/g, "\\$&")).test(s.todo) && s.todo.indexOf(x.desc) > 0, x.id + " goal"));
   T.REG.filter(x => x.secret).forEach(x => ok(h.indexOf(x.name) < 0 && h.indexOf(x.desc) < 0 && h.indexOf(x.id) < 0, x.id + " leaked"));
-  T.REG.filter(x => !T.has(x.id)).forEach(x => ok(h.indexOf('data-trophy="' + x.id + '"') < 0, x.id + " not earned but shown"));
-  at(2026, 11, 20, 2); T.report("five", "round", { won: true, burstAt: 5 }); h = T.html();
-  const g = [...h.matchAll(/class="tro-game">([^<]+)</g)].map(m => m[1]); ok(g[0] === "Everywhere" && g.indexOf("Five") === 3, g.join());
-  ok(/class="tr secret" data-trophy="five_exact"[\s\S]*?Right on five[\s\S]*?Burst at exactly five/.test(h), "earned secret shows its real description");
-  ok(/class="tr secret" data-trophy="fam_night"/.test(h) && /class="tr" data-trophy="fam_first"/.test(h));
-  ok(!/\d+\s*(of|\/)\s*\d+|lock|total/i.test(h.replace(/<svg[\s\S]*?<\/svg>/g, "")), "no counts");
+  ok(T.counts().earned === 0 && T.counts().visible === plain);
+});
+t("sheet: earned first, grouped Everywhere first then O-7 order; goals after; secrets absent until earned, then marked and counted", () => {
+  fresh(); T.report("seven", "drop", { waves: 3 }); T.report("two", "move", { top: 7 }); T.report("fibonacci", "move", { value: 89 });
+  let h = T.html(), s = sect(h);
+  const heads = [...s.earned.matchAll(/class="tro-game">([^<]+)</g)].map(m => m[1]);
+  ok(heads.join() === "Fibonacci,Two,Seven", heads.join());
+  ok(h.indexOf('<div class="sec">Earned</div>') < h.indexOf('<div class="sec">Still to find</div>'), "earned before goals");
+  ok(!/Nothing yet/.test(h) && h.indexOf(">3 of " + plain + " trophies<") > 0, "3 of " + plain);
+  T.REG.filter(x => x.secret).forEach(x => ok(h.indexOf(x.name) < 0 && h.indexOf(x.desc) < 0 && h.indexOf(x.id) < 0, x.id + " leaked"));
+  ["sev_three", "two_128", "fib_89"].forEach(id => ok(s.earned.indexOf('data-trophy="' + id + '"') > 0 && s.todo.indexOf('data-trophy="' + id + '"') < 0, id + " earned, once"));
+  ok(!/locked/.test(s.earned), "earned tiles are not dimmed");
+  ok(s.todo.indexOf('data-trophy="two_2048"') > 0 && s.todo.indexOf('data-trophy="sev_three"') < 0, "goals: not yet earned only");
+  at(2026, 11, 20, 2); T.report("five", "round", { won: true, burstAt: 5 }); h = T.html(); s = sect(h);
+  const g = [...s.earned.matchAll(/class="tro-game">([^<]+)</g)].map(m => m[1]); ok(g[0] === "Everywhere" && g.indexOf("Five") === 3, g.join());
+  ok(/class="tr secret" data-trophy="five_exact"[\s\S]*?Right on five[\s\S]*?Burst at exactly five/.test(s.earned), "earned secret shows its real description");
+  ok(/class="tr secret" data-trophy="fam_night"/.test(s.earned) && /class="tr" data-trophy="fam_first"/.test(s.earned));
+  const c = T.counts(); ok(c.earned === 7 && c.visible === plain + 2 && h.indexOf(">7 of " + (plain + 2) + " trophies<") > 0, JSON.stringify(c));
 });
 t("glyphs: named paths and numbered squares and discs with the spec's font sizes", () => {
   ok(/<path d="M13 3L5 14h6l-1 7 8-11h-6z"\/>/.test(T.glyph("bolt")));

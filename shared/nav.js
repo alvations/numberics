@@ -89,7 +89,9 @@
     el.innerHTML = LIVE.map(function (g) { return card(g, root, cur); }).join("");
   }
 
-  // ---- the Today card (3.4): the three Dailies, done or not yet, and the streak from 2 days ----
+  // ---- the Today card (3.4): the three Dailies, done (the day's best) or not yet, and the daily streak, always shown
+  // ("Start a streak today" at 0, TRIAGE4 D4). Chips say "Daily" so they never read as the game cards (D9), and the
+  // Daily Sudoku's chip shows its level. The card redraws at local midnight and when a tab comes back on a new day. ----
   var FLAME = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c1 4 5 5.5 5 10a5 5 0 01-10 0c0-2.4 1.2-3.6 2.4-4.6.3 1.6 1 2.6 2.1 3C11 9 11 6 12 3z"/></svg>';
   var DAILIES = [["seven", "Seven"], ["six", "Six"], ["sudoku", "Sudoku"]];
   function today(el, opts) {
@@ -99,16 +101,35 @@
     if (!t) {
       var d = new Date(), label = "";
       try { label = d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }); } catch (e) { label = ""; }
-      t = { label: label, streak: 0, done: {} };
+      t = { label: label, streak: 0, done: {}, levels: {} };
     }
-    el.classList.add("today");
+    var n = Math.max(0, Math.floor(+t.streak || 0)), lv = t.levels || {};
+    el.classList.add("today"); el.setAttribute("data-day", t.day || "");
     el.innerHTML = '<div class="when"><span>Today · ' + esc(t.label) + "</span>" +
-      (t.streak >= 2 ? '<span class="streak">' + FLAME + t.streak + " days</span>" : "") + "</div>" +
+      (n >= 1 ? '<span class="streak">' + FLAME + n + (n === 1 ? " day" : " days") + "</span>"
+        : '<span class="streak zero">' + FLAME + "Start a streak today</span>") + "</div>" +
       "<h3>Three dailies, the same for everyone</h3><div class=\"chips\">" + DAILIES.map(function (g) {
-        var r = t.done && t.done[g[0]];
-        return '<a class="chip' + (r ? " done" : "") + '" href="' + root + g[0] + '/?mode=daily">' + g[1] +
-          "<small>" + (r ? "Done · " + esc(r) : "Not yet") + "</small></a>";
+        var r = t.done && t.done[g[0]], l = lv[g[0]] ? '<small class="lv">' + esc(cap(lv[g[0]])) + "</small>" : "";
+        return '<a class="chip' + (r ? " done" : "") + '" href="' + root + g[0] + '/?mode=daily" data-daily="' + g[0] + '"' +
+          (r ? ' title="Done today"' : "") + ">Daily " + g[1] + l + "<small>" + (r ? "Best " + esc(r) : "Not yet") + "</small></a>";
       }).join("") + "</div>";
+    armMidnight();
+  }
+  function cap(x) { x = String(x); return x.charAt(0).toUpperCase() + x.slice(1); }
+  // the Today label rolls over at midnight with the page open (round-4 mechanics: it went stale until a reload)
+  var midT = null;
+  function armMidnight() {
+    var P = w.NumbericsProgress; if (!P || !P.msToMidnight || midT !== null) return;
+    var ms = 0; try { ms = P.msToMidnight(); } catch (e) { return; }
+    midT = setTimeout(function () { midT = null; redrawToday(); }, Math.max(1000, Math.min(ms, 2147483000)));
+  }
+  function redrawToday() {
+    var td = doc.getElementById("today"); if (td) today(td, here());
+    var sh = doc.querySelector('#sh-games:not([hidden]) section[aria-label="Today"]'); if (sh) today(sh, here());
+  }
+  function stale() {
+    var P = w.NumbericsProgress, td = doc.getElementById("today"); if (!P || !td) return false;
+    try { return td.getAttribute("data-day") !== P.dayKey(); } catch (e) { return false; }
   }
 
   // ---- the quiet text row (every game page until its D package swaps in the cards) ----
@@ -141,8 +162,10 @@
       var c = doc.createElement("div"); c.setAttribute("aria-label", "Numberics games"); body.appendChild(c); cards(c, h);
     });
   }
-  w.NumbericsNav = { LIVE: LIVE, cards: cards, today: today, openSheet: openSheet, draw: draw, preview: function (id) { return PV[norm(id)] || ""; } };
+  w.NumbericsNav = { LIVE: LIVE, cards: cards, today: today, redrawToday: redrawToday, openSheet: openSheet, draw: draw, preview: function (id) { return PV[norm(id)] || ""; } };
   draw();
   // a run saved in another tab, or a page restored from the back-forward cache: redraw so the tags are current
-  w.addEventListener("pageshow", function (e) { if (e.persisted) draw(); });
+  w.addEventListener("pageshow", function (e) { if (e.persisted || stale()) draw(); });
+  // a tab left open overnight (timers sleep in the background): redraw Today when it comes back on a new day
+  doc.addEventListener("visibilitychange", function () { if (doc.visibilityState === "visible" && stale()) { clearTimeout(midT); midT = null; redrawToday(); } });
 })(typeof window !== "undefined" ? window : this);

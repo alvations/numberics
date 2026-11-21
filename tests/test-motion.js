@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 | Copyright 2026 alvations (Melon Lab)
  * shared/motion.js pure parts: track (slides, merges, spawns, chains of moves, Undo re-key), rekey, fallMs, ms, seq,
- * reduced (Settings tri-state, then the device). The keyed layer itself is proven in a browser: tests/emu/shared-motion.cjs.
+ * the sound rule under fast play (sfx, buzz, seq().sound, together: TRIAGE4 D7), reduced (Settings tri-state, then the device). The keyed layer itself is proven in a browser: tests/emu/shared-motion.cjs.
  * `node tests/test-motion.js` */
 "use strict";
 const M = require("../shared/motion.js"), N = require("../engine.js"), F = require("../fibonacci/engine.js");
@@ -146,6 +146,41 @@ t("play(): without an element or WAAPI it returns null; reduced keeps only opaci
     ok(J(got.f) === J([{ opacity: 0 }, { opacity: 1 }]) && got.o.duration === 160 && got.o.easing === "linear" && got.o.delay === 20, J(got));
   } finally { delete global.self; delete global.NumbericsSettings; delete require.cache[path]; }
 });
+// ---- D7: one rule for sounds under fast play (TRIAGE4) ----
+function spyAudio() { const log = []; global.NumbericsAudio = new Proxy({}, { get: (o, k) => (a) => log.push(k + (a !== undefined ? ":" + a : "")) }); return log; }
+const tick = (ms) => new Promise(r => setTimeout(r, ms));
+t("D7 sfx/buzz: a missing audio module costs a sound, never an error", () => {
+  delete global.NumbericsAudio; M.sfx("merge", 3); M.buzz("tap");
+  global.NumbericsAudio = { merge: () => { throw new Error("x"); } }; M.sfx("merge", 1); delete global.NumbericsAudio;
+});
+t("D7 finish(): every pending sound plays at once, never dropped, deduplicated by name (one of each)", () => {
+  const log = spyAudio(), s = M.seq();
+  s.sound(110, () => { M.sfx("merge", 4); M.buzz("merge"); });
+  s.at(300, () => { M.sfx("merge", 5); M.sfx("best"); M.buzz("merge"); M.buzz("big"); }); // a cascade's second wave
+  s.finish(true);
+  ok(J(log) === J(["merge:4", "buzz:merge", "best", "buzz:big"]), J(log));
+  ok(!s.busy() && !s.finishing());
+  delete global.NumbericsAudio;
+});
+t("D7 together(): one dedup group across a finish and a final step; nested groups join the outer one", () => {
+  const log = spyAudio(), a = M.seq(), b = M.seq();
+  a.sound(50, () => M.sfx("lose")); b.at(80, () => M.sfx("lose"));
+  M.together(() => { a.finish(); b.finish(); M.sfx("lose"); M.sfx("best"); });
+  ok(J(log) === J(["lose", "best"]), J(log));
+  M.sfx("lose"); ok(log.length === 3, "outside a group every call plays");
+  a.cancel(); b.cancel(); delete global.NumbericsAudio;
+});
+t("D7 every game uses the one rule: shared calls, no hush flags, no dropped sounds on input", () => {
+  const fs = require("fs"), path = require("path"), root = path.join(__dirname, "..");
+  const games = ["game.js"].concat(["fibonacci", "three", "four", "five", "six", "seven", "nine", "fifteen", "sudoku"].map(g => g + "/game.js"));
+  games.forEach(f => {
+    const g = fs.readFileSync(path.join(root, f), "utf8");
+    ok(/M\.sfx/.test(g), f + " plays through M.sfx");
+    ok(!/window\.NumbericsAudio|NumbericsAudio\s*[,;]/.test(g), f + " has no audio wrapper of its own");
+    ok(!/\b(hush|hushing|skipping|quiet)\s*=\s*(true|false)/.test(g), f + " has no hush flag");
+    ok(!/sounds?\.cancel\(\)|snd\.cancel\(\)/.test(g), f + " never drops pending sounds on input");
+  });
+});
 t("conventions for the motion module", () => {
   const fs = require("fs"), s = fs.readFileSync(require.resolve("../shared/motion.js"), "utf8");
   ok(/SPDX-License-Identifier: Apache-2\.0/.test(s) && !/\u2014/.test(s) && !/document\.write|localStorage/.test(s));
@@ -157,4 +192,21 @@ t("conventions for the motion module", () => {
   ok(!/(transition|animation)[^;]*\b(width|height|top|left|margin|padding)\b/.test(blk), "transform and opacity only");
 });
 
+// async, so last: the sync tests above swap the audio spy
+t("D7 fast play: after an input finished a running animation, that input's sound steps play at once (same task)", async () => {
+  const log = spyAudio(), s = M.seq();
+  s.sound(110, () => M.sfx("merge", 1));    // move 1: scheduled at the slide's end
+  s.finish();                               // move 2 arrives at once: move 1's join plays now (it was pending)
+  s.sound(110, () => M.sfx("merge", 2));    // move 2's own join: with its own move, not on move 3's key
+  ok(J(log) === J(["merge:1", "merge:2"]), J(log));
+  s.finish(true); s.sound(110, () => { M.sfx("merge", 3); M.sfx("merge", 9); }); // one of each in the at-once group too
+  ok(J(log) === J(["merge:1", "merge:2", "merge:3"]), J(log));
+  await tick(5);                            // a later task: the player slowed down, so sounds wait for their beat again
+  ok(!s.fast(), "fast play ends with the input's task");
+  s.sound(30, () => M.sfx("merge", 4)); ok(log.length === 3, "scheduled, not at once");
+  await tick(60); ok(log[3] === "merge:4", J(log));
+  s.finish(false); s.sound(30, () => M.sfx("merge", 5)); ok(log.length === 4, "a finish that ended nothing is not fast play");
+  s.cancel(); await tick(50); ok(log.length === 4, "cancel() (a reset) drops what is pending");
+  delete global.NumbericsAudio;
+});
 Promise.all(later).then(() => { console.log(pass + " passed, " + fail + " failed"); process.exit(fail ? 1 : 0); });
